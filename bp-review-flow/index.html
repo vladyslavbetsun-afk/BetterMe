@@ -482,8 +482,10 @@ function slackText(writer, tickets){
 const findT = key => S.jira.tickets.find(t => t.key === key);
 async function freshTicket(key){
   const p = await read(JIRA, "getJiraIssue", { cloudId:CLOUD, issueIdOrKey:key, fields:FIELDS, responseContentFormat:"markdown" });
-  const issue = p && p.fields ? p : (p && p.issue) || p;
-  return analyze({ key, fields: issue.fields || {} });
+  const nodes = p && p.issues && (Array.isArray(p.issues) ? p.issues : p.issues.nodes);
+  const issue = p && p.fields ? p : (nodes && nodes.find(n => n.key === key)) || (nodes && nodes[0]) || (p && p.issue);
+  if (!issue || !issue.fields || !issue.fields.status) throw { code:"tool_error", server:JIRA, message:`Jira returned no data for ${key}` };
+  return analyze({ key, fields: issue.fields });
 }
 function noteInput(key, target, msg){
   const adf = { type:"doc", version:1, content:[{ type:"paragraph", content:[{ type:"mention", attrs:{ id:target.id, text:"@"+target.name } }, { type:"text", text:" "+msg }] }] };
@@ -525,7 +527,10 @@ async function runSteps(key, kinds, mode){
     const same = T.status === old.status && (T.trigger && T.trigger.id) === (old.trigger && old.trigger.id) && kinds.every(k => T.actions.some(a => a.kind === k && !a.disabled));
     const sameExpert = !kinds.includes("assign") || ((T.planExpert && T.planExpert.id) === (old.planExpert && old.planExpert.id));
     if (!same || !sameExpert) {
-      await logIt("fail", `${key}: ticket changed since the last refresh, nothing was done. Review it again.`, { key });
+      const why = T.status !== old.status ? `status is now ${T.status} (was ${old.status})`
+        : (T.trigger && T.trigger.id) !== (old.trigger && old.trigger.id) ? "a newer comment arrived"
+        : !sameExpert ? "the expert choice changed" : "this step no longer applies";
+      await logIt("fail", `${key}: ticket changed since the last refresh (${why}), nothing was done. Review it again.`, { key });
       ok = false;
     } else {
       for (const k of kinds) {
