@@ -48,14 +48,6 @@ header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background
 .auto{margin-top:14px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;padding:10px 14px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
 .auto label{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:13px}
 .auto select{background:var(--sunk);border:1px solid var(--line);border-radius:6px;padding:3px 6px}
-.switch{position:relative;width:38px;height:22px;flex:none}
-.switch input{position:absolute;inset:0;opacity:0;margin:0;cursor:pointer}
-.switch span{position:absolute;inset:0;border-radius:999px;background:var(--line);transition:background .15s}
-.switch span::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:var(--surface);transition:transform .15s}
-.switch input:checked+span{background:var(--ok)}
-.switch input:checked+span::after{transform:translateX(16px)}
-.switch input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
-.autolbl{font-weight:600}
 .tiles{margin-top:14px;display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:8px}
 .tile{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:2px;min-width:0}
 .tile:hover{border-color:var(--accent)}
@@ -77,7 +69,7 @@ section.panel{background:var(--surface);border:1px solid var(--line);border-radi
 .loading{color:var(--muted);padding:14px 0 6px;font-size:13px}
 .loading::before{content:"";display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:8px;background:var(--accent);animation:pulse 1s infinite alternate}
 @keyframes pulse{from{opacity:.25}to{opacity:1}}
-@media (prefers-reduced-motion:reduce){.loading::before{animation:none}.switch span,.switch span::after{transition:none}}
+@media (prefers-reduced-motion:reduce){.loading::before{animation:none}}
 .card{border-top:1px solid var(--line);padding:12px 0;display:flex;flex-direction:column;gap:7px}
 .card:first-child{border-top:0}
 .row{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;min-width:0}
@@ -552,7 +544,7 @@ async function runSteps(key, kinds, mode){
   return ok;
 }
 async function runAutomation(){
-  if (!S.settings.automation || S.autoBusy || !S.mcp) return;
+  if (S.autoBusy || !S.mcp) return;
   S.autoBusy = true; render();
   const todo = S.jira.tickets.filter(t => t.auto && !S.excluded[t.key]);
   for (const t of todo) await runSteps(t.key, t.actions.map(a => a.kind), "auto");
@@ -629,7 +621,6 @@ async function findOnSlack(wid, name){
 /* ---------- refresh ---------- */
 async function refresh(){
   await Promise.all([loadJira(), loadSlack()]);
-  await runAutomation();
 }
 
 /* ---------- render ---------- */
@@ -667,7 +658,7 @@ function renderMove(D){
     return `<div class="card">
       <div class="row">${keyLink(t)}<span class="title">${esc(t.title)}</span></div>
       <div class="row">${stChip(t.status)}<span class="chip">${esc(t.stage)}</span>${t.category ? `<span class="chip">${t.category==="fitness"?"Fitness":"Nutrition"}</span>` : `<span class="chip flag">Category?</span>`}
-        ${t.auto ? `<span class="chip auto-y" title="Automation may do this ticket by itself">Auto</span>` : `<span class="chip auto-n" title="${esc(t.autoWhy)}">Manual</span>`}${!t.auto && t.autoWhy ? `<span class="sub">${esc(t.autoWhy)}</span>` : ""}</div>
+        ${t.auto ? `<span class="chip auto-y" title="Run automation now will do this ticket">Auto</span>` : `<span class="chip auto-n" title="${esc(t.autoWhy)}">Manual</span>`}${!t.auto && t.autoWhy ? `<span class="sub">${esc(t.autoWhy)}</span>` : ""}</div>
       <div class="people"><span>Writer <b>${esc(t.writer ? t.writer.name : "—")}</b></span><span>Expert <b>${esc(t.expert ? expertName(t.expert) : "—")}</b></span><span>Proofreader <b>${esc(t.proof ? t.proof.name : "—")}</b></span></div>
       ${t.trigger ? `<div class="quote"><span class="who">${esc(t.trigger.name)} · ${ago(t.trigger.at)} ago</span>${esc(t.trigger.text.slice(0,260) || "(link)")}</div>` : ""}
       ${t.warnings.map(w => `<div class="warn">${esc(w)}</div>`).join("")}
@@ -784,14 +775,12 @@ function renderExcl(){
 function renderAuto(){
   const s = S.settings;
   $("auto").innerHTML = `
-    <span class="switch"><input type="checkbox" id="auto-on" role="switch" data-act="autoon" ${s.automation?"checked":""} ${S.dbReady||!S.db?"":"disabled"} aria-label="Automation"><span></span></span>
-    <span class="autolbl">Automation ${s.automation ? "On" : "Off"}</span>
     <label for="auto-win">Act on comments newer than <select id="auto-win" data-act="win">${[3,7,14,30].map(d => `<option value="${d}" ${+s.windowDays===d?"selected":""}>${d} days</option>`).join("")}</select></label>
     <label for="auto-note">Note to writer <select id="auto-note" data-act="note">
       <option value="internal" ${s.noteMode!=="standard"?"selected":""}>Internal (Service Desk Team)</option>
       <option value="standard" ${s.noteMode==="standard"?"selected":""}>Standard comment</option></select></label>
-    <button class="btn" data-act="runnow" ${S.autoBusy?"disabled":""}>Run automation now</button>
-    <span class="status">${S.autoBusy ? "Running steps…" : S.lastAuto ? `Last run ${ago(S.lastAuto.at)} ago · ${S.lastAuto.n} ticket${S.lastAuto.n===1?"":"s"}` : s.automation ? "Runs every 10 minutes while open, and hourly on weekdays from the scheduled task" : "Off: nothing happens without your click"}</span>`;
+    <button class="btn pri" data-act="runnow" ${S.autoBusy?"disabled":""}>Run automation now</button>
+    <span class="status">${S.autoBusy ? "Running steps…" : S.lastAuto ? `Last run ${ago(S.lastAuto.at)} ago · ${S.lastAuto.n} ticket${S.lastAuto.n===1?"":"s"}` : "Runs every step on the tickets marked Auto"}</span>`;
 }
 function renderTiles(D){
   const c = D.counts;
@@ -824,7 +813,13 @@ document.addEventListener("click", async ev => {
     case "perms": try { const p = await claude.use("permissions"); await p.manage(); refresh(); } catch { toast("Open the page's Permissions menu to allow Atlassian and Slack."); } break;
     case "step": await runSteps(key, [b.dataset.s], "manual"); break;
     case "all": { const t = findT(key); if (t) await runSteps(key, t.actions.map(a => a.kind), "manual"); break; }
-    case "runnow": await refresh(); if (!S.settings.automation) toast("Automation is off. Turn it on to let it act."); break;
+    case "runnow": {
+      await refresh();
+      const n = S.jira.tickets.filter(t => t.auto && !S.excluded[t.key]).length;
+      if (!n) { toast("No tickets are marked Auto right now."); break; }
+      await logIt("manual", `Run automation now: ${n} ticket${n===1?"":"s"} marked Auto`);
+      await runAutomation(); break;
+    }
     case "exclude": { const t = findT(key); await dbSet("exclusions/"+key, { title: t ? t.title : "", at: Date.now() }); await logIt("manual", `${key}: excluded from tracking`, { key }); break; }
     case "track": await dbDel("exclusions/"+key); await logIt("manual", `${key}: tracked again`, { key }); break;
     case "hide": await dbSet("hiddenSlack/"+b.dataset.ts, { at: Date.now() }); break;
@@ -877,8 +872,7 @@ document.addEventListener("click", async ev => {
 });
 document.addEventListener("change", async ev => {
   const el = ev.target; const act = el.dataset && el.dataset.act; if (!act) return;
-  if (act === "autoon") { await saveSettings({ automation: el.checked }); await logIt("manual", `Automation turned ${el.checked ? "on" : "off"}`); if (el.checked) runAutomation(); }
-  else if (act === "win") { await saveSettings({ windowDays: +el.value }); reanalyze(); }
+  if (act === "win") { await saveSettings({ windowDays: +el.value }); reanalyze(); }
   else if (act === "note") { await saveSettings({ noteMode: el.value }); }
   else if (act === "cat") { const k = el.dataset.k; if (el.value) await dbSet("overrides/"+k, { category: el.value }); else await dbDel("overrides/"+k); }
   else if (act === "exp") {
