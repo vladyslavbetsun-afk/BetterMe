@@ -1,0 +1,895 @@
+<title>BP Review Flow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: an editor's desk. Sticky control bar, count strip, then a work queue (left) beside a feed + log rail (right). */
+:root{
+  --bg:#f3f5f7; --surface:#ffffff; --sunk:#e9edf1; --line:#d5dce3; --fg:#17212b; --muted:#5b6876;
+  --accent:#1d5c8f; --accent-fg:#ffffff; --accent-soft:#dfeaf4;
+  --ok:#1f7a4d; --ok-soft:#dcefe4; --warn:#9a5b00; --warn-soft:#fbecd2; --bad:#b3261e; --bad-soft:#f8dedb;
+  --violet:#5b3fa6; --violet-soft:#e8e2f6;
+  --f-display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body:"Public Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono:"JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --r:8px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#11161c; --surface:#19212a; --sunk:#141b22; --line:#2b3643; --fg:#e4e9ee; --muted:#93a1b0;
+  --accent:#6aa8dc; --accent-fg:#0b1620; --accent-soft:#1d3346;
+  --ok:#5cc58f; --ok-soft:#173527; --warn:#e5a54a; --warn-soft:#3a2a12; --bad:#ef7d74; --bad-soft:#3d1c1a;
+  --violet:#ab95ec; --violet-soft:#2b2343; color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --bg:#11161c; --surface:#19212a; --sunk:#141b22; --line:#2b3643; --fg:#e4e9ee; --muted:#93a1b0;
+  --accent:#6aa8dc; --accent-fg:#0b1620; --accent-soft:#1d3346;
+  --ok:#5cc58f; --ok-soft:#173527; --warn:#e5a54a; --warn-soft:#3a2a12; --bad:#ef7d74; --bad-soft:#3d1c1a;
+  --violet:#ab95ec; --violet-soft:#2b2343; color-scheme:dark;}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:14px;line-height:1.45}
+a{color:var(--accent)}
+button,select,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.wrap{max-width:1360px;margin:0 auto;padding-inline:16px;padding-block:0 48px}
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+.topin{max-width:1360px;margin:0 auto;padding:10px 16px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px}
+.brand{font-family:var(--f-display);font-weight:700;font-size:20px;letter-spacing:-.01em;margin-right:auto;display:flex;align-items:baseline;gap:8px}
+.brand small{font-family:var(--f-mono);font-size:11px;font-weight:500;color:var(--muted);letter-spacing:.04em}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--surface)}
+.seg button{border:0;background:none;padding:5px 12px;cursor:pointer;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-fg)}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:5px 10px;cursor:pointer;white-space:nowrap}
+.btn:hover:not(:disabled){border-color:var(--accent)}
+.btn:disabled{opacity:.5;cursor:default}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.btn.sm{padding:2px 8px;font-size:12.5px}
+.btn.ghost{border-color:transparent;background:none;color:var(--muted)}
+.btn.danger{color:var(--bad)}
+.status{font-size:12.5px;color:var(--muted)}
+.status b{color:var(--fg);font-weight:600}
+.auto{margin-top:14px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;padding:10px 14px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
+.auto label{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:13px}
+.auto select{background:var(--sunk);border:1px solid var(--line);border-radius:6px;padding:3px 6px}
+.switch{position:relative;width:38px;height:22px;flex:none}
+.switch input{position:absolute;inset:0;opacity:0;margin:0;cursor:pointer}
+.switch span{position:absolute;inset:0;border-radius:999px;background:var(--line);transition:background .15s}
+.switch span::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:var(--surface);transition:transform .15s}
+.switch input:checked+span{background:var(--ok)}
+.switch input:checked+span::after{transform:translateX(16px)}
+.switch input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
+.autolbl{font-weight:600}
+.tiles{margin-top:14px;display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:8px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:2px;min-width:0}
+.tile:hover{border-color:var(--accent)}
+.tile .n{font-family:var(--f-display);font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1}
+.tile .l{font-size:12px;color:var(--muted)}
+.tile.hot .n{color:var(--accent)}
+.tile.alarm .n{color:var(--bad)}
+.grid{margin-top:18px;display:grid;grid-template-columns:minmax(0,1.65fr) minmax(0,1fr);gap:18px;align-items:start}
+.col{display:flex;flex-direction:column;gap:18px;min-width:0}
+section.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);min-width:0}
+.ph{display:flex;align-items:baseline;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.ph h2{font-family:var(--f-display);font-size:16px;font-weight:700;margin:0;letter-spacing:-.005em;text-wrap:balance}
+.ph .cnt{font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.ph .sp{margin-left:auto;display:flex;gap:8px;align-items:center}
+.pb{padding:4px 14px 12px}
+.empty{color:var(--muted);padding:14px 0 6px;font-size:13px}
+.err{background:var(--bad-soft);color:var(--bad);border-radius:6px;padding:8px 10px;margin:10px 0;font-size:13px}
+.err .btn{margin-left:6px}
+.loading{color:var(--muted);padding:14px 0 6px;font-size:13px}
+.loading::before{content:"";display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:8px;background:var(--accent);animation:pulse 1s infinite alternate}
+@keyframes pulse{from{opacity:.25}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){.loading::before{animation:none}.switch span,.switch span::after{transition:none}}
+.card{border-top:1px solid var(--line);padding:12px 0;display:flex;flex-direction:column;gap:7px}
+.card:first-child{border-top:0}
+.row{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;min-width:0}
+.key{font-family:var(--f-mono);font-size:12.5px;font-weight:500;text-decoration:none;background:var(--accent-soft);color:var(--accent);padding:1px 6px;border-radius:4px}
+.title{font-weight:600;min-width:0;overflow-wrap:anywhere}
+.chip{font-size:11.5px;padding:1px 7px;border-radius:999px;background:var(--sunk);color:var(--muted);white-space:nowrap;letter-spacing:.01em}
+.chip.st-Text{background:var(--sunk);color:var(--fg)}
+.chip.st-Review{background:var(--violet-soft);color:var(--violet)}
+.chip.st-Proofreading{background:var(--warn-soft);color:var(--warn)}
+.chip.st-Ready{background:var(--ok-soft);color:var(--ok)}
+.chip.auto-y{background:var(--ok-soft);color:var(--ok);font-weight:600}
+.chip.auto-n{background:var(--sunk);color:var(--muted);font-weight:600}
+.chip.flag{background:var(--bad-soft);color:var(--bad);font-weight:600}
+.chip.soon{background:var(--warn-soft);color:var(--warn)}
+.people{font-size:12.5px;color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 14px}
+.people b{color:var(--fg);font-weight:500}
+.quote{font-size:13px;border-left:3px solid var(--line);padding:2px 0 2px 10px;color:var(--fg);overflow-wrap:anywhere}
+.quote .who{color:var(--muted);font-size:12px;display:block}
+.warn{font-size:12.5px;color:var(--warn);background:var(--warn-soft);padding:3px 8px;border-radius:5px}
+.acts{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.acts select{background:var(--sunk);border:1px solid var(--line);border-radius:6px;padding:3px 6px;font-size:12.5px;max-width:100%}
+.sub{font-size:12px;color:var(--muted)}
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl td{padding:7px 6px;border-top:1px solid var(--line);vertical-align:top}
+.tbl tr:first-child td{border-top:0}
+.tbl td.num{font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--muted);text-align:right}
+.scroll{overflow-x:auto}
+.group{border-top:1px solid var(--line);padding:10px 0}
+.group:first-child{border-top:0}
+.gh{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin-bottom:6px}
+.gh strong{font-size:14px}
+.tl{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.tl li{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;font-size:13px;min-width:0}
+.tl li .t{min-width:0;overflow-wrap:anywhere}
+.x{border:0;background:none;color:var(--muted);cursor:pointer;font-size:15px;line-height:1;padding:0 4px}
+.x:hover{color:var(--bad)}
+.preview{background:var(--sunk);border:1px solid var(--line);border-radius:6px;padding:10px;font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere;margin:6px 0}
+.feed .it{border-top:1px solid var(--line);padding:9px 0;display:flex;flex-direction:column;gap:3px}
+.feed .it:first-child{border-top:0}
+.feed .h{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.feed .h time{font-family:var(--f-mono);color:var(--muted);font-size:11.5px}
+.feed .what{font-size:13px;font-weight:500}
+.feed .body{font-size:12.5px;color:var(--muted);overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.log{list-style:none;margin:0;padding:0;max-height:520px;overflow-y:auto}
+.log li{border-top:1px solid var(--line);padding:7px 0;font-size:12.5px;display:grid;grid-template-columns:auto 1fr;gap:2px 8px}
+.log li:first-child{border-top:0}
+.log time{font-family:var(--f-mono);font-size:11px;color:var(--muted);white-space:nowrap;padding-top:1px}
+.log .k{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-right:4px}
+.log li.fail{color:var(--bad)}
+.log li.fail .k{color:var(--bad)}
+.log .extra{grid-column:2}
+.confirm{display:inline-flex;gap:6px;align-items:center;font-size:12.5px}
+.linkbox{display:flex;flex-direction:column;gap:4px;margin-top:4px}
+.linkbox .opt{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12.5px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:8px 14px;border-radius:6px;font-size:13px;z-index:10;max-width:calc(100% - 32px)}
+@media (max-width:1100px){.tiles{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media (max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:520px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.brand{font-size:18px}}
+</style>
+
+<header class="top"><div class="topin">
+  <div class="brand">BP Review Flow <small>NEWSITEAM · BLOG PROJECT</small></div>
+  <div class="seg" role="group" aria-label="Ticket scope">
+    <button id="scope-mine" data-act="scope" data-v="mine">My tickets</button>
+    <button id="scope-all" data-act="scope" data-v="all">All BP</button>
+  </div>
+  <button class="btn" id="refresh" data-act="refresh">Refresh</button>
+  <span class="status" id="status">Starting…</span>
+</div></header>
+
+<div class="wrap">
+  <div class="auto" id="auto"></div>
+  <div class="tiles" id="tiles"></div>
+  <div id="pageerr"></div>
+  <div class="grid">
+    <div class="col">
+      <section class="panel" id="sec-move"><div class="ph"><h2>Your move</h2><span class="cnt" id="c-move"></span></div><div class="pb" id="b-move"></div></section>
+      <section class="panel" id="sec-noreply"><div class="ph"><h2>No reply to your comment (7+ days)</h2><span class="cnt" id="c-noreply"></span></div><div class="pb" id="b-noreply"></div></section>
+      <section class="panel" id="sec-follow"><div class="ph"><h2>Follow-ups to writers</h2><span class="cnt" id="c-follow"></span></div><div class="pb" id="b-follow"></div></section>
+      <section class="panel" id="sec-slackw"><div class="ph"><h2>Slack writers about edits</h2><span class="cnt" id="c-slackw"></span></div><div class="pb" id="b-slackw"></div></section>
+      <section class="panel" id="sec-expert"><div class="ph"><h2>Experts with no update (7+ days)</h2><span class="cnt" id="c-expert"></span></div><div class="pb" id="b-expert"></div></section>
+      <section class="panel" id="sec-wait"><div class="ph"><h2>Waiting on others</h2><span class="cnt" id="c-wait"></span></div><div class="pb" id="b-wait"></div></section>
+    </div>
+    <div class="col">
+      <section class="panel" id="sec-feed"><div class="ph"><h2>Jira → Slack today</h2><span class="cnt" id="c-feed"></span></div><div class="pb feed" id="b-feed"></div></section>
+      <section class="panel" id="sec-log"><div class="ph"><h2>Action log</h2><span class="cnt" id="c-log"></span><span class="sp" id="logtools"></span></div><div class="pb" id="b-log"></div></section>
+      <section class="panel" id="sec-excl"><div class="ph"><h2>Excluded tickets</h2><span class="cnt" id="c-excl"></span></div><div class="pb" id="b-excl"></div></section>
+    </div>
+  </div>
+</div>
+<div id="toast" class="toast" hidden></div>
+
+<script>
+"use strict";
+/* ---------- constants ---------- */
+const CLOUD = "657e24cd-f643-4482-aba5-7e848607df28";
+const SITE = "https://newsiteam.atlassian.net";
+const JIRA = "Atlassian", SLACK = "Slack";
+const F = { author:"customfield_11710", expert:"customfield_11711", proof:"customfield_11712", parts:"customfield_11208", mgr:"customfield_11709" };
+const TR = { review:"21", proof:"31", ready:"41" };
+const EXPERTS = {
+  fitness:[{id:"712020:78a486c4-c1e4-4bc0-bba9-4676513ecb28",name:"Carter Lee"},{id:"5de4fe878389de0cd335416b",name:"Garett Reid"}],
+  nutrition:[{id:"712020:43ac8bef-1645-465e-9909-5bbb7ee20fa5",name:"Angelica Galvan"},{id:"712020:87a66480-0c2d-4444-be68-26bb3afbbd60",name:"maria.eugenia.coaching"}]
+};
+const ALL_EXPERTS = [...EXPERTS.fitness, ...EXPERTS.nutrition];
+const EXPERT_IDS = new Set(ALL_EXPERTS.map(e => e.id));
+const EXPERT_LABEL = { "712020:87a66480-0c2d-4444-be68-26bb3afbbd60":"Maria Eugenia Corrarello" };
+const TIM = { id:"70121:f5089ddd-2808-4286-a217-02dd8bda85e9", name:"Tim Jones" };
+const IGNORED = new Set(["712020:7cf474f8-6ae6-439f-8d54-f6a1e3143066","712020:b345726f-fe25-4239-a7dc-7322d7dbc2ae"]);
+const IGNORED_NAMES = ["Oksana Pidlisna","Yuliia Koreniuk"];
+const JIRA_DM = "D0BU742R27L";
+const ACTIVE = ["Text","Review","Proofreading"];
+const ALL_ST = ["Open","Text","Review","Proofreading","Ready"];
+const DAY = 864e5;
+const FIT_KW = ["workout","exercise","exercises","yoga","squat","squats","pilates","push up","push-up","pushup","pull up","pull-up","pullup","plank","cardio","abs","stretch","stretches","stretching","walking","walk","running","run","hiit","calisthenics","strength","muscle","muscles","glute","glutes","lunge","lunges","burpee","deadlift","gym","fitness","training","core","dumbbell","kettlebell","jump","steps","posture","mobility","flexibility","somatic","barre","tai chi","treadmill","cycling","swimming","body composition","toning","tone","arm","arms","leg","legs","belly fat","reps","sets","warm up","cool down"];
+const NUT_KW = ["diet","diets","meal","meals","snack","snacks","drink","drinks","food","foods","recipe","recipes","calorie","calories","protein","carb","carbs","keto","fasting","eat","eating","nutrition","nutrient","vitamin","vitamins","fruit","fruits","vegetable","vegetables","smoothie","smoothies","juice","tea","coffee","sugar","breakfast","lunch","dinner","good for you","healthy fats","fiber","cheese","bread","rice","pasta","pepperoni","egg","eggs","oatmeal","yogurt","supplement","supplements","hydration","water","alcohol","wine","beer","sauce","salad","soup","nuts","chocolate","milk","grocery","menu","dessert","bars","shake","shakes"];
+const NOTE_RE = /please address the comments/i, ASK_EDITS_RE = /any news on the edits/i, ASK_TICKET_RE = /any news on the ticket/i;
+
+/* ---------- state ---------- */
+const S = {
+  scope: lsGet("bp.scope") || "mine",
+  me: null, mcp: null, db: null, perms: null,
+  jira: { loading:false, error:null, tickets:[], at:null },
+  reviewCounts: {},
+  slack: { loading:false, error:null, items:[], at:null },
+  settings: { automation:false, windowDays:14, noteMode:"internal" },
+  excluded: {}, links: {}, sent: {}, hidden: {}, overrides: {}, expertAsks: {}, log: [],
+  dbReady:false, running:{}, autoBusy:false, lastAuto:null,
+  ui: { preview:{}, find:{}, confirmClear:false, linkOpen:{} }
+};
+
+/* ---------- utils ---------- */
+function lsGet(k){ try { return localStorage.getItem(k); } catch { return null; } }
+function lsSet(k,v){ try { localStorage.setItem(k,v); } catch {} }
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const $ = id => document.getElementById(id);
+const parseT = s => s ? Date.parse(String(s).replace(/([+-]\d\d)(\d\d)$/, "$1:$2")) : NaN;
+function ago(t){ if(!t) return "—"; const d = Date.now()-t; if(d<36e5) return Math.max(1,Math.round(d/6e4))+"m"; if(d<DAY) return Math.round(d/36e5)+"h"; return Math.floor(d/DAY)+"d"; }
+const days = t => (Date.now()-t)/DAY;
+const last = a => a[a.length-1];
+const shortTitle = t => String(t||"").split(",")[0].trim();
+const cap = s => s ? s.charAt(0).toUpperCase()+s.slice(1).toLowerCase() : s;
+function firstName(name){ const n = String(name||"").split(/[\s.]+/)[0]; return cap(n) || "there"; }
+function expertName(e){ return EXPERT_LABEL[e.id] || e.name; }
+function toast(msg){ const t=$("toast"); t.textContent=msg; t.hidden=false; clearTimeout(toast._t); toast._t=setTimeout(()=>t.hidden=true,4000); }
+function clean(body){
+  return String(body||"").replace(/<custom[^>]*>([\s\S]*?)<\/custom>/g,"$1").replace(/[‌​]/g,"").replace(/\s+/g," ").trim();
+}
+function payloadOf(res){ let p = res && res.payload; if (typeof p === "string") { try { p = JSON.parse(p); } catch {} } return p; }
+function textOf(p){ if (typeof p === "string") return p; if (!p) return ""; return p.messages || p.results || p.text || JSON.stringify(p); }
+
+/* ---------- connector calls ---------- */
+async function read(server, tool, input, ms=80000){
+  if (!S.mcp) throw { code:"not_granted", server, message:"Connectors are not available on this view." };
+  const opt = { cache:false };
+  try { opt.signal = AbortSignal.timeout(ms); } catch {}
+  return payloadOf(await S.mcp.callTool(server, tool, input, opt));
+}
+async function write(server, tool, input){
+  if (!S.mcp) throw { code:"not_granted", server, message:"Connectors are not available on this view." };
+  return payloadOf(await S.mcp.callTool(server, tool, input, { cache:false }));
+}
+function errText(e, server){
+  const s = (e && e.server) || server || "the connector";
+  const m = (e && e.message) || String(e);
+  switch (e && e.code) {
+    case "needs_reauth": return `Reconnect ${s} in claude.ai Settings → Connectors, then click Refresh.`;
+    case "server_not_connected": return `Add ${s} in claude.ai Settings → Connectors, then click Refresh.`;
+    case "selection_required": return `Choose which ${s} connector this page should use when claude.ai asks, then click Refresh.`;
+    case "not_in_manifest": return `${s} isn't allowed for this page. Allow it from the page's Permissions menu.`;
+    case "blocked_by_policy": return `Your organization blocks this ${s} action.`;
+    case "cancelled": return `${s} took too long and the request was stopped. Click Refresh to try again.`;
+    case "not_granted": case "capability_disabled": case "capability_removed": return `Connectors aren't available in this view. Open the dashboard in claude.ai while signed in.`;
+    case "tool_error":
+      if (/not installed|403|forbidden/i.test(m) && s===JIRA) return `Jira refused access: the Atlassian connector isn't installed on the newsiteam site. In claude.ai go to Settings → Connectors → Atlassian, reconnect and choose newsiteam.`;
+      return `${s} reported: ${m}`;
+    default: return `${s}: ${m}`;
+  }
+}
+const needsPerm = e => e && (e.code === "not_in_manifest");
+
+/* ---------- db ---------- */
+async function dbSet(path, data){ if(!S.db) return; try { await S.db.doc(path).set(data); } catch(e){ toast("Couldn't save: "+(e.message||e.code)); } }
+async function dbDel(path){ if(!S.db) return; try { await S.db.doc(path).delete(); } catch(e){ toast("Couldn't save: "+(e.message||e.code)); } }
+async function logIt(kind, text, extra={}){
+  const entry = { at: Date.now(), kind, text, ...extra };
+  if (!S.db) { S.log.unshift(entry); render(); return; }
+  try { await S.db.collection("log").add(entry); } catch(e){ S.log.unshift(entry); render(); }
+}
+function subscribeDb(){
+  const db = S.db;
+  const coll = (name, fn) => db.collection(name).onSnapshot(snap => { const m={}; snap.docs.forEach(d=>m[d.id]=d.data()); fn(m); render(); }, () => {});
+  db.doc("settings/main").onSnapshot(d => { if (d.exists) S.settings = { ...S.settings, ...d.data() }; S.dbReady = true; reanalyze(); }, () => {});
+  coll("exclusions", m => S.excluded = m);
+  coll("slackLinks", m => S.links = m);
+  coll("slackSent", m => S.sent = m);
+  coll("hiddenSlack", m => S.hidden = m);
+  coll("overrides", m => { S.overrides = m; reanalyze(); });
+  coll("expertAsks", m => { S.expertAsks = m; reanalyze(); });
+  db.collection("log").orderBy("at","desc").limit(200).onSnapshot(snap => { S.log = snap.docs.map(d => ({ id:d.id, ...d.data() })); render(); }, () => {});
+}
+async function saveSettings(patch){ S.settings = { ...S.settings, ...patch }; render(); await dbSet("settings/main", S.settings); }
+
+/* ---------- Jira load ---------- */
+const FIELDS = ["summary","status","comment","created","updated",F.author,F.expert,F.proof,F.parts,F.mgr];
+async function searchAll(jql, fields, pages=6){
+  let out = [], token;
+  for (let i=0;i<pages;i++){
+    const input = { cloudId:CLOUD, jql, fields, maxResults:100, responseContentFormat:"markdown" };
+    if (token) input.nextPageToken = token;
+    const p = await read(JIRA, "searchJiraIssuesUsingJql", input);
+    const nodes = (p && p.issues && p.issues.nodes) || (p && p.issues) || [];
+    out = out.concat(Array.isArray(nodes) ? nodes : []);
+    const pi = p && p.issues && p.issues.pageInfo;
+    if (pi && pi.hasNextPage && pi.endCursor) token = pi.endCursor; else if (p && p.nextPageToken) token = p.nextPageToken; else break;
+  }
+  return out;
+}
+function jqlFor(scope){
+  return `project = BP AND status in (${ALL_ST.map(s=>`"${s}"`).join(",")})` + (scope==="mine" ? " AND customfield_11709 = currentUser()" : "") + " ORDER BY updated DESC";
+}
+async function loadJira(){
+  S.jira.loading = true; S.jira.error = null; render();
+  try {
+    const [issues, review] = await Promise.all([
+      searchAll(jqlFor(S.scope), FIELDS),
+      searchAll(`project = BP AND status = "Review"`, [F.expert], 4).catch(() => [])
+    ]);
+    const rc = {}; review.forEach(i => { const e = i.fields && i.fields[F.expert]; if (e && e.accountId) rc[e.accountId] = (rc[e.accountId]||0)+1; });
+    S.reviewCounts = rc;
+    S.jira.tickets = issues.map(analyze);
+    S.jira.at = Date.now();
+  } catch (e) { S.jira.error = e; }
+  S.jira.loading = false; render();
+}
+
+/* ---------- analysis ---------- */
+function person(u){ return u && u.accountId ? { id:u.accountId, name:u.displayName || "Unknown" } : null; }
+function categoryOf(title){
+  const t = " " + String(title||"").toLowerCase().replace(/[^a-z0-9\s-]/g," ") + " ";
+  const hit = kw => t.includes(" "+kw+" ");
+  const f = FIT_KW.filter(hit).length, n = NUT_KW.filter(hit).length;
+  if (f && !n) return "fitness"; if (n && !f) return "nutrition";
+  if (f && n) return f > n+1 ? "fitness" : n > f+1 ? "nutrition" : null;
+  return null;
+}
+function pickExpert(cat){
+  const list = EXPERTS[cat]; if (!list) return null;
+  return [...list].sort((a,b) => (S.reviewCounts[a.id]||0) - (S.reviewCounts[b.id]||0))[0];
+}
+const rawCache = new Map();
+function analyze(issue){
+  rawCache.set(issue.key, issue);
+  const f = issue.fields || {};
+  const writer = person(f[F.author]), expert = person(f[F.expert]), proof = person(f[F.proof]);
+  const partsRaw = (Array.isArray(f[F.parts]) ? f[F.parts] : []).map(person).filter(Boolean);
+  const mgrRaw = f[F.mgr]; const mgrs = (Array.isArray(mgrRaw) ? mgrRaw : mgrRaw ? [mgrRaw] : []).map(person).filter(Boolean);
+  const mine = S.me ? mgrs.some(m => m.id === S.me) : S.scope === "mine";
+  const status = (f.status && f.status.name) || "?";
+  const expSet = new Set(EXPERT_IDS); if (expert) expSet.add(expert.id);
+  const raw = (f.comment && f.comment.comments) || [];
+  const cs = raw.filter(c => !(c.author && IGNORED.has(c.author.accountId))).map(c => {
+    const aid = c.author && c.author.accountId;
+    const role = aid && aid === S.me ? "me" : writer && aid === writer.id ? "writer" : aid === TIM.id ? "tim" : expSet.has(aid) ? "expert" : "other";
+    const mentions = [...String(c.body||"").matchAll(/data-type="mention"[^>]*>@([^<]+)</g)].map(m => m[1].trim());
+    return { id:c.id, aid, name:(c.author && c.author.displayName) || "?", role, at:parseT(c.created), text:clean(c.body), link:/https?:\/\//.test(c.body||""), mentions };
+  }).sort((a,b) => a.at - b.at);
+  const people = {}; [writer, expert, proof, ...partsRaw, ...mgrs].filter(Boolean).forEach(p => people[p.name] = p);
+  cs.forEach(c => { if (c.aid) people[c.name] = { id:c.aid, name:c.name }; });
+  ALL_EXPERTS.forEach(e => people[e.name] = people[e.name] || e);
+
+  const T = { key:issue.key, title:f.summary || "", status, url:`${SITE}/browse/${issue.key}`, writer, expert, proof, parts:partsRaw, mine, cs, people,
+    created:parseT(f.created), actions:[], warnings:[], trigger:null, stage:status, waitingOn:null, since:null };
+  const ov = S.overrides[issue.key] || {};
+  T.category = ov.category || (expert ? (EXPERTS.fitness.some(e=>e.id===expert.id) ? "fitness" : EXPERTS.nutrition.some(e=>e.id===expert.id) ? "nutrition" : null) : null) || categoryOf(T.title);
+  T.catAuto = !ov.category;
+
+  const linkC = last(cs.filter(c => c.role === "writer" && c.link)) || (!writer ? last(cs.filter(c => c.role === "other" && c.link)) : null);
+  T.linkC = linkC;
+  const afterLink = linkC ? cs.filter(c => c.at > linkC.at) : cs;
+  const expC = afterLink.filter(c => c.role === "expert");
+  const lastExp = last(expC), firstExp = expC[0];
+
+  if (status === "Text") {
+    if (linkC) {
+      let target = null;
+      if (ov.expertId) target = ALL_EXPERTS.find(e => e.id === ov.expertId) || null;
+      else if (expert) target = expert;
+      else if (T.category) target = pickExpert(T.category);
+      if (!target) { T.warnings.push("Pick a category or expert"); T.category = T.category || null; }
+      if (!writer) T.warnings.push("No Author on ticket");
+      T.planExpert = target;
+      T.actions.push({ kind:"assign", label: target ? `Move to Review + add ${expertName(target)}` : "Move to Review + add expert", disabled:!target });
+      T.trigger = linkC; T.stage = "Article link posted";
+    } else { T.stage = "Writing"; T.waitingOn = writer ? writer.name : "writer"; T.since = last(cs)?.at || T.created; }
+  } else if (status === "Review") {
+    if (lastExp) {
+      const note = cs.find(c => c.role === "me" && NOTE_RE.test(c.text) && c.at > firstExp.at);
+      if (note) { T.actions.push({ kind:"toProof", label:"Move to Proofreading" }); T.trigger = note; T.stage = "Note sent, still in Review"; }
+      else {
+        T.actions.push({ kind:"toProof", label:"Move to Proofreading" });
+        T.actions.push({ kind:"note", label: writer ? `Post note tagging ${writer.name}` : "Post note to writer", disabled:!writer });
+        if (!writer) T.warnings.push("No Author on ticket");
+        if (/\?/.test(lastExp.text)) T.warnings.push("Expert's last comment looks like a question");
+        T.trigger = lastExp; T.stage = "Expert commented";
+      }
+    } else {
+      T.stage = "With expert"; T.waitingOn = expert ? expertName(expert) : "expert"; T.since = linkC ? linkC.at : (last(cs)?.at || T.created);
+      if (linkC && days(linkC.at) > 7) {
+        const recentAsk = cs.some(c => c.role === "me" && ASK_TICKET_RE.test(c.text) && days(c.at) < 7);
+        const dbAsk = S.expertAsks[T.key] && days(S.expertAsks[T.key].at) < 7;
+        if (!recentAsk && !dbAsk) T.expertSilent = true;
+      }
+    }
+  } else if (status === "Proofreading") {
+    const anyExp = cs.filter(c => c.role === "expert");
+    const note = last(cs.filter(c => c.role === "me" && NOTE_RE.test(c.text)));
+    if (!anyExp.length) T.warnings.push("Ticket is in Proofreading but has no expert comment");
+    const base = note ? note.at : (last(anyExp)?.at || 0);
+    const timC = last(cs.filter(c => c.role === "tim" && c.at > base));
+    if (timC) { T.actions.push({ kind:"toReady", label:"Move to Ready" }); T.trigger = timC; T.stage = "Proofreading done"; }
+    else if (!note) {
+      if (anyExp.length) {
+        T.actions.push({ kind:"note", label: writer ? `Post note tagging ${writer.name}` : "Post note to writer", disabled:!writer });
+        if (!writer) T.warnings.push("No Author on ticket");
+        T.trigger = last(anyExp); T.stage = "Note to writer missing"; T.manualOnly = true;
+      } else { T.stage = "Check manually"; T.waitingOn = "you"; T.since = last(cs)?.at || T.created; }
+    } else if (proof && proof.id === TIM.id) {
+      T.stage = "With proofreader"; T.waitingOn = TIM.name; T.since = (cs.find(c => c.role === "writer" && c.at > note.at) || note).at;
+    } else {
+      const reply = cs.find(c => c.role === "writer" && c.at > note.at);
+      if (reply) { T.actions.push({ kind:"addTim", label:"Add Tim Jones as proofreader" }); T.trigger = reply; T.stage = "Writer addressed comments"; }
+      else { T.stage = "Writer fixing"; T.waitingOn = writer ? writer.name : "writer"; T.since = note.at; }
+    }
+  }
+  const age = T.trigger ? days(T.trigger.at) : Infinity;
+  T.auto = !T.manualOnly && T.mine && T.actions.length > 0 && T.warnings.length === 0 && age <= S.settings.windowDays && T.actions.every(a => !a.disabled);
+  T.autoWhy = !T.actions.length ? "" : T.manualOnly ? "Not one of the four routine steps" : !T.mine ? "You aren't in Managers" : T.warnings.length ? "Has a warning" : age > S.settings.windowDays ? `Trigger older than ${S.settings.windowDays} days` : "";
+
+  // follow-up facts
+  const lastC = last(cs);
+  if (lastC && lastC.role === "me") {
+    T.myLast = lastC;
+    const tagged = lastC.mentions.map(n => T.people[n] || null).filter(Boolean)[0] || null;
+    T.target = tagged || writer;
+    T.targetIsExpert = !!(T.target && (EXPERT_IDS.has(T.target.id) || (expert && T.target.id === expert.id)));
+    T.isAsk = ASK_EDITS_RE.test(lastC.text);
+  }
+  return T;
+}
+
+/* ---------- derived views ---------- */
+function derive(){
+  const ex = S.excluded;
+  const ts = S.jira.tickets.filter(t => !ex[t.key]);
+  const move = ts.filter(t => t.actions.length);
+  const wait = ts.filter(t => !t.actions.length && ACTIVE.includes(t.status)).sort((a,b) => (a.since||0) - (b.since||0));
+  const noReply = ts.filter(t => t.myLast && !t.isAsk && days(t.myLast.at) > 7);
+  const asks = ts.filter(t => t.myLast && t.isAsk).map(t => {
+    const wid = t.writer ? t.writer.id : "none";
+    const sent = S.sent[wid]; const sAt = sent && sent.tickets && sent.tickets[t.key];
+    const afterSlack = sAt && sAt > t.myLast.at;
+    const hidden = afterSlack && days(sAt) < 3;
+    const returned = afterSlack && days(sAt) >= 3;
+    const d = days(t.myLast.at);
+    return { t, wid, d, hidden, returned, flagged: d >= 3 || returned };
+  });
+  const follow = asks.filter(a => !a.hidden && (a.d < 7 || a.returned));
+  const escalate = asks.filter(a => !a.hidden && !a.returned && a.d >= 7);
+  const expertSilent = ts.filter(t => t.expertSilent);
+  const counts = {
+    move: move.length,
+    text: ts.filter(t => t.status === "Text" && !t.actions.length).length,
+    expert: ts.filter(t => t.stage === "With expert").length,
+    fixing: ts.filter(t => t.stage === "Writer fixing").length,
+    proof: ts.filter(t => t.stage === "With proofreader").length,
+    noReply: noReply.length,
+    flagged: follow.filter(a => a.flagged).length,
+    silent: expertSilent.length
+  };
+  return { ts, move, wait, noReply, follow, escalate, expertSilent, counts, asks };
+}
+function groupBy(arr, keyFn){ const m = new Map(); arr.forEach(x => { const k = keyFn(x); if (!m.has(k)) m.set(k, []); m.get(k).push(x); }); return m; }
+// every ticket for this writer that needs attention (7d no-reply targeting them, or asks flagged and not hidden)
+function attentionFor(wid, D){
+  const keys = new Map();
+  D.noReply.filter(t => t.writer && t.writer.id === wid && !t.targetIsExpert).forEach(t => keys.set(t.key, t));
+  D.asks.filter(a => a.wid === wid && !a.hidden && a.flagged).forEach(a => keys.set(a.t.key, a.t));
+  return [...keys.values()];
+}
+function slackText(writer, tickets){
+  const link = S.links[writer.id];
+  const name = firstName(link && link.slackName || writer.name);
+  const sent = S.sent[writer.id];
+  const earliestAsk = Math.min(...tickets.map(t => t.myLast ? t.myLast.at : Date.now()));
+  const again = sent && sent.at && sent.at > earliestAsk;
+  const lines = tickets.map(t => `- [${t.key} ${shortTitle(t.title)}](${t.url})`).join("\n");
+  return `Hi ${name}, hope you're doing well! ${again ? "Just checking in again on the edits for these tickets:" : "Just following up on the edits for these tickets:"}\n${lines}\n\nCould you share an update on where they stand when you get a chance? Thank you!`;
+}
+
+/* ---------- actions on Jira ---------- */
+const findT = key => S.jira.tickets.find(t => t.key === key);
+async function freshTicket(key){
+  const p = await read(JIRA, "getJiraIssue", { cloudId:CLOUD, issueIdOrKey:key, fields:FIELDS, responseContentFormat:"markdown" });
+  const issue = p && p.fields ? p : (p && p.issue) || p;
+  return analyze({ key, fields: issue.fields || {} });
+}
+function noteInput(key, target, msg){
+  const adf = { type:"doc", version:1, content:[{ type:"paragraph", content:[{ type:"mention", attrs:{ id:target.id, text:"@"+target.name } }, { type:"text", text:" "+msg }] }] };
+  const input = { cloudId:CLOUD, issueIdOrKey:key, commentBody:JSON.stringify(adf), contentFormat:"adf" };
+  if (S.settings.noteMode !== "standard") input.commentVisibility = { type:"role", value:"Service Desk Team" };
+  return input;
+}
+async function doStep(T, a){
+  const key = T.key;
+  if (a.kind === "assign") {
+    const ex = T.planExpert; if (!ex) throw { message:"No expert chosen" };
+    const ids = new Set(T.parts.map(p => p.id)); ids.add(ex.id);
+    await write(JIRA, "editJiraIssue", { cloudId:CLOUD, issueIdOrKey:key, fields:{ [F.expert]:{ accountId:ex.id }, [F.parts]:[...ids].map(id => ({ accountId:id })) } });
+    await write(JIRA, "transitionJiraIssue", { cloudId:CLOUD, issueIdOrKey:key, transition:{ id:TR.review } });
+    return `Set Expert = ${expertName(ex)}, added to Request participants, moved to Review`;
+  }
+  if (a.kind === "toProof") { await write(JIRA, "transitionJiraIssue", { cloudId:CLOUD, issueIdOrKey:key, transition:{ id:TR.proof } }); return "Moved to Proofreading"; }
+  if (a.kind === "toReady") { await write(JIRA, "transitionJiraIssue", { cloudId:CLOUD, issueIdOrKey:key, transition:{ id:TR.ready } }); return "Moved to Ready"; }
+  if (a.kind === "note") {
+    if (!T.writer) throw { message:"No Author on ticket" };
+    await write(JIRA, "addCommentToJiraIssue", noteInput(key, T.writer, "Hi. Please address the comments. Thanks."));
+    return `Posted note: "@${T.writer.name} Hi. Please address the comments. Thanks."`;
+  }
+  if (a.kind === "addTim") {
+    const ids = new Set(T.parts.map(p => p.id)); ids.add(TIM.id);
+    await write(JIRA, "editJiraIssue", { cloudId:CLOUD, issueIdOrKey:key, fields:{ [F.proof]:{ accountId:TIM.id }, [F.parts]:[...ids].map(id => ({ accountId:id })) } });
+    return "Set Proofreader = Tim Jones and added him to Request participants";
+  }
+  throw { message:"Unknown step" };
+}
+// Re-read the ticket, confirm the plan still holds, then run the steps in order.
+async function runSteps(key, kinds, mode){
+  const old = findT(key); if (!old) return false;
+  if (S.excluded[key]) return false;
+  S.running[key] = true; render();
+  let ok = true;
+  try {
+    const T = await freshTicket(key);
+    const same = T.status === old.status && (T.trigger && T.trigger.id) === (old.trigger && old.trigger.id) && kinds.every(k => T.actions.some(a => a.kind === k && !a.disabled));
+    const sameExpert = !kinds.includes("assign") || ((T.planExpert && T.planExpert.id) === (old.planExpert && old.planExpert.id));
+    if (!same || !sameExpert) {
+      await logIt("fail", `${key}: ticket changed since the last refresh, nothing was done. Review it again.`, { key });
+      ok = false;
+    } else {
+      for (const k of kinds) {
+        const a = T.actions.find(x => x.kind === k);
+        try { const what = await doStep(T, a); await logIt(mode, `${key}: ${what}`, { key }); }
+        catch (e) { ok = false; await logIt("fail", `${key}: ${a.label} failed. ${errText(e, JIRA)}`, { key }); break; }
+      }
+    }
+  } catch (e) { ok = false; await logIt("fail", `${key}: couldn't re-read the ticket. ${errText(e, JIRA)}`, { key }); }
+  delete S.running[key];
+  try { const fresh = await freshTicket(key); S.jira.tickets = S.jira.tickets.map(t => t.key === key ? fresh : t); } catch {}
+  render();
+  return ok;
+}
+async function runAutomation(){
+  if (!S.settings.automation || S.autoBusy || !S.mcp) return;
+  S.autoBusy = true; render();
+  const todo = S.jira.tickets.filter(t => t.auto && !S.excluded[t.key]);
+  for (const t of todo) await runSteps(t.key, t.actions.map(a => a.kind), "auto");
+  S.lastAuto = { at: Date.now(), n: todo.length };
+  S.autoBusy = false; render();
+}
+
+/* ---------- follow-up actions ---------- */
+async function sendSlack(writer, tickets){
+  const link = S.links[writer.id];
+  if (!link || !link.slackId) { await logIt("fail", `Slack skipped for ${writer.name}: not linked to a Slack account yet. Use Find on Slack.`, { writerId:writer.id }); return false; }
+  try {
+    await write(SLACK, "slack_send_message", { channel_id:link.slackId, message:slackText(writer, tickets) });
+    const now = Date.now(); const prev = S.sent[writer.id] || {};
+    const map = { ...(prev.tickets || {}) }; tickets.forEach(t => map[t.key] = now);
+    await dbSet("slackSent/"+writer.id, { name:writer.name, at:now, tickets:map });
+    await logIt("slack", `Slacked ${link.slackName || writer.name} about ${tickets.length} ticket${tickets.length>1?"s":""}: ${tickets.map(t=>t.key).join(", ")}`, { writerId:writer.id });
+    return true;
+  } catch (e) { await logIt("fail", `Slack to ${writer.name} failed. ${errText(e, SLACK)}`, { writerId:writer.id }); return false; }
+}
+async function askNote(T, target, isExpert){
+  const msg = isExpert ? "Hi. Any news on the ticket?" : "Hi. Any news on the edits?";
+  try { await write(JIRA, "addCommentToJiraIssue", noteInput(T.key, target, msg)); await logIt("jira", `${T.key}: posted "@${target.name} ${msg}"`, { key:T.key, writerId: !isExpert && T.writer ? T.writer.id : undefined }); return true; }
+  catch (e) { await logIt("fail", `${T.key}: note to ${target.name} failed. ${errText(e, JIRA)}`, { key:T.key }); return false; }
+}
+async function reloadKeys(keys){
+  for (const k of keys) { try { const f = await freshTicket(k); S.jira.tickets = S.jira.tickets.map(t => t.key === k ? f : t); } catch {} }
+  render();
+}
+
+/* ---------- Slack feed ---------- */
+function decode(s){ return String(s||"").replace(/&gt;/g,">").replace(/&lt;/g,"<").replace(/&amp;/g,"&"); }
+function parseSlack(text){
+  const out = [];
+  const re = /=== Message from (.+?)(?: <[^>]*>)? \(([A-Z0-9]+)\) at (.+?) ===\s*\nMessage TS: ([\d.]+)\n([\s\S]*?)(?=\n+=== Message from |$)/g;
+  let m;
+  while ((m = re.exec(text))) {
+    const [, from, uid, , ts, body] = m;
+    if (!/jira/i.test(from)) continue;
+    const head = (body.match(/\*([^*\n]+)\*/) || [])[1] || "";
+    const lk = body.match(/<(https:\/\/newsiteam\.atlassian\.net[^|>]*)\|([^>]+)>/);
+    const label = lk ? decode(lk[2]) : ""; const km = label.match(/^(BP-\d+)\s*(.*)$/);
+    let quote = ""; const qi = body.indexOf("&gt;&gt;&gt;");
+    if (qi >= 0) quote = decode(body.slice(qi+12)).replace(/\n?Comment button[\s\S]*$/,"").replace(/\n?(View|Open) (issue|in Jira)[\s\S]*$/i,"").trim();
+    out.push({ ts, at: Math.round(parseFloat(ts)*1000), head: decode(head).replace(/^:\w+:\s*/,""), key: km ? km[1] : null, title: km ? km[2] : label, url: lk ? decode(lk[1]) : null, quote });
+  }
+  return out;
+}
+async function loadSlack(){
+  S.slack.loading = true; S.slack.error = null; render();
+  try {
+    const mid = new Date(); mid.setHours(0,0,0,0);
+    const p = await read(SLACK, "slack_read_channel", { channel_id:JIRA_DM, oldest:String(Math.floor(mid.getTime()/1000)), limit:100, response_format:"detailed" });
+    S.slack.items = parseSlack(textOf(p)).filter(i => i.at >= mid.getTime()).sort((a,b) => b.at - a.at);
+    S.slack.at = Date.now();
+  } catch (e) { S.slack.error = e; }
+  S.slack.loading = false; render();
+}
+async function findOnSlack(wid, name){
+  const parts = String(name).split(/[\s.]+/).filter(Boolean); const surname = parts.length > 1 ? last(parts) : parts[0];
+  S.ui.find[wid] = { loading:true }; render();
+  try {
+    const p = await read(SLACK, "slack_search_users", { keywords:[surname], natural_language_query:name, limit:10 });
+    const txt = textOf(p); const res = [];
+    txt.split(/### Result/).slice(1).forEach(b => {
+      const nm = (b.match(/Name:\s*(.+)/)||[])[1], id = (b.match(/User ID:\s*([A-Z0-9]+)/)||[])[1], em = (b.match(/Email:\s*(.*)/)||[])[1];
+      if (id) res.push({ name:(nm||"").trim(), id, email:(em||"").trim() });
+    });
+    S.ui.find[wid] = { results:res };
+  } catch (e) { S.ui.find[wid] = { error:errText(e, SLACK) }; }
+  render();
+}
+
+/* ---------- refresh ---------- */
+async function refresh(){
+  await Promise.all([loadJira(), loadSlack()]);
+  await runAutomation();
+}
+
+/* ---------- render ---------- */
+function linkUI(writer){
+  if (!writer) return "";
+  const link = S.links[writer.id], f = S.ui.find[writer.id];
+  let h = link && link.slackId && !S.ui.linkOpen[writer.id]
+    ? `<span class="sub">Slack: <b>${esc(link.slackName || link.name)}</b></span> <button class="btn ghost sm" data-act="relink" data-w="${esc(writer.id)}">Change</button>`
+    : `<button class="btn sm" data-act="find" data-w="${esc(writer.id)}" data-n="${esc(writer.name)}">Find on Slack</button>${link && link.slackId ? ` <button class="btn ghost sm" data-act="unrelink" data-w="${esc(writer.id)}">Cancel</button>` : ` <span class="sub">Not linked to Slack</span>`}`;
+  if (f && (S.ui.linkOpen[writer.id] || !(link && link.slackId))) {
+    if (f.loading) h += `<div class="loading">Searching Slack…</div>`;
+    else if (f.error) h += `<div class="err">${esc(f.error)}</div>`;
+    else if (f.results) h += `<div class="linkbox">${f.results.length ? f.results.map(r => `<div class="opt"><button class="btn sm pri" data-act="pick" data-w="${esc(writer.id)}" data-wn="${esc(writer.name)}" data-id="${esc(r.id)}" data-n="${esc(r.name)}" data-e="${esc(r.email)}">Link</button> <b>${esc(r.name)}</b> <span class="sub">${esc(r.email || "no email shown")}</span></div>`).join("") : `<span class="sub">No Slack users match that surname.</span>`}</div>`;
+  }
+  return h;
+}
+function keyLink(t){ return `<a class="key" href="${esc(t.url)}" target="_blank" rel="noopener">${esc(t.key)}</a>`; }
+function stChip(s){ return `<span class="chip st-${esc(s)}">${esc(s)}</span>`; }
+function excludeBtn(key, small){ return small ? `<button class="x" title="Exclude ${esc(key)}" aria-label="Exclude ${esc(key)}" data-act="exclude" data-k="${esc(key)}">×</button>` : `<button class="btn ghost sm" data-act="exclude" data-k="${esc(key)}">Exclude</button>`; }
+
+function renderMove(D){
+  $("c-move").textContent = D.move.length || "";
+  if (S.jira.loading && !S.jira.at) return `<div class="loading">Loading Jira…</div>`;
+  if (!D.move.length) return S.jira.error ? "" : `<div class="empty">Nothing waits on you right now. New steps appear here when writers, experts or Tim comment.</div>`;
+  return D.move.map(t => {
+    const busy = !!S.running[t.key];
+    const catSel = t.status === "Text" ? `<select id="cat-${esc(t.key)}" data-act="cat" data-k="${esc(t.key)}" aria-label="Category for ${esc(t.key)}">
+        <option value="" ${!t.category?"selected":""}>Category?</option>
+        <option value="fitness" ${t.category==="fitness"?"selected":""}>Fitness</option>
+        <option value="nutrition" ${t.category==="nutrition"?"selected":""}>Nutrition</option></select>
+      <select id="exp-${esc(t.key)}" data-act="exp" data-k="${esc(t.key)}" aria-label="Expert for ${esc(t.key)}">
+        <option value="">Expert: ${t.planExpert ? "auto ("+esc(expertName(t.planExpert))+")" : "pick"}</option>
+        <optgroup label="Fitness">${EXPERTS.fitness.map(e => `<option value="${e.id}" ${(S.overrides[t.key]||{}).expertId===e.id?"selected":""}>${esc(expertName(e))} · ${S.reviewCounts[e.id]||0} in Review</option>`).join("")}</optgroup>
+        <optgroup label="Nutrition">${EXPERTS.nutrition.map(e => `<option value="${e.id}" ${(S.overrides[t.key]||{}).expertId===e.id?"selected":""}>${esc(expertName(e))} · ${S.reviewCounts[e.id]||0} in Review</option>`).join("")}</optgroup></select>` : "";
+    return `<div class="card">
+      <div class="row">${keyLink(t)}<span class="title">${esc(t.title)}</span></div>
+      <div class="row">${stChip(t.status)}<span class="chip">${esc(t.stage)}</span>${t.category ? `<span class="chip">${t.category==="fitness"?"Fitness":"Nutrition"}</span>` : `<span class="chip flag">Category?</span>`}
+        ${t.auto ? `<span class="chip auto-y" title="Automation may do this ticket by itself">Auto</span>` : `<span class="chip auto-n" title="${esc(t.autoWhy)}">Manual</span>`}${!t.auto && t.autoWhy ? `<span class="sub">${esc(t.autoWhy)}</span>` : ""}</div>
+      <div class="people"><span>Writer <b>${esc(t.writer ? t.writer.name : "—")}</b></span><span>Expert <b>${esc(t.expert ? expertName(t.expert) : "—")}</b></span><span>Proofreader <b>${esc(t.proof ? t.proof.name : "—")}</b></span></div>
+      ${t.trigger ? `<div class="quote"><span class="who">${esc(t.trigger.name)} · ${ago(t.trigger.at)} ago</span>${esc(t.trigger.text.slice(0,260) || "(link)")}</div>` : ""}
+      ${t.warnings.map(w => `<div class="warn">${esc(w)}</div>`).join("")}
+      <div class="acts">
+        ${t.actions.map(a => `<button class="btn" ${busy||a.disabled?"disabled":""} data-act="step" data-k="${esc(t.key)}" data-s="${a.kind}">${esc(a.label)}</button>`).join("")}
+        ${t.actions.length > 1 ? `<button class="btn pri" ${busy||t.actions.some(a=>a.disabled)?"disabled":""} data-act="all" data-k="${esc(t.key)}">Do all steps</button>` : ""}
+        ${catSel}${excludeBtn(t.key)}${busy ? `<span class="sub">Working…</span>` : ""}
+      </div></div>`;
+  }).join("");
+}
+function renderNoReply(D){
+  $("c-noreply").textContent = D.noReply.length || "";
+  if (S.jira.loading && !S.jira.at) return `<div class="loading">Loading Jira…</div>`;
+  if (!D.noReply.length) return `<div class="empty">No ticket has your comment sitting unanswered for more than 7 days.</div>`;
+  return D.noReply.sort((a,b) => a.myLast.at - b.myLast.at).map(t => {
+    const tg = t.target; const sent = t.writer && S.sent[t.writer.id];
+    const busy = !!S.running["ask:"+t.key];
+    const label = !tg ? "No one to tag" : t.targetIsExpert ? `Ask ${esc(expertName(tg))} for news (Jira)` : `Ask ${esc(tg.name)} about edits (Jira + Slack)`;
+    return `<div class="card"><div class="row">${keyLink(t)}<span class="title">${esc(t.title)}</span>${stChip(t.status)}<span class="chip flag">${Math.floor(days(t.myLast.at))}d no reply</span></div>
+      <div class="quote"><span class="who">You · ${ago(t.myLast.at)} ago</span>${esc(t.myLast.text.slice(0,200))}</div>
+      <div class="acts"><button class="btn" ${!tg||busy?"disabled":""} data-act="ask" data-k="${esc(t.key)}">${label}</button>
+      ${sent && sent.at ? `<span class="sub">Slacked ${ago(sent.at)} ago</span>` : ""}${excludeBtn(t.key)}${busy?`<span class="sub">Working…</span>`:""}</div></div>`;
+  }).join("");
+}
+function renderFollow(D){
+  $("c-follow").textContent = D.follow.length || "";
+  if (S.jira.loading && !S.jira.at) return `<div class="loading">Loading Jira…</div>`;
+  if (!D.follow.length) return `<div class="empty">No open "Any news on the edits?" asks. When you send one, the ticket is tracked here until the writer replies.</div>`;
+  const g = groupBy(D.follow, a => a.wid);
+  return [...g.entries()].map(([wid, list]) => {
+    const w = list[0].t.writer; const flagged = list.filter(a => a.flagged);
+    const att = w ? attentionFor(wid, D) : [];
+    const busy = !!S.running["slack:"+wid];
+    return `<div class="group"><div class="gh"><strong>${esc(w ? w.name : "No Author")}</strong><span class="chip">${list.length} ticket${list.length>1?"s":""}</span>
+      ${w && flagged.length ? `<button class="btn sm pri" ${busy?"disabled":""} data-act="slackw" data-w="${esc(wid)}">Slack ${esc(firstName((S.links[wid]||{}).slackName || w.name))} about ${att.length} ticket${att.length>1?"s":""}</button>` : ""}
+      ${w && S.sent[wid] ? `<span class="sub">Slacked ${ago(S.sent[wid].at)} ago</span>` : ""}</div>
+      <ul class="tl">${list.sort((a,b)=>b.d-a.d).map(a => `<li>${keyLink(a.t)}<span class="t">${esc(shortTitle(a.t.title))}</span>
+        ${a.returned ? `<span class="chip flag">flagged · no reply 3d after Slack</span>` : a.d >= 3 ? `<span class="chip flag">flagged · ${Math.floor(a.d)}d</span>` : `<span class="chip soon">flags in ${Math.max(1,Math.ceil(3-a.d))}d</span>`}
+        ${excludeBtn(a.t.key, true)}</li>`).join("")}</ul>
+      ${w && !(S.links[wid]||{}).slackId ? `<div class="row">${linkUI(w)}</div>` : ""}</div>`;
+  }).join("");
+}
+function renderSlackW(D){
+  const g = groupBy(D.escalate, a => a.wid);
+  $("c-slackw").textContent = g.size || "";
+  if (S.jira.loading && !S.jira.at) return `<div class="loading">Loading Jira…</div>`;
+  if (!g.size) return `<div class="empty">No writer has left your "Any news on the edits?" unanswered for 7+ days.</div>`;
+  return [...g.entries()].map(([wid, list]) => {
+    const w = list[0].t.writer; if (!w) return `<div class="group"><div class="gh"><strong>No Author</strong></div><ul class="tl">${list.map(a=>`<li>${keyLink(a.t)}<span class="t">${esc(shortTitle(a.t.title))}</span></li>`).join("")}</ul></div>`;
+    const att = attentionFor(wid, D); const busy = !!S.running["slack:"+wid] || !!S.running["bulk:"+wid];
+    const pv = S.ui.preview[wid]; const linked = !!(S.links[wid]||{}).slackId;
+    return `<div class="group"><div class="gh"><strong>${esc(w.name)}</strong><span class="chip flag">${list.length} waiting 7d+</span>${S.sent[wid] ? `<span class="sub">Slacked ${ago(S.sent[wid].at)} ago</span>` : ""}</div>
+      <ul class="tl">${list.sort((a,b)=>b.d-a.d).map(a => `<li>${keyLink(a.t)}<span class="t">${esc(shortTitle(a.t.title))}</span><span class="chip">${Math.floor(a.d)}d</span>${excludeBtn(a.t.key, true)}</li>`).join("")}</ul>
+      ${pv ? `<div class="preview">${esc(slackText(w, att))}</div>` : ""}
+      <div class="acts">
+        ${pv ? `<button class="btn pri" ${busy||!linked?"disabled":""} data-act="slacksend" data-w="${esc(wid)}">Send</button><button class="btn ghost" data-act="preview" data-w="${esc(wid)}">Cancel</button>`
+             : `<button class="btn" ${busy||!linked?"disabled":""} data-act="preview" data-w="${esc(wid)}">Slack ${esc(firstName((S.links[wid]||{}).slackName || w.name))}</button>`}
+        <button class="btn" ${busy?"disabled":""} data-act="bulk" data-w="${esc(wid)}">Ask in Jira on all ${list.length} + one Slack</button>
+        ${busy ? `<span class="sub">Working…</span>` : ""}
+      </div><div class="row" style="margin-top:6px">${linkUI(w)}</div></div>`;
+  }).join("");
+}
+function renderExpert(D){
+  $("c-expert").textContent = D.expertSilent.length || "";
+  if (S.jira.loading && !S.jira.at) return `<div class="loading">Loading Jira…</div>`;
+  if (!D.expertSilent.length) return `<div class="empty">Every ticket in Review has heard from its expert, or you followed up within the last 7 days.</div>`;
+  return `<div class="scroll"><table class="tbl"><tbody>${D.expertSilent.sort((a,b)=>a.linkC.at-b.linkC.at).map(t => {
+    const busy = !!S.running["exp:"+t.key];
+    return `<tr><td>${keyLink(t)}</td><td>${esc(shortTitle(t.title))}<div class="sub">Expert ${esc(t.expert ? expertName(t.expert) : "not set")}</div></td><td class="num">${Math.floor(days(t.linkC.at))}d</td>
+    <td><button class="btn sm" ${!t.expert||busy?"disabled":""} data-act="askexp" data-k="${esc(t.key)}">Ask ${esc(t.expert ? firstName(expertName(t.expert)) : "expert")} for news</button> ${excludeBtn(t.key, true)}</td></tr>`;
+  }).join("")}</tbody></table></div>`;
+}
+function renderWait(D){
+  $("c-wait").textContent = D.wait.length || "";
+  if (S.jira.loading && !S.jira.at) return `<div class="loading">Loading Jira…</div>`;
+  if (!D.wait.length) return `<div class="empty">No tickets are waiting on writers, experts or the proofreader.</div>`;
+  return `<div class="scroll"><table class="tbl"><tbody>${D.wait.map(t => `<tr><td>${keyLink(t)}</td><td>${esc(shortTitle(t.title))}<div class="sub">${esc(t.stage)} · waiting on ${esc(t.waitingOn || "—")}</div></td><td>${stChip(t.status)}</td><td class="num">${ago(t.since)}</td><td>${excludeBtn(t.key, true)}</td></tr>`).join("")}</tbody></table></div>`;
+}
+function renderFeed(){
+  const items = S.slack.items.filter(i => !IGNORED_NAMES.some(n => i.head.startsWith(n)) && !(i.key && S.excluded[i.key]));
+  const shown = items.filter(i => !S.hidden[i.ts]); const removed = items.length - shown.length;
+  $("c-feed").textContent = S.slack.at ? `${items.length} today${removed ? ` · ${removed} removed` : ""}` : "";
+  let h = "";
+  if (S.slack.error) h += `<div class="err">${esc(errText(S.slack.error, SLACK))}${needsPerm(S.slack.error) ? ` <button class="btn sm" data-act="perms">Permissions</button>` : ""}</div>`;
+  if (S.slack.loading && !S.slack.at) return h + `<div class="loading">Loading Slack…</div>`;
+  if (!shown.length) return h + (S.slack.at ? `<div class="empty">No Jira notifications in your Slack DMs since midnight.</div>` : "");
+  return h + shown.map(i => { const t = i.key && findT(i.key); return `<div class="it">
+    <div class="h"><time>${new Date(i.at).toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" })}</time>${i.key ? `<a class="key" href="${esc(i.url || SITE+"/browse/"+i.key)}" target="_blank" rel="noopener">${esc(i.key)}</a>` : ""}${t ? `<span class="chip st-${esc(t.status)}">${esc(t.stage)}</span>` : ""}<button class="btn ghost sm" style="margin-left:auto" data-act="hide" data-ts="${esc(i.ts)}">Delete</button></div>
+    <div class="what">${esc(i.head)}</div>${i.title ? `<div class="sub">${esc(i.title)}</div>` : ""}${i.quote ? `<div class="body">${esc(i.quote)}</div>` : ""}</div>`; }).join("");
+}
+function renderLog(D){
+  $("c-log").textContent = S.log.length || "";
+  $("logtools").innerHTML = S.ui.confirmClear
+    ? `<span class="confirm">Delete all log entries? <button class="btn sm danger" data-act="clearyes">Delete</button><button class="btn sm ghost" data-act="clearno">Keep</button></span>`
+    : (S.log.length ? `<button class="btn sm ghost" data-act="clear">Clear log</button>` : "");
+  if (!S.log.length) return `<div class="empty">Every click, automated step, Jira note and Slack message will be recorded here.</div>`;
+  const escalated = new Set(D.escalate.map(a => a.wid)); const shownBtn = new Set();
+  const label = { manual:"Manual", auto:"Auto", sched:"Scheduled", jira:"Jira", slack:"Slack", fail:"Failed" };
+  return `<ul class="log">${S.log.map(l => {
+    let extra = "";
+    if (l.writerId && escalated.has(l.writerId) && !shownBtn.has(l.writerId)) {
+      shownBtn.add(l.writerId); const w = D.escalate.find(a => a.wid === l.writerId).t.writer; const n = attentionFor(l.writerId, D).length;
+      extra = `<div class="extra"><button class="btn sm" data-act="slackw" data-w="${esc(l.writerId)}">Slack ${esc(firstName((S.links[l.writerId]||{}).slackName || w.name))} about ${n} ticket${n>1?"s":""}</button></div>`;
+    }
+    return `<li class="${l.kind==="fail"?"fail":""}"><time>${new Date(l.at).toLocaleString([], { month:"short", day:"numeric", hour:"2-digit", minute:"2-digit" })}</time><span><span class="k">${label[l.kind]||esc(l.kind)}</span>${esc(l.text)}</span>${extra}</li>`;
+  }).join("")}</ul>`;
+}
+function renderExcl(){
+  const list = Object.entries(S.excluded).sort((a,b) => (b[1].at||0)-(a[1].at||0));
+  $("c-excl").textContent = list.length || "";
+  if (!list.length) return `<div class="empty">No excluded tickets. Exclude a ticket to hide it everywhere and keep automation away from it.</div>`;
+  return `<ul class="tl">${list.map(([k,v]) => `<li><a class="key" href="${SITE}/browse/${esc(k)}" target="_blank" rel="noopener">${esc(k)}</a><span class="t">${esc(shortTitle(v.title||""))}</span><button class="btn sm" style="margin-left:auto" data-act="track" data-k="${esc(k)}">Track again</button></li>`).join("")}</ul>`;
+}
+function renderAuto(){
+  const s = S.settings;
+  $("auto").innerHTML = `
+    <span class="switch"><input type="checkbox" id="auto-on" role="switch" data-act="autoon" ${s.automation?"checked":""} ${S.dbReady||!S.db?"":"disabled"} aria-label="Automation"><span></span></span>
+    <span class="autolbl">Automation ${s.automation ? "On" : "Off"}</span>
+    <label for="auto-win">Act on comments newer than <select id="auto-win" data-act="win">${[3,7,14,30].map(d => `<option value="${d}" ${+s.windowDays===d?"selected":""}>${d} days</option>`).join("")}</select></label>
+    <label for="auto-note">Note to writer <select id="auto-note" data-act="note">
+      <option value="internal" ${s.noteMode!=="standard"?"selected":""}>Internal (Service Desk Team)</option>
+      <option value="standard" ${s.noteMode==="standard"?"selected":""}>Standard comment</option></select></label>
+    <button class="btn" data-act="runnow" ${S.autoBusy?"disabled":""}>Run automation now</button>
+    <span class="status">${S.autoBusy ? "Running steps…" : S.lastAuto ? `Last run ${ago(S.lastAuto.at)} ago · ${S.lastAuto.n} ticket${S.lastAuto.n===1?"":"s"}` : s.automation ? "Runs every 10 minutes while open, and hourly on weekdays from the scheduled task" : "Off: nothing happens without your click"}</span>`;
+}
+function renderTiles(D){
+  const c = D.counts;
+  const T = [["move","Your move","sec-move",c.move,"hot"],["text","Writing (Text)","sec-wait",c.text],["expert","With expert","sec-wait",c.expert],["fixing","Writer fixing","sec-wait",c.fixing],
+    ["proof","With proofreader","sec-wait",c.proof],["noReply","No reply 7d+","sec-noreply",c.noReply,"alarm"],["flagged","Follow-up flagged 3d+","sec-follow",c.flagged,"alarm"],["silent","Expert silent 7d+","sec-expert",c.silent,"alarm"]];
+  $("tiles").innerHTML = T.map(([id,l,sec,n,cls]) => `<button class="tile ${n && cls ? cls : ""}" data-act="jump" data-sec="${sec}"><span class="n">${S.jira.at ? n : "–"}</span><span class="l">${l}</span></button>`).join("");
+}
+function render(){
+  $("scope-mine").setAttribute("aria-pressed", S.scope === "mine"); $("scope-all").setAttribute("aria-pressed", S.scope === "all");
+  const pend = [S.jira.loading && "Jira", S.slack.loading && "Slack"].filter(Boolean);
+  $("status").innerHTML = pend.length ? `Loading ${pend.join(" and ")}…` : S.jira.at ? `Updated <b>${new Date(S.jira.at).toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" })}</b>` : "";
+  $("refresh").disabled = !!pend.length;
+  const D = derive();
+  renderAuto(); renderTiles(D);
+  $("pageerr").innerHTML = S.jira.error ? `<div class="err">${esc(errText(S.jira.error, JIRA))}${needsPerm(S.jira.error) ? ` <button class="btn sm" data-act="perms">Permissions</button>` : ""} <button class="btn sm" data-act="refresh">Refresh</button></div>` : "";
+  $("b-move").innerHTML = renderMove(D); $("b-noreply").innerHTML = renderNoReply(D); $("b-follow").innerHTML = renderFollow(D);
+  $("b-slackw").innerHTML = renderSlackW(D); $("b-expert").innerHTML = renderExpert(D); $("b-wait").innerHTML = renderWait(D);
+  $("b-feed").innerHTML = renderFeed(); $("b-log").innerHTML = renderLog(D); $("b-excl").innerHTML = renderExcl();
+}
+
+/* ---------- events ---------- */
+document.addEventListener("click", async ev => {
+  const b = ev.target.closest("[data-act]"); if (!b || b.tagName === "SELECT" || b.tagName === "INPUT") return;
+  const act = b.dataset.act, key = b.dataset.k, wid = b.dataset.w;
+  const D = derive();
+  switch (act) {
+    case "scope": if (S.scope !== b.dataset.v) { S.scope = b.dataset.v; lsSet("bp.scope", S.scope); S.jira.tickets = []; S.jira.at = null; loadJira(); } break;
+    case "refresh": refresh(); break;
+    case "jump": $(b.dataset.sec).scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block:"start" }); break;
+    case "perms": try { const p = await claude.use("permissions"); await p.manage(); refresh(); } catch { toast("Open the page's Permissions menu to allow Atlassian and Slack."); } break;
+    case "step": await runSteps(key, [b.dataset.s], "manual"); break;
+    case "all": { const t = findT(key); if (t) await runSteps(key, t.actions.map(a => a.kind), "manual"); break; }
+    case "runnow": await refresh(); if (!S.settings.automation) toast("Automation is off. Turn it on to let it act."); break;
+    case "exclude": { const t = findT(key); await dbSet("exclusions/"+key, { title: t ? t.title : "", at: Date.now() }); await logIt("manual", `${key}: excluded from tracking`, { key }); break; }
+    case "track": await dbDel("exclusions/"+key); await logIt("manual", `${key}: tracked again`, { key }); break;
+    case "hide": await dbSet("hiddenSlack/"+b.dataset.ts, { at: Date.now() }); break;
+    case "clear": S.ui.confirmClear = true; render(); break;
+    case "clearno": S.ui.confirmClear = false; render(); break;
+    case "clearyes": {
+      S.ui.confirmClear = false;
+      if (S.db) { try { const snap = await S.db.collection("log").get(); for (const d of snap.docs) await S.db.collection("log").doc(d.id).delete(); } catch (e) { toast("Couldn't clear the log: "+(e.message||e.code)); } }
+      else { S.log = []; }
+      render(); break;
+    }
+    case "find": S.ui.linkOpen[wid] = true; findOnSlack(wid, b.dataset.n); break;
+    case "relink": S.ui.linkOpen[wid] = true; render(); break;
+    case "unrelink": S.ui.linkOpen[wid] = false; delete S.ui.find[wid]; render(); break;
+    case "pick": await dbSet("slackLinks/"+wid, { name:b.dataset.wn, slackId:b.dataset.id, slackName:b.dataset.n, email:b.dataset.e, at:Date.now() }); S.ui.linkOpen[wid] = false; delete S.ui.find[wid]; toast(`Linked ${b.dataset.wn} to ${b.dataset.n} on Slack`); break;
+    case "ask": {
+      const t = findT(key); if (!t || !t.target) break;
+      S.running["ask:"+key] = true; render();
+      const ok = await askNote(t, t.target, t.targetIsExpert);
+      if (ok && !t.targetIsExpert && t.writer && t.target.id === t.writer.id) {
+        const list = attentionFor(t.writer.id, D); if (!list.some(x => x.key === key)) list.unshift(t);
+        await sendSlack(t.writer, list);
+      }
+      delete S.running["ask:"+key]; await reloadKeys([key]); break;
+    }
+    case "slackw": {
+      const list = attentionFor(wid, D); const w = list[0] && list[0].writer; if (!w) break;
+      S.running["slack:"+wid] = true; render(); await sendSlack(w, list); delete S.running["slack:"+wid]; render(); break;
+    }
+    case "preview": S.ui.preview[wid] = !S.ui.preview[wid]; render(); break;
+    case "slacksend": {
+      const list = attentionFor(wid, D); const w = list[0] && list[0].writer; if (!w) break;
+      S.running["slack:"+wid] = true; render(); const ok = await sendSlack(w, list); delete S.running["slack:"+wid]; if (ok) S.ui.preview[wid] = false; render(); break;
+    }
+    case "bulk": {
+      const items = D.escalate.filter(a => a.wid === wid); const w = items[0] && items[0].t.writer; if (!w) break;
+      S.running["bulk:"+wid] = true; render();
+      for (const a of items) await askNote(a.t, w, false);
+      const list = attentionFor(wid, D); items.forEach(a => { if (!list.some(x => x.key === a.t.key)) list.push(a.t); });
+      await sendSlack(w, list);
+      delete S.running["bulk:"+wid]; await reloadKeys(items.map(a => a.t.key)); break;
+    }
+    case "askexp": {
+      const t = findT(key); if (!t || !t.expert) break;
+      S.running["exp:"+key] = true; render();
+      if (await askNote(t, t.expert, true)) await dbSet("expertAsks/"+key, { at: Date.now() });
+      delete S.running["exp:"+key]; await reloadKeys([key]); break;
+    }
+  }
+});
+document.addEventListener("change", async ev => {
+  const el = ev.target; const act = el.dataset && el.dataset.act; if (!act) return;
+  if (act === "autoon") { await saveSettings({ automation: el.checked }); await logIt("manual", `Automation turned ${el.checked ? "on" : "off"}`); if (el.checked) runAutomation(); }
+  else if (act === "win") { await saveSettings({ windowDays: +el.value }); reanalyze(); }
+  else if (act === "note") { await saveSettings({ noteMode: el.value }); }
+  else if (act === "cat") { const k = el.dataset.k; if (el.value) await dbSet("overrides/"+k, { category: el.value }); else await dbDel("overrides/"+k); }
+  else if (act === "exp") {
+    const k = el.dataset.k; const e = ALL_EXPERTS.find(x => x.id === el.value);
+    if (e) await dbSet("overrides/"+k, { category: EXPERTS.fitness.includes(e) ? "fitness" : "nutrition", expertId: e.id });
+    else { const o = { ...(S.overrides[k]||{}) }; delete o.expertId; if (o.category) await dbSet("overrides/"+k, o); else await dbDel("overrides/"+k); }
+  }
+});
+// overrides and the time window feed analysis, so re-derive tickets from their source when they change
+function reanalyze(){ S.jira.tickets = S.jira.tickets.map(t => rawCache.has(t.key) ? analyze(rawCache.get(t.key)) : t); render(); }
+
+/* ---------- boot ---------- */
+render();
+(async () => {
+  const [mcp, db, user] = await Promise.all([claude.use("mcp"), claude.use("db"), claude.use("user")].map(p => p.catch(() => null)));
+  S.mcp = mcp; S.db = db;
+  if (db) {
+    subscribeDb();
+  } else S.dbReady = true;
+  if (!mcp) { S.jira.error = { code:"not_granted", server:JIRA }; render(); return; }
+  try { const u = await read(JIRA, "atlassianUserInfo", {}); S.me = u && u.account_id || null; } catch (e) { if (needsPerm(e) || e.code === "needs_reauth" || e.code === "server_not_connected") { S.jira.error = e; render(); } }
+  await refresh();
+  setInterval(() => { if (!document.hidden) refresh(); }, 10*60*1000);
+})();
+</script>
