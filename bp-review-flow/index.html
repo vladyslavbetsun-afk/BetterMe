@@ -104,6 +104,8 @@ section.panel{background:var(--surface);border:1px solid var(--line);border-radi
 .tl{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
 .tl li{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;font-size:13px;min-width:0}
 .tl li .t{min-width:0;overflow-wrap:anywhere}
+.cb{display:inline-flex;align-items:center;gap:5px;cursor:pointer}
+.cb input{margin:0}
 .x{border:0;background:none;color:var(--muted);cursor:pointer;font-size:15px;line-height:1;padding:0 4px}
 .x:hover{color:var(--bad)}
 .preview{background:var(--sunk);border:1px solid var(--line);border-radius:6px;padding:10px;font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere;margin:6px 0}
@@ -147,9 +149,9 @@ section.panel{background:var(--surface);border:1px solid var(--line);border-radi
   <div class="grid">
     <div class="col">
       <section class="panel" id="sec-move"><div class="ph"><h2>Your move</h2><span class="cnt" id="c-move"></span></div><div class="pb" id="b-move"></div></section>
-      <section class="panel" id="sec-noreply"><div class="ph"><h2>No reply to your comment (7+ days)</h2><span class="cnt" id="c-noreply"></span></div><div class="pb" id="b-noreply"></div></section>
-      <section class="panel" id="sec-follow"><div class="ph"><h2>Follow-ups to writers</h2><span class="cnt" id="c-follow"></span></div><div class="pb" id="b-follow"></div></section>
-      <section class="panel" id="sec-slackw"><div class="ph"><h2>Slack writers about edits</h2><span class="cnt" id="c-slackw"></span></div><div class="pb" id="b-slackw"></div></section>
+      <section class="panel" id="sec-noreply"><div class="ph"><h2>No reply to your comment (3+ business days)</h2><span class="cnt" id="c-noreply"></span></div><div class="pb" id="b-noreply"></div></section>
+      <section class="panel" id="sec-follow"><div class="ph"><h2>Follow-ups counting down</h2><span class="cnt" id="c-follow"></span></div><div class="pb" id="b-follow"></div></section>
+      <section class="panel" id="sec-slackw"><div class="ph"><h2>Flagged follow-ups</h2><span class="cnt" id="c-slackw"></span></div><div class="pb" id="b-slackw"></div></section>
       <section class="panel" id="sec-expert"><div class="ph"><h2>Experts with no update (7+ days)</h2><span class="cnt" id="c-expert"></span></div><div class="pb" id="b-expert"></div></section>
       <section class="panel" id="sec-wait"><div class="ph"><h2>Waiting on others</h2><span class="cnt" id="c-wait"></span></div><div class="pb" id="b-wait"></div></section>
     </div>
@@ -186,7 +188,8 @@ const ALL_ST = ["Open","Text","Review","Proofreading","Ready"];
 const DAY = 864e5;
 const FIT_KW = ["workout","exercise","exercises","yoga","squat","squats","pilates","push up","push-up","pushup","pull up","pull-up","pullup","plank","cardio","abs","stretch","stretches","stretching","walking","walk","running","run","hiit","calisthenics","strength","muscle","muscles","glute","glutes","lunge","lunges","burpee","deadlift","gym","fitness","training","core","dumbbell","kettlebell","jump","steps","posture","mobility","flexibility","somatic","barre","tai chi","treadmill","cycling","swimming","body composition","toning","tone","arm","arms","leg","legs","belly fat","reps","sets","warm up","cool down"];
 const NUT_KW = ["diet","diets","meal","meals","snack","snacks","drink","drinks","food","foods","recipe","recipes","calorie","calories","protein","carb","carbs","keto","fasting","eat","eating","nutrition","nutrient","vitamin","vitamins","fruit","fruits","vegetable","vegetables","smoothie","smoothies","juice","tea","coffee","sugar","breakfast","lunch","dinner","good for you","healthy fats","fiber","cheese","bread","rice","pasta","pepperoni","egg","eggs","oatmeal","yogurt","supplement","supplements","hydration","water","alcohol","wine","beer","sauce","salad","soup","nuts","chocolate","milk","grocery","menu","dessert","bars","shake","shakes"];
-const NOTE_RE = /please address the comments?\b/i, ASK_EDITS_RE = /any news on the edits/i, ASK_TICKET_RE = /any news on the ticket/i;
+const NOTE_RE = /please address/i;
+const ORD = n => n===1 ? "1st" : n===2 ? "2nd" : n===3 ? "3rd" : n+"th";
 
 /* ---------- state ---------- */
 const S = {
@@ -197,7 +200,7 @@ const S = {
   slack: { loading:false, error:null, items:[], at:null },
   settings: { automation:false, windowDays:14, noteMode:"internal" },
   excluded: {}, links: {}, sent: {}, hidden: {}, overrides: {}, expertAsks: {}, log: [],
-  dbReady:false, running:{}, autoBusy:false, lastAuto:null,
+  dbReady:false, running:{}, autoBusy:false, lastAuto:null, autoSlackBusy:false, autoSlackTried:{},
   ui: { preview:{}, find:{}, confirmClear:false, linkOpen:{} }
 };
 
@@ -268,7 +271,11 @@ async function logIt(kind, text, extra={}){
 function subscribeDb(){
   const db = S.db;
   const coll = (name, fn) => db.collection(name).onSnapshot(snap => { const m={}; snap.docs.forEach(d=>m[d.id]=d.data()); fn(m); render(); }, () => {});
-  db.doc("settings/main").onSnapshot(d => { if (d.exists) S.settings = { ...S.settings, ...d.data() }; S.dbReady = true; reanalyze(); }, () => {});
+  db.doc("settings/main").onSnapshot(d => {
+    if (d.exists) S.settings = { ...S.settings, ...d.data() };
+    if (!S.settings.autoSlackSince && !S.stamped) { S.stamped = true; saveSettings({ autoSlackSince: Date.now() }); }
+    S.dbReady = true; reanalyze();
+  }, () => {});
   coll("exclusions", m => S.excluded = m);
   coll("slackLinks", m => S.links = m);
   coll("slackSent", m => S.sent = m);
@@ -373,7 +380,7 @@ function analyze(issue){
     } else { T.stage = "Writing"; T.waitingOn = writer ? writer.name : "writer"; T.since = last(cs)?.at || T.created; }
   } else if (status === "Review") {
     if (lastExp) {
-      const note = cs.find(c => c.role === "me" && NOTE_RE.test(c.text) && c.at > firstExp.at);
+      const note = cs.find(c => c.role === "me" && c.at > firstExp.at);
       if (note) { T.actions.push({ kind:"toProof", label:"Move to Proofreading" }); T.trigger = note; T.stage = "Note sent, still in Review"; }
       else {
         T.actions.push({ kind:"toProof", label:"Move to Proofreading" });
@@ -385,14 +392,15 @@ function analyze(issue){
     } else {
       T.stage = "With expert"; T.waitingOn = expert ? expertName(expert) : "expert"; T.since = linkC ? linkC.at : (last(cs)?.at || T.created);
       if (linkC && days(linkC.at) > 7) {
-        const recentAsk = cs.some(c => c.role === "me" && ASK_TICKET_RE.test(c.text) && days(c.at) < 7);
+        const recentAsk = cs.some(c => c.role === "me" && c.at > linkC.at && days(c.at) < 7);
         const dbAsk = S.expertAsks[T.key] && days(S.expertAsks[T.key].at) < 7;
         if (!recentAsk && !dbAsk) T.expertSilent = true;
       }
     }
   } else if (status === "Proofreading") {
     const anyExp = cs.filter(c => c.role === "expert");
-    const note = last(cs.filter(c => c.role === "me" && NOTE_RE.test(c.text)));
+    const lastAnyExp = last(anyExp);
+    const note = lastAnyExp ? cs.find(c => c.role === "me" && c.at > lastAnyExp.at) : last(cs.filter(c => c.role === "me" && NOTE_RE.test(c.text)));
     if (!anyExp.length) T.warnings.push("Ticket is in Proofreading but has no expert comment");
     const base = note ? note.at : (last(anyExp)?.at || 0);
     const timC = last(cs.filter(c => c.role === "tim" && c.at > base));
@@ -416,14 +424,18 @@ function analyze(issue){
   T.autoWhy = !T.actions.length ? "" : T.manualOnly ? "Not one of the four routine steps" : !T.mine ? "You aren't in Managers" : T.warnings.length ? "Has a warning" : age > S.settings.windowDays ? `Trigger older than ${S.settings.windowDays} days` : "";
 
   // follow-up facts
-  const lastC = last(cs);
-  if (lastC && lastC.role === "me") {
-    T.myLast = lastC;
-    const tagged = lastC.mentions.map(n => T.people[n] || null).filter(Boolean)[0] || null;
+  const run = [];
+  for (let i = cs.length - 1; i >= 0 && cs[i].role === "me"; i--) run.unshift(cs[i]);
+  if (run.length) {
+    const lastC = last(run);
+    T.myLast = lastC; T.msgNo = run.length;
+    const tagged = [...run].reverse().flatMap(c => c.mentions).map(n => T.people[n] || null).filter(Boolean)[0] || null;
     T.target = tagged || writer;
     T.targetIsExpert = !!(T.target && (EXPERT_IDS.has(T.target.id) || (expert && T.target.id === expert.id)));
-    T.isAsk = ASK_EDITS_RE.test(lastC.text);
+    T.toWriter = !!(T.target && writer && T.target.id === writer.id);
+    T.bd = bizDays(lastC.at);
   }
+  T.autoSlack = (S.overrides[T.key] || {}).autoSlack !== false;
   return T;
 }
 
@@ -433,18 +445,19 @@ function derive(){
   const ts = S.jira.tickets.filter(t => !ex[t.key]);
   const move = ts.filter(t => t.actions.length);
   const wait = ts.filter(t => !t.actions.length && ACTIVE.includes(t.status)).sort((a,b) => (a.since||0) - (b.since||0));
-  const noReply = ts.filter(t => t.myLast && !t.isAsk && days(t.myLast.at) > 7);
-  const asks = ts.filter(t => t.myLast && t.isAsk).map(t => {
-    const wid = t.writer ? t.writer.id : "none";
+  // 1st message unanswered for 3+ business days
+  const noReply = ts.filter(t => t.myLast && t.msgNo === 1 && t.bd >= 3);
+  // 2nd, 3rd… messages to the writer: count down 3 business days from the latest one, then flag
+  const asks = ts.filter(t => t.myLast && t.msgNo >= 2 && t.toWriter).map(t => {
+    const wid = t.writer.id;
     const sent = S.sent[wid]; const sAt = sent && sent.tickets && sent.tickets[t.key];
     const afterSlack = sAt && sAt > t.myLast.at;
-    const hidden = afterSlack && days(sAt) < 3;
-    const returned = afterSlack && days(sAt) >= 3;
-    const d = days(t.myLast.at), bd = bizDays(t.myLast.at);
-    return { t, wid, d, bd, hidden, returned, flagged: bd >= 3 || returned };
+    const paused = afterSlack && bizDays(sAt) < 3;
+    const returned = afterSlack && bizDays(sAt) >= 3;
+    return { t, wid, bd: t.bd, sAt, paused, returned, flagged: !paused && (t.bd >= 3 || returned) };
   });
-  const follow = asks.filter(a => !a.hidden && (a.d < 7 || a.returned));
-  const escalate = asks.filter(a => !a.hidden && !a.returned && a.d >= 7);
+  const follow = asks.filter(a => !a.flagged);
+  const flagged = asks.filter(a => a.flagged);
   const expertSilent = ts.filter(t => t.expertSilent);
   const counts = {
     move: move.length,
@@ -453,18 +466,36 @@ function derive(){
     fixing: ts.filter(t => t.stage === "Writer fixing").length,
     proof: ts.filter(t => t.stage === "With proofreader").length,
     noReply: noReply.length,
-    flagged: follow.filter(a => a.flagged).length,
+    flagged: flagged.length,
     silent: expertSilent.length
   };
-  return { ts, move, wait, noReply, follow, escalate, expertSilent, counts, asks };
+  return { ts, move, wait, noReply, follow, flagged, expertSilent, counts, asks };
 }
 function groupBy(arr, keyFn){ const m = new Map(); arr.forEach(x => { const k = keyFn(x); if (!m.has(k)) m.set(k, []); m.get(k).push(x); }); return m; }
-// every ticket for this writer that needs attention (7d no-reply targeting them, or asks flagged and not hidden)
+// every ticket for this writer that needs attention: unanswered 1st notes to them and flagged follow-ups
 function attentionFor(wid, D){
   const keys = new Map();
-  D.noReply.filter(t => t.writer && t.writer.id === wid && !t.targetIsExpert).forEach(t => keys.set(t.key, t));
-  D.asks.filter(a => a.wid === wid && !a.hidden && a.flagged).forEach(a => keys.set(a.t.key, a.t));
+  D.noReply.filter(t => t.writer && t.writer.id === wid && t.toWriter).forEach(t => keys.set(t.key, t));
+  D.flagged.filter(a => a.wid === wid).forEach(a => keys.set(a.t.key, a.t));
   return [...keys.values()];
+}
+// 2nd/3rd notes posted in Jira (by hand or here) that haven't been Slacked yet
+function pendingAutoSlack(D){
+  const since = S.settings.autoSlackSince || Infinity;
+  return D.ts.filter(t => t.myLast && t.toWriter && t.autoSlack && (t.msgNo === 2 || t.msgNo === 3) && t.myLast.at > since
+    && !S.autoSlackTried[t.key + ":" + t.myLast.id]
+    && !(((S.sent[t.writer.id] || {}).tickets || {})[t.key] >= t.myLast.at));
+}
+async function runAutoSlack(){
+  if (S.autoSlackBusy || !S.mcp || !S.jira.at) return;
+  const D = derive(); const pend = pendingAutoSlack(D); if (!pend.length) return;
+  S.autoSlackBusy = true;
+  for (const [wid, list] of groupBy(pend, t => t.writer.id)) {
+    list.forEach(t => S.autoSlackTried[t.key + ":" + t.myLast.id] = true);
+    const all = attentionFor(wid, D); list.forEach(t => { if (!all.some(x => x.key === t.key)) all.unshift(t); });
+    await sendSlack(list[0].writer, all, `after your ${list.map(t => ORD(t.msgNo) + " note on " + t.key).join(", ")}`);
+  }
+  S.autoSlackBusy = false; render();
 }
 function slackText(writer, tickets){
   const link = S.links[writer.id];
@@ -553,7 +584,7 @@ async function runAutomation(){
 }
 
 /* ---------- follow-up actions ---------- */
-async function sendSlack(writer, tickets){
+async function sendSlack(writer, tickets, reason){
   const link = S.links[writer.id];
   if (!link || !link.slackId) { await logIt("fail", `Slack skipped for ${writer.name}: not linked to a Slack account yet. Use Find on Slack.`, { writerId:writer.id }); return false; }
   try {
@@ -561,7 +592,7 @@ async function sendSlack(writer, tickets){
     const now = Date.now(); const prev = S.sent[writer.id] || {};
     const map = { ...(prev.tickets || {}) }; tickets.forEach(t => map[t.key] = now);
     await dbSet("slackSent/"+writer.id, { name:writer.name, at:now, tickets:map });
-    await logIt("slack", `Slacked ${link.slackName || writer.name} about ${tickets.length} ticket${tickets.length>1?"s":""}: ${tickets.map(t=>t.key).join(", ")}`, { writerId:writer.id });
+    await logIt(reason ? "auto" : "slack", `Slacked ${link.slackName || writer.name} about ${tickets.length} ticket${tickets.length>1?"s":""}: ${tickets.map(t=>t.key).join(", ")}${reason ? " (automatic, " + reason + ")" : ""}`, { writerId:writer.id });
     return true;
   } catch (e) { await logIt("fail", `Slack to ${writer.name} failed. ${errText(e, SLACK)}`, { writerId:writer.id }); return false; }
 }
@@ -621,6 +652,7 @@ async function findOnSlack(wid, name){
 /* ---------- refresh ---------- */
 async function refresh(){
   await Promise.all([loadJira(), loadSlack()]);
+  await runAutoSlack();
 }
 
 /* ---------- render ---------- */
@@ -669,54 +701,61 @@ function renderMove(D){
       </div></div>`;
   }).join("");
 }
+function autoSlackBox(t){
+  if (!t.toWriter) return "";
+  return `<label class="sub cb" for="as-${esc(t.key)}"><input type="checkbox" id="as-${esc(t.key)}" data-act="autoslack" data-k="${esc(t.key)}" ${t.autoSlack?"checked":""}> Auto-Slack writer on 2nd &amp; 3rd note</label>`;
+}
+function bdLabel(n){ n = Math.max(0, n); return `${n} business day${n===1?"":"s"}`; }
 function renderNoReply(D){
   $("c-noreply").textContent = D.noReply.length || "";
   if (S.jira.loading && !S.jira.at) return `<div class="loading">Loading Jira…</div>`;
-  if (!D.noReply.length) return `<div class="empty">No ticket has your comment sitting unanswered for more than 7 days.</div>`;
+  if (!D.noReply.length) return `<div class="empty">No ticket has your comment sitting unanswered for 3 or more business days.</div>`;
   return D.noReply.sort((a,b) => a.myLast.at - b.myLast.at).map(t => {
     const tg = t.target; const sent = t.writer && S.sent[t.writer.id];
     const busy = !!S.running["ask:"+t.key];
-    const label = !tg ? "No one to tag" : t.targetIsExpert ? `Ask ${esc(expertName(tg))} for news (Jira)` : `Ask ${esc(tg.name)} about edits (Jira + Slack)`;
-    return `<div class="card"><div class="row">${keyLink(t)}<span class="title">${esc(t.title)}</span>${stChip(t.status)}<span class="chip flag">${Math.floor(days(t.myLast.at))}d no reply</span></div>
+    const label = !tg ? "No one to tag" : t.targetIsExpert ? `Ask ${esc(expertName(tg))} for news (Jira)` : `Post 2nd note to ${esc(tg.name)} (Jira${t.toWriter && t.autoSlack ? " + Slack" : ""})`;
+    return `<div class="card"><div class="row">${keyLink(t)}<span class="title">${esc(t.title)}</span>${stChip(t.status)}<span class="chip flag">${bdLabel(Math.floor(t.bd))} no reply</span></div>
       <div class="quote"><span class="who">You · ${ago(t.myLast.at)} ago</span>${esc(t.myLast.text.slice(0,200))}</div>
       <div class="acts"><button class="btn" ${!tg||busy?"disabled":""} data-act="ask" data-k="${esc(t.key)}">${label}</button>
-      ${sent && sent.at ? `<span class="sub">Slacked ${ago(sent.at)} ago</span>` : ""}${excludeBtn(t.key)}${busy?`<span class="sub">Working…</span>`:""}</div></div>`;
+      ${autoSlackBox(t)}${sent && sent.at ? `<span class="sub">Slacked ${ago(sent.at)} ago</span>` : ""}${excludeBtn(t.key)}${busy?`<span class="sub">Working…</span>`:""}</div></div>`;
   }).join("");
+}
+function followRow(a){
+  const chip = a.paused ? `<span class="chip">Slacked ${ago(a.sAt)} ago · back in ${bdLabel(Math.ceil(3 - bizDays(a.sAt)))}</span>`
+    : a.returned ? `<span class="chip flag">no reply 3 business days after Slack</span>`
+    : a.bd >= 3 ? `<span class="chip flag">flagged · ${bdLabel(Math.floor(a.bd))}</span>`
+    : `<span class="chip soon">flags in ${bdLabel(Math.max(1, Math.ceil(3 - a.bd)))}</span>`;
+  return `<li>${keyLink(a.t)}<span class="t">${esc(shortTitle(a.t.title))}</span><span class="chip">${ORD(a.t.msgNo)} note · ${ago(a.t.myLast.at)} ago</span>${chip}${autoSlackBox(a.t)}${excludeBtn(a.t.key, true)}</li>`;
 }
 function renderFollow(D){
   $("c-follow").textContent = D.follow.length || "";
   if (S.jira.loading && !S.jira.at) return `<div class="loading">Loading Jira…</div>`;
-  if (!D.follow.length) return `<div class="empty">No open "Any news on the edits?" asks. When you send one, the ticket is tracked here until the writer replies.</div>`;
+  if (!D.follow.length) return `<div class="empty">No 2nd or 3rd notes are counting down. After you post one, the ticket waits here for 3 business days, then moves to Flagged follow-ups.</div>`;
   const g = groupBy(D.follow, a => a.wid);
   return [...g.entries()].map(([wid, list]) => {
-    const w = list[0].t.writer; const flagged = list.filter(a => a.flagged);
-    const att = w ? attentionFor(wid, D) : [];
-    const busy = !!S.running["slack:"+wid];
-    return `<div class="group"><div class="gh"><strong>${esc(w ? w.name : "No Author")}</strong><span class="chip">${list.length} ticket${list.length>1?"s":""}</span>
-      ${w && flagged.length ? `<button class="btn sm pri" ${busy?"disabled":""} data-act="slackw" data-w="${esc(wid)}">Slack ${esc(firstName((S.links[wid]||{}).slackName || w.name))} about ${att.length} ticket${att.length>1?"s":""}</button>` : ""}
-      ${w && S.sent[wid] ? `<span class="sub">Slacked ${ago(S.sent[wid].at)} ago</span>` : ""}</div>
-      <ul class="tl">${list.sort((a,b)=>b.d-a.d).map(a => `<li>${keyLink(a.t)}<span class="t">${esc(shortTitle(a.t.title))}</span>
-        ${a.returned ? `<span class="chip flag">flagged · no reply 3d after Slack</span>` : a.bd >= 3 ? `<span class="chip flag">flagged · ${Math.floor(a.bd)} business day${Math.floor(a.bd)===1?"":"s"}</span>` : `<span class="chip soon">flags in ${Math.max(1,Math.ceil(3-a.bd))} business day${Math.max(1,Math.ceil(3-a.bd))===1?"":"s"}</span>`}
-        ${excludeBtn(a.t.key, true)}</li>`).join("")}</ul>
-      ${w && !(S.links[wid]||{}).slackId ? `<div class="row">${linkUI(w)}</div>` : ""}</div>`;
+    const w = list[0].t.writer;
+    return `<div class="group"><div class="gh"><strong>${esc(w.name)}</strong><span class="chip">${list.length} ticket${list.length>1?"s":""}</span>${S.sent[wid] ? `<span class="sub">Slacked ${ago(S.sent[wid].at)} ago</span>` : ""}</div>
+      <ul class="tl">${list.sort((a,b)=>b.bd-a.bd).map(followRow).join("")}</ul>
+      ${!(S.links[wid]||{}).slackId ? `<div class="row">${linkUI(w)}</div>` : ""}</div>`;
   }).join("");
 }
 function renderSlackW(D){
-  const g = groupBy(D.escalate, a => a.wid);
-  $("c-slackw").textContent = g.size || "";
+  const g = groupBy(D.flagged, a => a.wid);
+  $("c-slackw").textContent = D.flagged.length || "";
   if (S.jira.loading && !S.jira.at) return `<div class="loading">Loading Jira…</div>`;
-  if (!g.size) return `<div class="empty">No writer has left your "Any news on the edits?" unanswered for 7+ days.</div>`;
+  if (!g.size) return `<div class="empty">Nothing flagged. A ticket lands here when the writer hasn't replied 3 business days after your 2nd or later note.</div>`;
   return [...g.entries()].map(([wid, list]) => {
-    const w = list[0].t.writer; if (!w) return `<div class="group"><div class="gh"><strong>No Author</strong></div><ul class="tl">${list.map(a=>`<li>${keyLink(a.t)}<span class="t">${esc(shortTitle(a.t.title))}</span></li>`).join("")}</ul></div>`;
+    const w = list[0].t.writer;
     const att = attentionFor(wid, D); const busy = !!S.running["slack:"+wid] || !!S.running["bulk:"+wid];
     const pv = S.ui.preview[wid]; const linked = !!(S.links[wid]||{}).slackId;
-    return `<div class="group"><div class="gh"><strong>${esc(w.name)}</strong><span class="chip flag">${list.length} waiting 7d+</span>${S.sent[wid] ? `<span class="sub">Slacked ${ago(S.sent[wid].at)} ago</span>` : ""}</div>
-      <ul class="tl">${list.sort((a,b)=>b.d-a.d).map(a => `<li>${keyLink(a.t)}<span class="t">${esc(shortTitle(a.t.title))}</span><span class="chip">${Math.floor(a.d)}d</span>${excludeBtn(a.t.key, true)}</li>`).join("")}</ul>
+    const withSlack = list.some(a => a.t.autoSlack && a.t.msgNo + 1 <= 3);
+    return `<div class="group"><div class="gh"><strong>${esc(w.name)}</strong><span class="chip flag">${list.length} flagged</span>${S.sent[wid] ? `<span class="sub">Slacked ${ago(S.sent[wid].at)} ago</span>` : ""}</div>
+      <ul class="tl">${list.sort((a,b)=>b.bd-a.bd).map(followRow).join("")}</ul>
       ${pv ? `<div class="preview">${esc(slackText(w, att))}</div>` : ""}
       <div class="acts">
         ${pv ? `<button class="btn pri" ${busy||!linked?"disabled":""} data-act="slacksend" data-w="${esc(wid)}">Send</button><button class="btn ghost" data-act="preview" data-w="${esc(wid)}">Cancel</button>`
-             : `<button class="btn" ${busy||!linked?"disabled":""} data-act="preview" data-w="${esc(wid)}">Slack ${esc(firstName((S.links[wid]||{}).slackName || w.name))}</button>`}
-        <button class="btn" ${busy?"disabled":""} data-act="bulk" data-w="${esc(wid)}">Ask in Jira on all ${list.length} + one Slack</button>
+             : `<button class="btn" ${busy||!linked?"disabled":""} data-act="preview" data-w="${esc(wid)}">Slack ${esc(firstName((S.links[wid]||{}).slackName || w.name))} only</button>`}
+        <button class="btn" ${busy?"disabled":""} data-act="bulk" data-w="${esc(wid)}">Post next note on ${list.length === 1 ? "it" : "all " + list.length}${withSlack ? " + one Slack" : ""}</button>
         ${busy ? `<span class="sub">Working…</span>` : ""}
       </div><div class="row" style="margin-top:6px">${linkUI(w)}</div></div>`;
   }).join("");
@@ -755,12 +794,12 @@ function renderLog(D){
     ? `<span class="confirm">Delete all log entries? <button class="btn sm danger" data-act="clearyes">Delete</button><button class="btn sm ghost" data-act="clearno">Keep</button></span>`
     : (S.log.length ? `<button class="btn sm ghost" data-act="clear">Clear log</button>` : "");
   if (!S.log.length) return `<div class="empty">Every click, automated step, Jira note and Slack message will be recorded here.</div>`;
-  const escalated = new Set(D.escalate.map(a => a.wid)); const shownBtn = new Set();
+  const escalated = new Set(D.flagged.map(a => a.wid)); const shownBtn = new Set();
   const label = { manual:"Manual", auto:"Auto", sched:"Scheduled", jira:"Jira", slack:"Slack", fail:"Failed" };
   return `<ul class="log">${S.log.map(l => {
     let extra = "";
     if (l.writerId && escalated.has(l.writerId) && !shownBtn.has(l.writerId)) {
-      shownBtn.add(l.writerId); const w = D.escalate.find(a => a.wid === l.writerId).t.writer; const n = attentionFor(l.writerId, D).length;
+      shownBtn.add(l.writerId); const w = D.flagged.find(a => a.wid === l.writerId).t.writer; const n = attentionFor(l.writerId, D).length;
       extra = `<div class="extra"><button class="btn sm" data-act="slackw" data-w="${esc(l.writerId)}">Slack ${esc(firstName((S.links[l.writerId]||{}).slackName || w.name))} about ${n} ticket${n>1?"s":""}</button></div>`;
     }
     return `<li class="${l.kind==="fail"?"fail":""}"><time>${new Date(l.at).toLocaleString([], { month:"short", day:"numeric", hour:"2-digit", minute:"2-digit" })}</time><span><span class="k">${label[l.kind]||esc(l.kind)}</span>${esc(l.text)}</span>${extra}</li>`;
@@ -785,7 +824,7 @@ function renderAuto(){
 function renderTiles(D){
   const c = D.counts;
   const T = [["move","Your move","sec-move",c.move,"hot"],["text","Writing (Text)","sec-wait",c.text],["expert","With expert","sec-wait",c.expert],["fixing","Writer fixing","sec-wait",c.fixing],
-    ["proof","With proofreader","sec-wait",c.proof],["noReply","No reply 7d+","sec-noreply",c.noReply,"alarm"],["flagged","Follow-up flagged 3 business days+","sec-follow",c.flagged,"alarm"],["silent","Expert silent 7d+","sec-expert",c.silent,"alarm"]];
+    ["proof","With proofreader","sec-wait",c.proof],["noReply","No reply 3+ business days","sec-noreply",c.noReply,"alarm"],["flagged","Follow-ups flagged","sec-slackw",c.flagged,"alarm"],["silent","Expert silent 7d+","sec-expert",c.silent,"alarm"]];
   $("tiles").innerHTML = T.map(([id,l,sec,n,cls]) => `<button class="tile ${n && cls ? cls : ""}" data-act="jump" data-sec="${sec}"><span class="n">${S.jira.at ? n : "–"}</span><span class="l">${l}</span></button>`).join("");
 }
 function render(){
@@ -839,7 +878,7 @@ document.addEventListener("click", async ev => {
       const t = findT(key); if (!t || !t.target) break;
       S.running["ask:"+key] = true; render();
       const ok = await askNote(t, t.target, t.targetIsExpert);
-      if (ok && !t.targetIsExpert && t.writer && t.target.id === t.writer.id) {
+      if (ok && t.toWriter && t.autoSlack) {
         const list = attentionFor(t.writer.id, D); if (!list.some(x => x.key === key)) list.unshift(t);
         await sendSlack(t.writer, list);
       }
@@ -855,11 +894,12 @@ document.addEventListener("click", async ev => {
       S.running["slack:"+wid] = true; render(); const ok = await sendSlack(w, list); delete S.running["slack:"+wid]; if (ok) S.ui.preview[wid] = false; render(); break;
     }
     case "bulk": {
-      const items = D.escalate.filter(a => a.wid === wid); const w = items[0] && items[0].t.writer; if (!w) break;
+      const items = D.flagged.filter(a => a.wid === wid); const w = items[0] && items[0].t.writer; if (!w) break;
       S.running["bulk:"+wid] = true; render();
-      for (const a of items) await askNote(a.t, w, false);
-      const list = attentionFor(wid, D); items.forEach(a => { if (!list.some(x => x.key === a.t.key)) list.push(a.t); });
-      await sendSlack(w, list);
+      const posted = [];
+      for (const a of items) if (await askNote(a.t, w, false)) posted.push(a.t);
+      // Slack once if any ticket just got its 2nd or 3rd note with Auto-Slack on
+      if (posted.some(t => t.autoSlack && t.msgNo + 1 <= 3)) { const list = attentionFor(wid, D); posted.forEach(t => { if (!list.some(x => x.key === t.key)) list.push(t); }); await sendSlack(w, list); }
       delete S.running["bulk:"+wid]; await reloadKeys(items.map(a => a.t.key)); break;
     }
     case "askexp": {
@@ -874,6 +914,7 @@ document.addEventListener("change", async ev => {
   const el = ev.target; const act = el.dataset && el.dataset.act; if (!act) return;
   if (act === "win") { await saveSettings({ windowDays: +el.value }); reanalyze(); }
   else if (act === "note") { await saveSettings({ noteMode: el.value }); }
+  else if (act === "autoslack") { const k = el.dataset.k; const o = { ...(S.overrides[k]||{}) }; if (el.checked) delete o.autoSlack; else o.autoSlack = false; if (Object.keys(o).length) await dbSet("overrides/"+k, o); else await dbDel("overrides/"+k); }
   else if (act === "cat") { const k = el.dataset.k; if (el.value) await dbSet("overrides/"+k, { category: el.value }); else await dbDel("overrides/"+k); }
   else if (act === "exp") {
     const k = el.dataset.k; const e = ALL_EXPERTS.find(x => x.id === el.value);
