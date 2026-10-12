@@ -253,7 +253,8 @@ function errText(e, server){
     case "cancelled": return `${s} took too long and the request was stopped. Click Refresh to try again.`;
     case "not_granted": case "capability_disabled": case "capability_removed": return `Connectors aren't available in this view. Open the dashboard in claude.ai while signed in.`;
     case "tool_error":
-      if (/not installed|403|forbidden/i.test(m) && s===JIRA) return `Jira refused access: the Atlassian connector isn't installed on the newsiteam site. In claude.ai go to Settings → Connectors → Atlassian, reconnect and choose newsiteam.`;
+      if (e.fieldBlocked) return e.message;
+      if (/not installed on this instance/i.test(m) && s===JIRA) return `Jira refused this change (403: "The app is not installed on this instance"). Reconnect Atlassian in claude.ai Settings → Connectors and choose newsiteam; if it keeps failing, a Jira admin must allow the Atlassian MCP app on newsiteam.`;
       return `${s} reported: ${m}`;
     default: return `${s}: ${m}`;
   }
@@ -375,7 +376,8 @@ function analyze(issue){
       if (!target) { T.warnings.push("Pick a category or expert"); T.category = T.category || null; }
       if (!writer) T.warnings.push("No Author on ticket");
       T.planExpert = target;
-      T.actions.push({ kind:"assign", label: target ? `Move to Review + add ${expertName(target)}` : "Move to Review + add expert", disabled:!target });
+      const ready = target && expert && expert.id === target.id && partsRaw.some(p => p.id === target.id);
+      T.actions.push({ kind:"assign", label: !target ? "Move to Review + add expert" : ready ? `Move to Review (${expertName(target)} already set)` : `Move to Review + add ${expertName(target)}`, disabled:!target });
       T.trigger = linkC; T.stage = "Article link posted";
     } else { T.stage = "Writing"; T.waitingOn = writer ? writer.name : "writer"; T.since = last(cs)?.at || T.created; }
   } else if (status === "Review") {
@@ -522,14 +524,30 @@ function noteInput(key, target, msg){
   if (S.settings.noteMode !== "standard") input.commentVisibility = { type:"role", value:"Service Desk Team" };
   return input;
 }
+// Field edits can be refused by Jira for the connector even when comments and status moves work.
+async function editFields(key, fields, manual){
+  try { await write(JIRA, "editJiraIssue", { cloudId:CLOUD, issueIdOrKey:key, fields }); }
+  catch (e) {
+    if (/not installed on this instance/i.test((e && e.message) || "")) throw { code:"tool_error", server:JIRA, fieldBlocked:true,
+      message:`Jira won't let the connector change fields on this site (403: "The app is not installed on this instance"). Nothing was changed. In Jira, ${manual}, then click the button again: the dashboard skips fields that are already set.` };
+    throw e;
+  }
+}
 async function doStep(T, a){
   const key = T.key;
   if (a.kind === "assign") {
     const ex = T.planExpert; if (!ex) throw { message:"No expert chosen" };
-    const ids = new Set(T.parts.map(p => p.id)); ids.add(ex.id);
-    await write(JIRA, "editJiraIssue", { cloudId:CLOUD, issueIdOrKey:key, fields:{ [F.expert]:{ accountId:ex.id }, [F.parts]:[...ids].map(id => ({ accountId:id })) } });
+    const fields = {};
+    if (!T.expert || T.expert.id !== ex.id) fields[F.expert] = { accountId:ex.id };
+    if (!T.parts.some(p => p.id === ex.id)) fields[F.parts] = [...new Set([...T.parts.map(p => p.id), ex.id])].map(id => ({ accountId:id }));
+    const did = [];
+    if (Object.keys(fields).length) {
+      await editFields(key, fields, `set Expert = ${expertName(ex)} and add ${expertName(ex)} to Request participants`);
+      if (fields[F.expert]) did.push(`Set Expert = ${expertName(ex)}`);
+      if (fields[F.parts]) did.push("added to Request participants");
+    }
     await write(JIRA, "transitionJiraIssue", { cloudId:CLOUD, issueIdOrKey:key, transition:{ id:TR.review } });
-    return `Set Expert = ${expertName(ex)}, added to Request participants, moved to Review`;
+    return [...did, "moved to Review"].join(", ");
   }
   if (a.kind === "toProof") { await write(JIRA, "transitionJiraIssue", { cloudId:CLOUD, issueIdOrKey:key, transition:{ id:TR.proof } }); return "Moved to Proofreading"; }
   if (a.kind === "toReady") { await write(JIRA, "transitionJiraIssue", { cloudId:CLOUD, issueIdOrKey:key, transition:{ id:TR.ready } }); return "Moved to Ready"; }
@@ -539,8 +557,9 @@ async function doStep(T, a){
     return `Posted note: "@${T.writer.name} Hi. Please address the comments. Thanks."`;
   }
   if (a.kind === "addTim") {
-    const ids = new Set(T.parts.map(p => p.id)); ids.add(TIM.id);
-    await write(JIRA, "editJiraIssue", { cloudId:CLOUD, issueIdOrKey:key, fields:{ [F.proof]:{ accountId:TIM.id }, [F.parts]:[...ids].map(id => ({ accountId:id })) } });
+    const fields = { [F.proof]:{ accountId:TIM.id } };
+    if (!T.parts.some(p => p.id === TIM.id)) fields[F.parts] = [...new Set([...T.parts.map(p => p.id), TIM.id])].map(id => ({ accountId:id }));
+    await editFields(key, fields, "set Proofreader = Tim Jones and add him to Request participants");
     return "Set Proofreader = Tim Jones and added him to Request participants";
   }
   throw { message:"Unknown step" };
