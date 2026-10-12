@@ -197,7 +197,7 @@ h1{margin:0 0 4px;font-family:var(--f-display);font-weight:600;font-size:34px;le
 
     <div class="col sticky" id="writersCol">
       <div class="col" id="writersPanel">
-        <div class="section-head"><h2>Writers &amp; pricing</h2><span class="count">In progress = Text, Review and Proofreading</span></div>
+        <div class="section-head"><h2>Writers &amp; pricing</h2><span class="count">In progress = tickets in Text</span></div>
         <div class="monthbar" id="monthbar"></div>
         <div id="picked"></div>
         <div class="cards" id="cards"></div>
@@ -321,7 +321,7 @@ function fits(w, t){
   if (w.niche === "any" || w.niche === "both") return true;
   return (t.cat === "fitness" && w.niche === "exercise") || (t.cat === "nutrition" && w.niche === "nutrition");
 }
-function loadOf(id){ const l = S.load[id] || {}; return { text:l.Text||0, review:l.Review||0, proof:l.Proofreading||0, total:(l.Text||0)+(l.Review||0)+(l.Proofreading||0) }; }
+function loadOf(id){ const l = S.load[id] || {}; return { text:l.Text||0, review:l.Review||0, proof:l.Proofreading||0, total:l.Text||0 }; }
 
 /* ---------- Jira reads ---------- */
 async function searchAll(jql, fields, pages=5){
@@ -471,7 +471,7 @@ function confirmBody(t, w){
 function quickRow(t){
   const conf = S.confirm && S.confirm.key === t.key && BY_ID[S.confirm.wid];
   if (conf) return `<div class="quick"><div class="confirm" style="flex:1 1 100%">${confirmBody(t, conf)}</div></div>`;
-  const opts = sortedWriters(t).map(({ w, fit, ld }) => `<option value="${esc(w.id)}">${esc(w.name)}${fit ? "" : " (outside niche)"} · ${ld.total} in progress${priceFor(w, t) ? " · " + priceFor(w, t) : ""}</option>`).join("");
+  const opts = sortedWriters(t).map(({ w, fit, ld }) => `<option value="${esc(w.id)}">${esc(w.name)}${fit ? "" : " (outside niche)"} · ${ld.total} in Text${priceFor(w, t) ? " · " + priceFor(w, t) : ""}</option>`).join("");
   return `<div class="quick"><label for="qw-${esc(t.key)}" class="wc">Writer</label><select id="qw-${esc(t.key)}">${opts}</select><button class="btn primary sm" data-act="quick" data-k="${esc(t.key)}">Assign</button></div>`;
 }
 function renderMonth(){
@@ -496,7 +496,7 @@ function renderCards(t){
     const busy = t && S.busy[t.key];
     const price = t ? priceFor(w, t) : null;
     const conf = t && S.confirm && S.confirm.key === t.key && S.confirm.wid === w.id;
-    const chips = [ld.text && `<span class="pill text">${ld.text} Drafting</span>`, ld.review && `<span class="pill review">${ld.review} Review</span>`, ld.proof && `<span class="pill proof">${ld.proof} Proofreading</span>`].filter(Boolean).join("")
+    const chips = (ld.text ? `<span class="pill text">${ld.text} in Text</span>` : "")
       || (S.at ? `<span class="pill nut">free</span>` : "");
     let foot = "";
     if (t) {
@@ -506,7 +506,7 @@ function renderCards(t){
              ${busy === w.id ? `<span class="working">Assigning…</span>` : `<button class="btn ${fit ? "primary" : ""} sm" data-act="ask" data-w="${esc(w.id)}" ${busy ? "disabled" : ""}>Assign ${esc(t.key)}</button>`}</div>`;
     }
     return `<div class="card ${t && !fit ? "dim" : ""}">
-      <div class="card-top"><span class="name">${esc(w.name)}</span><span class="load">${S.at ? ld.total : "–"}<small>in progress</small></span></div>
+      <div class="card-top"><span class="name">${esc(w.name)}</span><span class="load">${S.at ? ld.total : "–"}<small>in Text</small></span></div>
       <div class="card-meta"><span class="pill ${n.cls}">${esc(n.label)}</span><span class="rate">${esc(rateLabel(w))}</span></div>
       ${w.noReview ? `<span class="noreview">✓ no expert review needed</span>` : ""}
       ${t && !fit ? `<span class="pill">Topic outside their niche</span>` : ""}
