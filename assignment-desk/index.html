@@ -89,10 +89,12 @@ h1{margin:0 0 4px;font-family:var(--f-display);font-weight:600;font-size:34px;le
 .seg button[aria-pressed="true"]{background:var(--accent);color:var(--on-accent)}
 
 .queue{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);overflow:hidden}
-.tk{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:4px 12px;width:100%;text-align:left;background:none;border:0;border-top:1px solid var(--line-soft);padding:11px 14px;cursor:pointer}
-.tk:first-child{border-top:0}
+.tkw{border-top:1px solid var(--line-soft)}
+.tkw:first-child{border-top:0}
+.tkw.on{background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent)}
+.tk{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:4px 12px;width:100%;text-align:left;background:none;border:0;padding:11px 14px;cursor:pointer}
 .tk:hover{background:var(--surface-2)}
-.tk[aria-pressed="true"]{background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent)}
+.tk[aria-pressed="true"]:hover{background:none}
 .tk .key{font-family:var(--f-mono);font-size:12px;font-weight:600;color:var(--accent);padding-top:1px}
 .tk .ttl{font-weight:500;overflow-wrap:anywhere}
 .tk .age{font-family:var(--f-mono);font-size:11.5px;color:var(--ink-faint);white-space:nowrap;padding-top:2px}
@@ -147,6 +149,17 @@ h1{margin:0 0 4px;font-family:var(--f-display);font-weight:600;font-size:34px;le
 @media (prefers-reduced-motion:reduce){.skel{animation:none}}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--ground);padding:8px 14px;border-radius:7px;font-size:13px;z-index:10;max-width:calc(100% - 32px)}
 @media (min-width:901px){.col.sticky{position:sticky;top:calc(12px + env(safe-area-inset-top,0px))}}
+.grid.solo{grid-template-columns:minmax(0,1fr)}
+.monthbar{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 14px}
+.monthbar .big{font-family:var(--f-mono);font-size:22px;font-weight:600}
+.monthbar .lbl{font-size:12px;color:var(--ink-soft)}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;background:var(--surface-2);border-radius:8px;padding:8px 10px}
+.stat{display:flex;flex-direction:column;gap:1px;min-width:0}
+.stat .k{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-faint);font-weight:600}
+.stat .v{font-family:var(--f-mono);font-size:13.5px;font-weight:600;white-space:nowrap}
+.stat .s{font-size:11px;color:var(--ink-soft)}
+.quick{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:0 14px 11px;font-size:12.5px}
+.quick select{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:4px 6px;font:inherit;font-size:12.5px;color:var(--ink);max-width:100%}
 @media (max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}
 @media (max-width:520px){h1{font-size:28px}}
 </style>
@@ -160,13 +173,14 @@ h1{margin:0 0 4px;font-family:var(--f-display);font-weight:600;font-size:34px;le
     </div>
     <div class="sync">
       <span class="sync-info"><span class="dot wait" id="dot"></span><span id="syncText">Connecting to Jira…</span></span>
+      <button class="btn" id="togglePanel" aria-pressed="true" aria-controls="writersPanel">Hide writers &amp; pricing</button>
       <button class="btn primary" id="refresh" disabled>Refresh</button>
     </div>
   </div>
 
   <div id="pageErr"></div>
 
-  <div class="grid">
+  <div class="grid" id="grid">
     <div class="col">
       <div class="section-head"><h2>Open tickets</h2><span class="count" id="openCount"></span></div>
       <div class="controls">
@@ -182,9 +196,12 @@ h1{margin:0 0 4px;font-family:var(--f-display);font-weight:600;font-size:34px;le
     </div>
 
     <div class="col sticky" id="writersCol">
-      <div class="section-head"><h2>Writers</h2><span class="count" id="writerNote">Load = tickets in Text, Review and Proofreading</span></div>
-      <div id="picked"></div>
-      <div class="cards" id="cards"></div>
+      <div class="col" id="writersPanel">
+        <div class="section-head"><h2>Writers &amp; pricing</h2><span class="count">In progress = Text, Review and Proofreading</span></div>
+        <div class="monthbar" id="monthbar"></div>
+        <div id="picked"></div>
+        <div class="cards" id="cards"></div>
+      </div>
       <div class="section-head"><h2>This session</h2><span class="count" id="logCount"></span></div>
       <ul class="log" id="log"><li><time>—</time><span>Assignments you make here are listed with what changed in Jira.</span></li></ul>
     </div>
@@ -204,7 +221,7 @@ const TEXT_TRANSITION_FALLBACK = "11";
 const WRITERS = [
   { id:"70121:064c601e-cbf1-4550-8d17-8fea2b338118", name:"Zindzy Gracia",         niche:"exercise",  rateType:"word", rate:0.03 },
   { id:"712020:51b52722-9eb1-4aa8-8b6d-527b045f3913", name:"Eve Chalicha",         niche:"exercise",  rateType:"word", rate:0.035 },
-  { id:"712020:4e42fbfd-ec2b-414f-99d4-41dfb6faa417", name:"Jeremy Mukhwana",      niche:"exercise",  rateType:"word", rate:0.03 },
+  { id:"712020:4e42fbfd-ec2b-414f-99d4-41dfb6faa417", name:"Jeremy Mukhwana",      niche:"both",      rateType:"word", rate:0.03 },
   { id:"712020:4e7281a8-604f-46bd-9f0e-61aa6a42030b", name:"Nderitu Munuhe",       niche:"any",       rateType:"word", rate:0.04 },
   { id:"6348b6fe94b0b260830778d6",                    name:"Eva De Angelis",       niche:"nutrition", rateType:"word", rate:0.11, noReview:true },
   { id:"712020:44ae3ce5-c8c9-43b3-b106-63585b9a2edf", name:"Maria Lourdes Rubiolo",niche:"nutrition", rateType:"word", rate:0.10, noReview:true },
@@ -223,7 +240,8 @@ const NUT_KW = ["diet","diets","dieta","meal","meals","snack","snacks","drink","
 const S = {
   mcp:null, loading:false, error:null, at:null,
   open:[], load:{}, selected:null, confirm:null, busy:{}, log:[],
-  q:"", cat:"all"
+  q:"", cat:"all", earned:{}, titles:{},
+  panel: (() => { try { return localStorage.getItem("desk.panel") !== "off"; } catch { return true; } })()
 };
 
 /* ---------- helpers ---------- */
@@ -282,12 +300,22 @@ function rateLabel(w){
   if (w.rateType === "article") return w.rateMin ? `$${w.rateMin}–${w.rateMax}/article` : `$${w.rate}/article`;
   return `$${w.rate}/word`;
 }
-function priceFor(w, t){
-  if (w.rateType === "article") return w.rateMin ? `$${w.rateMin}–${w.rateMax}` : `$${w.rate}`;
-  if (!t || !t.wc) return null;
-  const lo = Math.round(t.wc.min * w.rate), hi = Math.round(t.wc.max * w.rate);
-  return lo === hi ? `$${lo}` : `$${lo}–${hi}`;
+function priceRange(w, wc){
+  if (w.rateType === "article") return w.rateMin ? { lo:w.rateMin, hi:w.rateMax } : { lo:w.rate, hi:w.rate };
+  if (!wc) return null;
+  return { lo:Math.round(wc.min * w.rate), hi:Math.round(wc.max * w.rate) };
 }
+const money = (lo, hi) => { const f = n => "$" + Math.round(n).toLocaleString("en-US"); return Math.round(lo) === Math.round(hi) ? f(lo) : `${f(lo)}–${Math.round(hi).toLocaleString("en-US")}`; };
+function priceFor(w, t){ const p = priceRange(w, t && t.wc); return p ? money(p.lo, p.hi) : null; }
+// Average price per article across the writer's articles this month and those in progress.
+function avgArticle(w){
+  if (w.rateType === "article") return money(w.rateMin || w.rate, w.rateMax || w.rate);
+  const ps = Object.values((S.titles || {})[w.id] || {}).map(t => priceRange(w, wordCount(t))).filter(Boolean);
+  if (!ps.length) return null;
+  return money(ps.reduce((s,p) => s + p.lo, 0) / ps.length, ps.reduce((s,p) => s + p.hi, 0) / ps.length);
+}
+function earnedOf(id){ return (S.earned || {})[id] || { n:0, lo:0, hi:0, unpriced:0 }; }
+const MONTH = new Date().toLocaleDateString("en-US", { month:"long" });
 function fits(w, t){
   if (!t || !t.cat) return true;
   if (w.niche === "any" || w.niche === "both") return true;
@@ -320,14 +348,24 @@ async function load(){
   if (S.loading) return;
   S.loading = true; S.error = null; render();
   try {
-    const [open, active] = await Promise.all([
+    const [open, active, month] = await Promise.all([
       searchAll(`project = BP AND status = "Open" ORDER BY created ASC`, ["summary","status","created",F.author,F.parts]),
-      searchAll(`project = BP AND status in ("Text","Review","Proofreading") AND cf[11710] is not EMPTY`, ["status",F.author], 8)
+      searchAll(`project = BP AND status in ("Text","Review","Proofreading") AND cf[11710] is not EMPTY`, ["summary","status",F.author], 8),
+      // An article counts as earned in the month the writer handed it in, i.e. it left Text.
+      searchAll(`project = BP AND cf[11710] is not EMPTY AND status CHANGED FROM "Text" DURING (startOfMonth(), now())`, ["summary","status",F.author], 4)
     ]);
     S.open = open.map(toTicket);
-    const ld = {};
-    active.forEach(i => { const a = i.fields && i.fields[F.author]; const st = i.fields && i.fields.status && i.fields.status.name; if (a && BY_ID[a.accountId] && st) { ld[a.accountId] = ld[a.accountId] || {}; ld[a.accountId][st] = (ld[a.accountId][st]||0) + 1; } });
-    S.load = ld;
+    const ld = {}, titles = {};
+    const note = (i) => { const a = i.fields && i.fields[F.author]; if (a && BY_ID[a.accountId]) { (titles[a.accountId] = titles[a.accountId] || {})[i.key] = i.fields.summary || ""; return a.accountId; } return null; };
+    active.forEach(i => { const wid = note(i); const st = i.fields.status && i.fields.status.name; if (wid && st) { ld[wid] = ld[wid] || {}; ld[wid][st] = (ld[wid][st]||0) + 1; } });
+    const earned = {};
+    month.forEach(i => {
+      const wid = note(i); if (!wid) return;
+      const e = earned[wid] = earned[wid] || { n:0, lo:0, hi:0, unpriced:0 };
+      const p = priceRange(BY_ID[wid], wordCount(i.fields.summary));
+      e.n++; if (p) { e.lo += p.lo; e.hi += p.hi; } else e.unpriced++;
+    });
+    S.load = ld; S.earned = earned; S.titles = titles;
     if (S.selected && !S.open.some(t => t.key === S.selected)) { S.selected = null; S.confirm = null; }
     S.at = Date.now();
   } catch (e) { S.error = e; }
@@ -410,13 +448,37 @@ function renderQueue(){
   return list.map(t => {
     const busy = S.busy[t.key];
     const authorW = t.author && BY_ID[t.author.id];
-    return `<button class="tk" aria-pressed="${S.selected === t.key}" data-k="${esc(t.key)}">
+    const on = S.selected === t.key;
+    return `<div class="tkw ${on ? "on" : ""}"><button class="tk" aria-pressed="${on}" data-k="${esc(t.key)}">
       <span class="key">${esc(t.key)}</span><span class="ttl">${esc(t.title)}</span><span class="age" title="Created">${age(t.created)}</span>
       <span class="meta">${catPill(t.cat)}${t.wc ? `<span class="wc">${t.wc.min === t.wc.max ? t.wc.min : t.wc.min+"–"+t.wc.max} words</span>` : ""}
         ${t.author ? `<span class="pill ${authorW ? "open" : "warn"}" title="Current Author">Author: ${esc(authorW ? authorW.name : t.author.name)}</span>` : ""}
         ${busy ? `<span class="pill text">Assigning to ${esc(firstName(BY_ID[busy].name))}…</span>` : ""}</span>
-    </button>`;
+    </button>${on && !S.panel && !busy ? quickRow(t) : ""}</div>`;
   }).join("");
+}
+// Compact assign controls shown under the picked ticket while the writers panel is hidden.
+function sortedWriters(t){
+  return [...WRITERS].map(w => ({ w, fit:fits(w, t), ld:loadOf(w.id) }))
+    .sort((a,b) => (b.fit - a.fit) || (a.ld.text - b.ld.text) || (a.ld.total - b.ld.total));
+}
+function confirmBody(t, w){
+  const isAuthor = t.author && t.author.id === w.id;
+  return `<b>Assign ${esc(t.key)} to ${esc(w.name)}?</b>
+    <ul><li>Author → ${esc(w.name)}${t.author && !isAuthor ? ` (replaces ${esc(t.author.name)})` : ""}</li><li>Added to Request participants</li><li>Status Open → Text</li></ul>
+    <div class="acts"><button class="btn primary sm" data-act="go" data-w="${esc(w.id)}">Assign</button><button class="btn ghost sm" data-act="cancel">Cancel</button></div>`;
+}
+function quickRow(t){
+  const conf = S.confirm && S.confirm.key === t.key && BY_ID[S.confirm.wid];
+  if (conf) return `<div class="quick"><div class="confirm" style="flex:1 1 100%">${confirmBody(t, conf)}</div></div>`;
+  const opts = sortedWriters(t).map(({ w, fit, ld }) => `<option value="${esc(w.id)}">${esc(w.name)}${fit ? "" : " (outside niche)"} · ${ld.total} in progress${priceFor(w, t) ? " · " + priceFor(w, t) : ""}</option>`).join("");
+  return `<div class="quick"><label for="qw-${esc(t.key)}" class="wc">Writer</label><select id="qw-${esc(t.key)}">${opts}</select><button class="btn primary sm" data-act="quick" data-k="${esc(t.key)}">Assign</button></div>`;
+}
+function renderMonth(){
+  const vals = Object.values(S.earned || {});
+  const n = vals.reduce((s,e) => s + e.n, 0), lo = vals.reduce((s,e) => s + e.lo, 0), hi = vals.reduce((s,e) => s + e.hi, 0);
+  if (!S.at) return `<span class="lbl">Loading ${MONTH} earnings…</span>`;
+  return `<span class="big">${money(lo, hi)}</span><span class="lbl">earned by these writers in ${MONTH} · ${n} article${n === 1 ? "" : "s"} handed in (left Text this month), priced from the word count in the title</span>`;
 }
 function renderPicked(t){
   if (!t) return `<div class="picked none">Pick an Open ticket on the left. The writers below then show the price for it and an Assign button. Writers whose topic fits the ticket come first.</div>`;
@@ -428,12 +490,10 @@ function renderPicked(t){
       <button class="btn ghost sm" data-act="unpick">Clear</button></div></div>`;
 }
 function renderCards(t){
-  const ws = [...WRITERS].map(w => ({ w, fit:fits(w, t), ld:loadOf(w.id) }));
-  if (t) ws.sort((a,b) => (b.fit - a.fit) || (a.ld.text - b.ld.text) || (a.ld.total - b.ld.total));
+  const ws = t ? sortedWriters(t) : WRITERS.map(w => ({ w, fit:true, ld:loadOf(w.id) }));
   return ws.map(({ w, fit, ld }) => {
     const n = nicheTag(w);
     const busy = t && S.busy[t.key];
-    const isAuthor = t && t.author && t.author.id === w.id;
     const price = t ? priceFor(w, t) : null;
     const conf = t && S.confirm && S.confirm.key === t.key && S.confirm.wid === w.id;
     const chips = [ld.text && `<span class="pill text">${ld.text} Drafting</span>`, ld.review && `<span class="pill review">${ld.review} Review</span>`, ld.proof && `<span class="pill proof">${ld.proof} Proofreading</span>`].filter(Boolean).join("")
@@ -441,9 +501,7 @@ function renderCards(t){
     let foot = "";
     if (t) {
       foot = conf
-        ? `<div class="confirm"><b>Assign ${esc(t.key)} to ${esc(w.name)}?</b>
-             <ul><li>Author → ${esc(w.name)}${t.author && !isAuthor ? ` (replaces ${esc(t.author.name)})` : ""}</li><li>Added to Request participants</li><li>Status Open → Text</li></ul>
-             <div class="acts"><button class="btn primary sm" data-act="go" data-w="${esc(w.id)}">Assign</button><button class="btn ghost sm" data-act="cancel">Cancel</button></div></div>`
+        ? `<div class="confirm">${confirmBody(t, w)}</div>`
         : `<div class="card-foot"><span class="price ${price ? "" : "none"}">${price ? esc(price) : esc(rateLabel(w))}</span>
              ${busy === w.id ? `<span class="working">Assigning…</span>` : `<button class="btn ${fit ? "primary" : ""} sm" data-act="ask" data-w="${esc(w.id)}" ${busy ? "disabled" : ""}>Assign ${esc(t.key)}</button>`}</div>`;
     }
@@ -452,7 +510,11 @@ function renderCards(t){
       <div class="card-meta"><span class="pill ${n.cls}">${esc(n.label)}</span><span class="rate">${esc(rateLabel(w))}</span></div>
       ${w.noReview ? `<span class="noreview">✓ no expert review needed</span>` : ""}
       ${t && !fit ? `<span class="pill">Topic outside their niche</span>` : ""}
-      <div class="chips">${chips}</div>${foot}</div>`;
+      <div class="chips">${chips}</div>
+      <div class="stats">
+        <div class="stat"><span class="k">Per article</span><span class="v">${esc(avgArticle(w) || "—")}</span><span class="s">${w.rateType === "article" ? "flat fee" : "average"}</span></div>
+        <div class="stat"><span class="k">${esc(MONTH)}</span><span class="v">${S.at ? esc(money(earnedOf(w.id).lo, earnedOf(w.id).hi)) : "–"}</span><span class="s">${earnedOf(w.id).n} article${earnedOf(w.id).n === 1 ? "" : "s"}${earnedOf(w.id).unpriced ? `, ${earnedOf(w.id).unpriced} without word count` : ""}</span></div>
+      </div>${foot}</div>`;
   }).join("");
 }
 function renderLog(){
@@ -467,6 +529,11 @@ function render(){
   $("pageErr").innerHTML = S.error ? `<div class="err" style="margin-bottom:18px">${esc(errText(S.error))}${S.error.code === "not_in_manifest" ? ` <button class="btn sm" data-act="perms">Permissions</button>` : ""}</div>` : "";
   $("queue").innerHTML = renderQueue();
   const t = S.open.find(x => x.key === S.selected) || null;
+  $("grid").classList.toggle("solo", !S.panel);
+  $("writersPanel").hidden = !S.panel;
+  $("togglePanel").setAttribute("aria-pressed", S.panel);
+  $("togglePanel").textContent = S.panel ? "Hide writers & pricing" : "Show writers & pricing";
+  $("monthbar").innerHTML = renderMonth();
   $("picked").innerHTML = renderPicked(t);
   $("cards").innerHTML = renderCards(t);
   $("log").innerHTML = renderLog();
@@ -478,7 +545,7 @@ document.addEventListener("click", async ev => {
   const tk = ev.target.closest(".tk");
   if (tk) {
     S.selected = S.selected === tk.dataset.k ? null : tk.dataset.k; S.confirm = null; render();
-    if (S.selected && matchMedia("(max-width:900px)").matches) $("writersCol").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block:"start" });
+    if (S.selected && S.panel && matchMedia("(max-width:900px)").matches) $("writersCol").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block:"start" });
     return;
   }
   const cb = ev.target.closest("#catSeg button");
@@ -488,11 +555,13 @@ document.addEventListener("click", async ev => {
     case "unpick": S.selected = null; S.confirm = null; render(); break;
     case "ask": S.confirm = { key:S.selected, wid:b.dataset.w }; render(); break;
     case "cancel": S.confirm = null; render(); break;
+    case "quick": { const sel = $("qw-" + b.dataset.k); if (sel) { S.confirm = { key:b.dataset.k, wid:sel.value }; render(); } break; }
     case "go": if (S.confirm) await assign(S.confirm.key, S.confirm.wid); break;
     case "perms": try { const p = await claude.use("permissions"); await p.request(["mcp"]); load(); } catch { toast("Open the page's Permissions menu to allow Atlassian."); } break;
   }
 });
 $("refresh").addEventListener("click", load);
+$("togglePanel").addEventListener("click", () => { S.panel = !S.panel; S.confirm = null; try { localStorage.setItem("desk.panel", S.panel ? "on" : "off"); } catch {} render(); });
 $("q").addEventListener("input", e => { S.q = e.target.value; $("queue").innerHTML = renderQueue(); });
 
 /* ---------- boot ---------- */

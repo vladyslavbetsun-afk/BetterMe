@@ -8,4 +8,6 @@ Source of the Assignment Desk dashboard, a claude.ai artifact for assigning Open
 
 Assigning a ticket re-reads it (it must still be Open), sets Author to the writer, adds the writer to Request participants, then moves the ticket to Text.
 
+"Earned this month" counts articles that left Text since the 1st of the month (`status CHANGED FROM "Text" DURING (startOfMonth(), now())`), priced from the word count in the title times the writer's rate, or their flat article fee. The writers & pricing panel can be hidden from the header; the choice is remembered in the browser.
+
 To update the page, edit `index.html` and republish it to the same artifact URL.
