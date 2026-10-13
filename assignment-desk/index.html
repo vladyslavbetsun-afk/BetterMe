@@ -214,7 +214,15 @@ h1{margin:0 0 4px;font-family:var(--f-display);font-weight:600;font-size:34px;le
 const CLOUD = "657e24cd-f643-4482-aba5-7e848607df28";
 const SITE = "https://newsiteam.atlassian.net";
 const JIRA = "Atlassian";
-const F = { author:"customfield_11710", parts:"customfield_11208" };
+const F = { author:"customfield_11710", parts:"customfield_11208", expert:"customfield_11711" };
+// Expert review fee added to the article price when this person is the ticket's Expert.
+const EXPERT_FEES = {
+  "712020:78a486c4-c1e4-4bc0-bba9-4676513ecb28": { name:"Carter Lee", fee:50 },
+  "5de4fe878389de0cd335416b": { name:"Garett Reid", fee:50 },
+  "712020:43ac8bef-1645-465e-9909-5bbb7ee20fa5": { name:"Angelica Galvan", fee:50 },
+  "712020:87a66480-0c2d-4444-be68-26bb3afbbd60": { name:"Maria Eugenia Corrarello", fee:20 }
+};
+const expertFee = id => (EXPERT_FEES[id] || {}).fee || 0;
 const TEXT_TRANSITION_FALLBACK = "11";
 
 // Roster from the Byline Board (Writers & Experts sheet). id = Jira account id.
@@ -306,15 +314,29 @@ function priceRange(w, wc){
   return { lo:Math.round(wc.min * w.rate), hi:Math.round(wc.max * w.rate) };
 }
 const money = (lo, hi) => { const f = n => "$" + Math.round(n).toLocaleString("en-US"); return Math.round(lo) === Math.round(hi) ? f(lo) : `${f(lo)}–${Math.round(hi).toLocaleString("en-US")}`; };
-function priceFor(w, t){ const p = priceRange(w, t && t.wc); return p ? money(p.lo, p.hi) : null; }
-// Average price per article across the writer's articles this month and those in progress.
+// Writer fee plus the review fee of the expert set on the ticket.
+function articleCost(w, title, expertId){
+  const p = priceRange(w, wordCount(title)); if (!p) return null;
+  const f = expertFee(expertId);
+  return { lo:p.lo + f, hi:p.hi + f, fee:f };
+}
+// For an Open ticket the expert isn't chosen yet: exercise experts charge $50, nutrition $20 (Maria) or $50.
+function expertEstimate(w, t){
+  if (w.noReview) return { lo:0, hi:0 };
+  return t && t.cat === "fitness" ? { lo:50, hi:50 } : { lo:20, hi:50 };
+}
+function priceFor(w, t){
+  const p = priceRange(w, t && t.wc); if (!p) return null;
+  const e = expertEstimate(w, t);
+  return money(p.lo + e.lo, p.hi + e.hi);
+}
+// Average price per article (writer + expert fee) across the writer's articles this month and those in progress.
 function avgArticle(w){
-  if (w.rateType === "article") return money(w.rateMin || w.rate, w.rateMax || w.rate);
-  const ps = Object.values((S.titles || {})[w.id] || {}).map(t => priceRange(w, wordCount(t))).filter(Boolean);
-  if (!ps.length) return null;
+  const ps = Object.values((S.titles || {})[w.id] || {}).map(x => articleCost(w, x.title, x.expertId)).filter(Boolean);
+  if (!ps.length) return w.rateType === "article" ? money(w.rateMin || w.rate, w.rateMax || w.rate) : null;
   return money(ps.reduce((s,p) => s + p.lo, 0) / ps.length, ps.reduce((s,p) => s + p.hi, 0) / ps.length);
 }
-function earnedOf(id){ return (S.earned || {})[id] || { n:0, lo:0, hi:0, unpriced:0 }; }
+function earnedOf(id){ return (S.earned || {})[id] || { n:0, lo:0, hi:0, unpriced:0, fees:0 }; }
 const MONTH = new Date().toLocaleDateString("en-US", { month:"long" });
 function fits(w, t){
   if (!t || !t.cat) return true;
@@ -350,20 +372,20 @@ async function load(){
   try {
     const [open, active, month] = await Promise.all([
       searchAll(`project = BP AND status = "Open" ORDER BY created ASC`, ["summary","status","created",F.author,F.parts]),
-      searchAll(`project = BP AND status in ("Text","Review","Proofreading") AND cf[11710] is not EMPTY`, ["summary","status",F.author], 8),
+      searchAll(`project = BP AND status in ("Text","Review","Proofreading") AND cf[11710] is not EMPTY`, ["summary","status",F.author,F.expert], 8),
       // An article counts as earned in the month the writer handed it in, i.e. it left Text.
-      searchAll(`project = BP AND cf[11710] is not EMPTY AND status CHANGED FROM "Text" DURING (startOfMonth(), now())`, ["summary","status",F.author], 4)
+      searchAll(`project = BP AND cf[11710] is not EMPTY AND status CHANGED FROM "Text" DURING (startOfMonth(), now())`, ["summary","status",F.author,F.expert], 4)
     ]);
     S.open = open.map(toTicket);
     const ld = {}, titles = {};
-    const note = (i) => { const a = i.fields && i.fields[F.author]; if (a && BY_ID[a.accountId]) { (titles[a.accountId] = titles[a.accountId] || {})[i.key] = i.fields.summary || ""; return a.accountId; } return null; };
+    const note = (i) => { const a = i.fields && i.fields[F.author]; if (a && BY_ID[a.accountId]) { (titles[a.accountId] = titles[a.accountId] || {})[i.key] = { title:i.fields.summary || "", expertId:(i.fields[F.expert] || {}).accountId || null }; return a.accountId; } return null; };
     active.forEach(i => { const wid = note(i); const st = i.fields.status && i.fields.status.name; if (wid && st) { ld[wid] = ld[wid] || {}; ld[wid][st] = (ld[wid][st]||0) + 1; } });
     const earned = {};
     month.forEach(i => {
       const wid = note(i); if (!wid) return;
-      const e = earned[wid] = earned[wid] || { n:0, lo:0, hi:0, unpriced:0 };
-      const p = priceRange(BY_ID[wid], wordCount(i.fields.summary));
-      e.n++; if (p) { e.lo += p.lo; e.hi += p.hi; } else e.unpriced++;
+      const e = earned[wid] = earned[wid] || { n:0, lo:0, hi:0, unpriced:0, fees:0 };
+      const p = articleCost(BY_ID[wid], i.fields.summary, (i.fields[F.expert] || {}).accountId);
+      e.n++; if (p) { e.lo += p.lo; e.hi += p.hi; e.fees += p.fee; } else e.unpriced++;
     });
     S.load = ld; S.earned = earned; S.titles = titles;
     if (S.selected && !S.open.some(t => t.key === S.selected)) { S.selected = null; S.confirm = null; }
@@ -478,7 +500,7 @@ function renderMonth(){
   const vals = Object.values(S.earned || {});
   const n = vals.reduce((s,e) => s + e.n, 0), lo = vals.reduce((s,e) => s + e.lo, 0), hi = vals.reduce((s,e) => s + e.hi, 0);
   if (!S.at) return `<span class="lbl">Loading ${MONTH} earnings…</span>`;
-  return `<span class="big">${money(lo, hi)}</span><span class="lbl">earned by these writers in ${MONTH} · ${n} article${n === 1 ? "" : "s"} handed in (left Text this month), priced from the word count in the title</span>`;
+  return `<span class="big">${money(lo, hi)}</span><span class="lbl">earned by these writers in ${MONTH} · ${n} article${n === 1 ? "" : "s"} handed in (left Text this month), priced as word count × rate (or flat fee) plus the expert's review fee: +$50 for Carter Lee, Garett Reid and Angelica Galvan, +$20 for Maria</span>`;
 }
 function renderPicked(t){
   if (!t) return `<div class="picked none">Pick an Open ticket on the left. The writers below then show the price for it and an Assign button. Writers whose topic fits the ticket come first.</div>`;
@@ -502,7 +524,7 @@ function renderCards(t){
     if (t) {
       foot = conf
         ? `<div class="confirm">${confirmBody(t, w)}</div>`
-        : `<div class="card-foot"><span class="price ${price ? "" : "none"}">${price ? esc(price) : esc(rateLabel(w))}</span>
+        : `<div class="card-foot"><span class="price ${price ? "" : "none"}" title="${w.noReview ? "No expert review" : "Includes the expert review fee"}">${price ? esc(price) + (w.noReview ? "" : `<span class="wc"> incl. expert</span>`) : esc(rateLabel(w))}</span>
              ${busy === w.id ? `<span class="working">Assigning…</span>` : `<button class="btn ${fit ? "primary" : ""} sm" data-act="ask" data-w="${esc(w.id)}" ${busy ? "disabled" : ""}>Assign ${esc(t.key)}</button>`}</div>`;
     }
     return `<div class="card ${t && !fit ? "dim" : ""}">
@@ -512,8 +534,8 @@ function renderCards(t){
       ${t && !fit ? `<span class="pill">Topic outside their niche</span>` : ""}
       <div class="chips">${chips}</div>
       <div class="stats">
-        <div class="stat"><span class="k">Per article</span><span class="v">${esc(avgArticle(w) || "—")}</span><span class="s">${w.rateType === "article" ? "flat fee" : "average"}</span></div>
-        <div class="stat"><span class="k">${esc(MONTH)}</span><span class="v">${S.at ? esc(money(earnedOf(w.id).lo, earnedOf(w.id).hi)) : "–"}</span><span class="s">${earnedOf(w.id).n} article${earnedOf(w.id).n === 1 ? "" : "s"}${earnedOf(w.id).unpriced ? `, ${earnedOf(w.id).unpriced} without word count` : ""}</span></div>
+        <div class="stat"><span class="k">Per article</span><span class="v">${esc(avgArticle(w) || "—")}</span><span class="s">${w.noReview ? "" : "incl. expert · "}${w.rateType === "article" ? "flat fee" : "average"}</span></div>
+        <div class="stat"><span class="k">${esc(MONTH)}</span><span class="v">${S.at ? esc(money(earnedOf(w.id).lo, earnedOf(w.id).hi)) : "–"}</span><span class="s">${earnedOf(w.id).n} article${earnedOf(w.id).n === 1 ? "" : "s"}${earnedOf(w.id).fees ? ` · $${earnedOf(w.id).fees} expert` : ""}${earnedOf(w.id).unpriced ? `, ${earnedOf(w.id).unpriced} without word count` : ""}</span></div>
       </div>${foot}</div>`;
   }).join("");
 }
