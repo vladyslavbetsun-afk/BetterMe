@@ -104,6 +104,8 @@ section.panel.tray{border-color:var(--accent)}
 .bl li{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;font-size:13px;min-width:0}
 .bl li .t{min-width:0;overflow-wrap:anywhere;flex:1 1 180px}
 .preview{background:var(--sunk);border:1px solid var(--line);border-radius:6px;padding:10px;font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere}
+.when{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}
+.when input{background:var(--sunk);border:1px solid var(--line);border-radius:6px;padding:3px 6px;font-size:13px;max-width:100%}
 .confirm{display:inline-flex;gap:6px;align-items:center;font-size:12.5px}
 .live{border-top:1px solid var(--line);padding:10px 0;display:flex;flex-direction:column;gap:5px}
 .live:first-child{border-top:0}
@@ -169,7 +171,7 @@ const S = {
   readyKeys: [],
   batches: {}, log: [],
   sel: [], q: "",
-  running: {}, ui: { preview:{}, confirmDel:null }
+  running: {}, ui: { preview:{}, confirmDel:null, mode:{}, when:{}, whenErr:{} }
 };
 
 /* ---------- utils ---------- */
@@ -325,8 +327,27 @@ async function addYuliia(key){
   await call(JIRA, "editJiraIssue", { cloudId:CLOUD, issueIdOrKey:key, fields:{ [F.parts]: [...cur, YULIIA.id].map(id => ({ accountId:id })) } });
   return true;
 }
+// default schedule time: next weekday at 09:00 local
+function defaultWhen(){
+  const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(9,0,0,0);
+  while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+  return toLocalInput(d);
+}
+function toLocalInput(d){ const p = n => String(n).padStart(2,"0"); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; }
+const fmtWhen = t => new Date(t).toLocaleString([], { weekday:"short", day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" });
+// Slack accepts scheduled messages 2 minutes to 120 days ahead
+function scheduleError(t){
+  if (!t || isNaN(t)) return "Pick a date and time to schedule the message.";
+  if (t < Date.now() + 3*6e4) return "Pick a time at least 3 minutes from now.";
+  if (t > Date.now() + 119*DAY) return "Slack can only schedule up to 120 days ahead.";
+  return "";
+}
 async function sendBatch(id, skipParts){
   const b = S.batches[id]; if (!b) return;
+  const scheduled = S.ui.mode[id] === "later";
+  const postAt = scheduled ? new Date(S.ui.when[id] || defaultWhen()).getTime() : null;
+  if (scheduled) { const er = scheduleError(postAt); if (er) { S.ui.whenErr[id] = er; render(); return; } }
+  S.ui.whenErr[id] = "";
   S.running[id] = true; render();
   const failed = [];
   if (!skipParts) {
@@ -339,13 +360,21 @@ async function sendBatch(id, skipParts){
     await saveBatch({ ...b, partsFailed: failed });
   } else {
     try {
-      await call(SLACK, "slack_send_message", { channel_id:YULIIA.slack, message:slackText(b.keys) });
-      await saveBatch({ ...b, partsFailed: [], sentAt: Date.now() });
-      await logIt("slack", `Batch ${b.n}: sent Yuliia Koreniuk a Slack DM with ${b.keys.length} ticket${b.keys.length===1?"":"s"}: ${b.keys.join(", ")}`);
-      toast(`Batch ${b.n} sent to Yuliia`);
+      const n = `${b.keys.length} ticket${b.keys.length===1?"":"s"}: ${b.keys.join(", ")}`;
+      if (scheduled) {
+        await call(SLACK, "slack_schedule_message", { channel_id:YULIIA.slack, message:slackText(b.keys), post_at:Math.floor(postAt/1000) });
+        await saveBatch({ ...b, partsFailed: [], sentAt: Date.now(), postAt });
+        await logIt("slack", `Batch ${b.n}: scheduled a Slack DM to Yuliia Koreniuk for ${fmtWhen(postAt)} with ${n}`);
+        toast(`Batch ${b.n} scheduled for ${fmtWhen(postAt)}`);
+      } else {
+        await call(SLACK, "slack_send_message", { channel_id:YULIIA.slack, message:slackText(b.keys) });
+        await saveBatch({ ...b, partsFailed: [], sentAt: Date.now() });
+        await logIt("slack", `Batch ${b.n}: sent Yuliia Koreniuk a Slack DM with ${n}`);
+        toast(`Batch ${b.n} sent to Yuliia`);
+      }
     } catch (e) {
       await saveBatch({ ...b, partsFailed: [] });
-      await logIt("fail", `Batch ${b.n}: Slack DM to Yuliia failed. ${errText(e, SLACK)}`);
+      await logIt("fail", `Batch ${b.n}: ${scheduled ? "scheduling the Slack DM" : "Slack DM"} to Yuliia failed. ${errText(e, SLACK)}`);
     }
   }
   delete S.running[id];
@@ -430,12 +459,18 @@ function renderBatches(){
   return list.map(b => {
     const done = isDone(b), busy = S.running[b.id];
     const pub = b.keys.filter(k => S.tickets[k] && S.tickets[k].status === "Published").length;
-    const chip = done ? `<span class="chip ok">All published</span>` : b.sentAt ? `<span class="chip ac">Sent ${ago(b.sentAt)} · ${pub}/${b.keys.length} published</span>` : (b.partsFailed || []).length ? `<span class="chip bad">Needs attention</span>` : `<span class="chip">Not sent</span>`;
-    let acts = "";
+    const chip = done ? `<span class="chip ok">All published</span>` : b.postAt && b.postAt > Date.now() ? `<span class="chip vi">Slack scheduled for ${esc(fmtWhen(b.postAt))} · ${pub}/${b.keys.length} published</span>` : b.sentAt ? `<span class="chip ac">Sent ${ago(b.postAt || b.sentAt)} · ${pub}/${b.keys.length} published</span>` : (b.partsFailed || []).length ? `<span class="chip bad">Needs attention</span>` : `<span class="chip">Not sent</span>`;
+    let acts = "", when = "";
     if (!b.sentAt) {
-      const failed = (b.partsFailed || []).length;
-      acts = `<button class="btn pri sm" data-act="send" data-b="${esc(b.id)}" ${busy ? "disabled" : ""}>${busy ? "Sending…" : failed ? "Retry" : "Add Yuliia & send Slack"}</button>`
-        + (failed ? ` <button class="btn sm" data-act="sendslack" data-b="${esc(b.id)}" ${busy ? "disabled" : ""}>Send Slack anyway</button>` : "")
+      const failed = (b.partsFailed || []).length, later = S.ui.mode[b.id] === "later";
+      const verb = later ? "schedule" : "send";
+      when = `<div class="when"><div class="seg" role="group" aria-label="When to send the Slack message">
+          <button data-act="mode" data-v="now" data-b="${esc(b.id)}" aria-pressed="${!later}">Send now</button>
+          <button data-act="mode" data-v="later" data-b="${esc(b.id)}" aria-pressed="${later}">Schedule</button></div>
+        ${later ? `<input type="datetime-local" id="when-${esc(b.id)}" data-act="when" data-b="${esc(b.id)}" value="${esc(S.ui.when[b.id] || defaultWhen())}" min="${esc(toLocalInput(new Date()))}" aria-label="Date and time to send the Slack message"><span class="sub">your local time</span>` : ""}
+        ${S.ui.whenErr[b.id] ? `<span class="chip bad">${esc(S.ui.whenErr[b.id])}</span>` : ""}</div>`;
+      acts = `<button class="btn pri sm" data-act="send" data-b="${esc(b.id)}" ${busy ? "disabled" : ""}>${busy ? (later ? "Scheduling…" : "Sending…") : failed ? "Retry" : `Add Yuliia & ${verb} Slack`}</button>`
+        + (failed ? ` <button class="btn sm" data-act="sendslack" data-b="${esc(b.id)}" ${busy ? "disabled" : ""}>${later ? "Schedule" : "Send"} Slack anyway</button>` : "")
         + ` <button class="btn ghost sm" data-act="preview" data-b="${esc(b.id)}">${S.ui.preview[b.id] ? "Hide message" : "Preview message"}</button>`
         + (S.ui.confirmDel === b.id ? ` <span class="confirm">Delete batch ${b.n}? <button class="btn sm" data-act="delyes" data-b="${esc(b.id)}">Delete</button><button class="btn ghost sm" data-act="delno">Keep</button></span>` : ` <button class="btn ghost sm" data-act="del" data-b="${esc(b.id)}">Delete</button>`);
     } else if (done) acts = `<button class="btn sm" data-act="archive" data-b="${esc(b.id)}">Archive</button>`;
@@ -444,7 +479,8 @@ function renderBatches(){
       <div class="bh"><strong>Batch ${esc(b.n)}</strong>${chip}<span class="sub">created ${ago(b.createdAt)}</span></div>
       <ul class="bl">${b.keys.map(k => batchTicket(b, k)).join("")}</ul>
       ${err}
-      ${S.ui.preview[b.id] && !b.sentAt ? `<div class="preview">${esc(slackText(b.keys))}</div><div class="sub">Sent as a DM to Yuliia Koreniuk on Slack.</div>` : ""}
+      ${S.ui.preview[b.id] && !b.sentAt ? `<div class="preview">${esc(slackText(b.keys))}</div><div class="sub">${S.ui.mode[b.id] === "later" ? "Scheduled" : "Sent"} as a DM to Yuliia Koreniuk on Slack.</div>` : ""}
+      ${when}
       ${acts ? `<div class="acts">${acts}</div>` : ""}
     </div>`;
   }).join("");
@@ -476,7 +512,7 @@ function render(){
     { n: ready.filter(t => t.images.length).length, l: "Ready with images", sec: "sec-img" },
     { n: ready.filter(t => !t.images.length).length, l: "Ready, no images", sec: "sec-noimg", cls: "alarm" },
     { n: open.filter(b => !b.sentAt).length, l: "Batches not sent", sec: "sec-batches" },
-    { n: waiting, l: "Batches with Yuliia", sec: "sec-batches" },
+    { n: waiting, l: "Batches sent or scheduled", sec: "sec-batches" },
     { n: live.length, l: "Live, to publish", sec: "sec-live", cls: live.length ? "hot" : "" }
   ];
   $("tiles").innerHTML = tiles.map(t => `<button class="tile ${t.cls || ""}" data-act="jump" data-sec="${t.sec}"><span class="n">${S.jira.at ? t.n : "–"}</span><span class="l">${t.l}</span></button>`).join("");
@@ -503,6 +539,7 @@ document.addEventListener("click", async ev => {
     case "create": await createBatch(); break;
     case "send": await sendBatch(id, false); break;
     case "sendslack": await sendBatch(id, true); break;
+    case "mode": S.ui.mode[id] = b.dataset.v; S.ui.whenErr[id] = ""; render(); break;
     case "preview": S.ui.preview[id] = !S.ui.preview[id]; render(); break;
     case "del": S.ui.confirmDel = id; render(); break;
     case "delno": S.ui.confirmDel = null; render(); break;
@@ -512,7 +549,9 @@ document.addEventListener("click", async ev => {
   }
 });
 document.addEventListener("change", ev => {
-  const el = ev.target; if (el.dataset.act !== "sel") return;
+  const el = ev.target;
+  if (el.dataset.act === "when") { S.ui.when[el.dataset.b] = el.value; S.ui.whenErr[el.dataset.b] = ""; return; }
+  if (el.dataset.act !== "sel") return;
   const k = el.dataset.k;
   if (el.checked) { if (S.sel.length < BATCH && !S.sel.includes(k)) S.sel.push(k); }
   else S.sel = S.sel.filter(x => x !== k);
