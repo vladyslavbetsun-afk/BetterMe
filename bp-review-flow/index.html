@@ -48,7 +48,7 @@ header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background
 .auto{margin-top:14px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;padding:10px 14px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
 .auto label{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:13px}
 .auto select{background:var(--sunk);border:1px solid var(--line);border-radius:6px;padding:3px 6px}
-.tiles{margin-top:14px;display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:8px}
+.tiles{margin-top:14px;display:grid;grid-template-columns:repeat(9,minmax(0,1fr));gap:8px}
 .tile{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:2px;min-width:0}
 .tile:hover{border-color:var(--accent)}
 .tile .n{font-family:var(--f-display);font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1}
@@ -127,7 +127,7 @@ section.panel{background:var(--surface);border:1px solid var(--line);border-radi
 .linkbox{display:flex;flex-direction:column;gap:4px;margin-top:4px}
 .linkbox .opt{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12.5px}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:8px 14px;border-radius:6px;font-size:13px;z-index:10;max-width:calc(100% - 32px)}
-@media (max-width:1100px){.tiles{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media (max-width:1100px){.tiles{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}
 @media (max-width:520px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.brand{font-size:18px}}
 </style>
@@ -152,6 +152,7 @@ section.panel{background:var(--surface);border:1px solid var(--line);border-radi
       <section class="panel" id="sec-noreply"><div class="ph"><h2>No reply to your comment (3+ business days)</h2><span class="cnt" id="c-noreply"></span></div><div class="pb" id="b-noreply"></div></section>
       <section class="panel" id="sec-follow"><div class="ph"><h2>Follow-ups counting down</h2><span class="cnt" id="c-follow"></span></div><div class="pb" id="b-follow"></div></section>
       <section class="panel" id="sec-slackw"><div class="ph"><h2>Flagged follow-ups</h2><span class="cnt" id="c-slackw"></span></div><div class="pb" id="b-slackw"></div></section>
+      <section class="panel" id="sec-late"><div class="ph"><h2>No document 5+ business days after assigning</h2><span class="cnt" id="c-late"></span></div><div class="pb" id="b-late"></div></section>
       <section class="panel" id="sec-expert"><div class="ph"><h2>Experts with no update (7+ days)</h2><span class="cnt" id="c-expert"></span></div><div class="pb" id="b-expert"></div></section>
       <section class="panel" id="sec-wait"><div class="ph"><h2>Waiting on others</h2><span class="cnt" id="c-wait"></span></div><div class="pb" id="b-wait"></div></section>
     </div>
@@ -200,7 +201,7 @@ const S = {
   slack: { loading:false, error:null, items:[], at:null },
   settings: { automation:false, windowDays:14, noteMode:"internal" },
   excluded: {}, links: {}, sent: {}, hidden: {}, overrides: {}, expertAsks: {}, log: [],
-  dbReady:false, running:{}, autoBusy:false, lastAuto:null, autoSlackBusy:false, autoSlackTried:{},
+  dbReady:false, running:{}, autoBusy:false, lastAuto:null, autoSlackBusy:false, autoSlackTried:{}, assigned:{},
   ui: { preview:{}, find:{}, confirmClear:false, linkOpen:{} }
 };
 
@@ -315,9 +316,43 @@ async function loadJira(){
     const rc = {}; review.forEach(i => { const e = i.fields && i.fields[F.expert]; if (e && e.accountId) rc[e.accountId] = (rc[e.accountId]||0)+1; });
     S.reviewCounts = rc;
     S.jira.tickets = issues.map(analyze);
+    loadAssignments();
     S.jira.at = Date.now();
   } catch (e) { S.jira.error = e; }
   S.jira.loading = false; render();
+}
+
+/* ---------- writer assignment times (from each ticket's change history) ---------- */
+// latest time the current Author was set as Author and added to Request participants (the later of the two)
+function assignedFrom(histories, wid){
+  let authorAt = 0, partsAt = 0;
+  for (const h of histories || []) {
+    const at = parseT(h.created);
+    for (const it of h.items || []) {
+      if (it.fieldId === F.author && (it.tmpToAccountId === wid || it.to === wid)) authorAt = Math.max(authorAt, at);
+      if (it.fieldId === F.parts && String(it.to || "").includes(wid) && !String(it.from || "").includes(wid)) partsAt = Math.max(partsAt, at);
+    }
+  }
+  const at = Math.max(authorAt, partsAt);
+  return at ? { at, authorAt, partsAt, writerId: wid } : null;
+}
+async function loadAssignments(){
+  const todo = S.jira.tickets.filter(t => t.status === "Text" && t.stage === "Writing" && t.writer && !(S.assigned[t.key] && S.assigned[t.key].writerId === t.writer.id));
+  let i = 0;
+  const worker = async () => {
+    while (i < todo.length) {
+      const t = todo[i++];
+      try {
+        const p = await read(JIRA, "getJiraIssue", { cloudId:CLOUD, issueIdOrKey:t.key, fields:["summary"], expand:"changelog", responseContentFormat:"markdown" });
+        const nodes = p && p.issues && (Array.isArray(p.issues) ? p.issues : p.issues.nodes);
+        const issue = (nodes && nodes[0]) || p;
+        const a = assignedFrom(issue && issue.changelog && issue.changelog.histories, t.writer.id);
+        if (a) S.assigned[t.key] = a;
+      } catch {}
+    }
+  };
+  await Promise.all([worker(), worker(), worker(), worker()]);
+  if (todo.length) reanalyze();
 }
 
 /* ---------- analysis ---------- */
@@ -379,7 +414,14 @@ function analyze(issue){
       const ready = target && expert && expert.id === target.id && partsRaw.some(p => p.id === target.id);
       T.actions.push({ kind:"assign", label: !target ? "Move to Review + add expert" : ready ? `Move to Review (${expertName(target)} already set)` : `Move to Review + add ${expertName(target)}`, disabled:!target });
       T.trigger = linkC; T.stage = "Article link posted";
-    } else { T.stage = "Writing"; T.waitingOn = writer ? writer.name : "writer"; T.since = last(cs)?.at || T.created; }
+    } else {
+      T.stage = "Writing"; T.waitingOn = writer ? writer.name : "writer";
+      const asg = writer && S.assigned[issue.key];
+      T.assignedAt = asg && asg.writerId === writer.id ? asg.at : null;
+      T.since = T.assignedAt || last(cs)?.at || T.created;
+      // writer set as Author + Request participant, no document link within 5 business days, and you haven't nudged since
+      if (T.assignedAt && bizDays(T.assignedAt) >= 5 && !cs.some(c => c.role === "me" && c.at > T.assignedAt)) T.writingLate = true;
+    }
   } else if (status === "Review") {
     if (lastExp) {
       const note = cs.find(c => c.role === "me" && c.at > firstExp.at);
@@ -461,6 +503,7 @@ function derive(){
   const follow = asks.filter(a => !a.flagged);
   const flagged = asks.filter(a => a.flagged);
   const expertSilent = ts.filter(t => t.expertSilent);
+  const writingLate = ts.filter(t => t.writingLate);
   const counts = {
     move: move.length,
     text: ts.filter(t => t.status === "Text" && !t.actions.length).length,
@@ -469,9 +512,10 @@ function derive(){
     proof: ts.filter(t => t.stage === "With proofreader").length,
     noReply: noReply.length,
     flagged: flagged.length,
-    silent: expertSilent.length
+    silent: expertSilent.length,
+    late: writingLate.length
   };
-  return { ts, move, wait, noReply, follow, flagged, expertSilent, counts, asks };
+  return { ts, move, wait, noReply, follow, flagged, expertSilent, writingLate, counts, asks };
 }
 function groupBy(arr, keyFn){ const m = new Map(); arr.forEach(x => { const k = keyFn(x); if (!m.has(k)) m.set(k, []); m.get(k).push(x); }); return m; }
 // every ticket for this writer that needs attention: unanswered 1st notes to them and flagged follow-ups
@@ -619,6 +663,28 @@ async function askNote(T, target, isExpert){
   const msg = isExpert ? "Hi. Any news on the ticket?" : "Hi. Any news on the edits?";
   try { await write(JIRA, "addCommentToJiraIssue", noteInput(T.key, target, msg)); await logIt("jira", `${T.key}: posted "@${target.name} ${msg}"`, { key:T.key, writerId: !isExpert && T.writer ? T.writer.id : undefined }); return true; }
   catch (e) { await logIt("fail", `${T.key}: note to ${target.name} failed. ${errText(e, JIRA)}`, { key:T.key }); return false; }
+}
+const STATUS_MSG = "Hi. What's the status on this one?";
+function statusSlackText(writer, tickets){
+  const name = firstName((S.links[writer.id] || {}).slackName || writer.name);
+  if (tickets.length === 1) { const t = tickets[0]; return `Hi ${name}. What's the status on this one?\n[${t.key} ${shortTitle(t.title)}](${t.url})`; }
+  return `Hi ${name}. What's the status on these ones?\n${tickets.map(t => `- [${t.key} ${shortTitle(t.title)}](${t.url})`).join("\n")}`;
+}
+async function askStatus(writer, tickets){
+  const posted = [];
+  for (const t of tickets) {
+    try { await write(JIRA, "addCommentToJiraIssue", noteInput(t.key, writer, STATUS_MSG)); posted.push(t); await logIt("jira", `${t.key}: posted "@${writer.name} ${STATUS_MSG}"`, { key:t.key, writerId:writer.id }); }
+    catch (e) { await logIt("fail", `${t.key}: status note to ${writer.name} failed. ${errText(e, JIRA)}`, { key:t.key }); }
+  }
+  if (!posted.length) return;
+  const link = S.links[writer.id];
+  if (!link || !link.slackId) { await logIt("fail", `Slack skipped for ${writer.name}: not linked to a Slack account yet. Use Find on Slack.`, { writerId:writer.id }); return; }
+  try {
+    await write(SLACK, "slack_send_message", { channel_id:link.slackId, message:statusSlackText(writer, posted) });
+    const now = Date.now(); const prev = S.sent[writer.id] || {}; const map = { ...(prev.tickets || {}) }; posted.forEach(t => map[t.key] = now);
+    await dbSet("slackSent/"+writer.id, { name:writer.name, at:now, tickets:map });
+    await logIt("slack", `Slacked ${link.slackName || writer.name} "What's the status" about ${posted.map(t => t.key).join(", ")}`, { writerId:writer.id });
+  } catch (e) { await logIt("fail", `Slack to ${writer.name} failed. ${errText(e, SLACK)}`, { writerId:writer.id }); }
 }
 async function reloadKeys(keys){
   for (const k of keys) { try { const f = await freshTicket(k); S.jira.tickets = S.jira.tickets.map(t => t.key === k ? f : t); } catch {} }
@@ -779,6 +845,21 @@ function renderSlackW(D){
       </div><div class="row" style="margin-top:6px">${linkUI(w)}</div></div>`;
   }).join("");
 }
+function renderLate(D){
+  $("c-late").textContent = D.writingLate.length || "";
+  if (S.jira.loading && !S.jira.at) return `<div class="loading">Loading Jira…</div>`;
+  if (!D.writingLate.length) return `<div class="empty">Every writer you assigned has posted their document within 5 business days, or you've already asked them.</div>`;
+  const g = groupBy(D.writingLate, t => t.writer.id);
+  return [...g.entries()].map(([wid, list]) => {
+    const w = list[0].writer; const linked = !!(S.links[wid]||{}).slackId; const busy = !!S.running["late:"+wid];
+    return `<div class="group"><div class="gh"><strong>${esc(w.name)}</strong><span class="chip flag">${list.length} late</span>${S.sent[wid] ? `<span class="sub">Slacked ${ago(S.sent[wid].at)} ago</span>` : ""}</div>
+      <ul class="tl">${list.sort((a,b)=>a.assignedAt-b.assignedAt).map(t => { const b = !!S.running["late:"+t.key]; return `<li>${keyLink(t)}<span class="t">${esc(shortTitle(t.title))}</span>
+        <span class="chip flag">assigned ${new Date(t.assignedAt).toLocaleDateString([], { month:"short", day:"numeric" })} · ${bdLabel(Math.floor(bizDays(t.assignedAt)))}</span>
+        <button class="btn sm" ${b||busy?"disabled":""} data-act="late" data-k="${esc(t.key)}">Ask for status (Jira${linked ? " + Slack" : ""})</button>${excludeBtn(t.key, true)}</li>`; }).join("")}</ul>
+      ${list.length > 1 ? `<div class="acts"><button class="btn" ${busy?"disabled":""} data-act="lateall" data-w="${esc(wid)}">Ask on all ${list.length} in Jira${linked ? " + one Slack" : ""}</button>${busy ? `<span class="sub">Working…</span>` : ""}</div>` : ""}
+      ${!linked ? `<div class="row">${linkUI(w)}</div>` : ""}</div>`;
+  }).join("");
+}
 function renderExpert(D){
   $("c-expert").textContent = D.expertSilent.length || "";
   if (S.jira.loading && !S.jira.at) return `<div class="loading">Loading Jira…</div>`;
@@ -843,7 +924,7 @@ function renderAuto(){
 function renderTiles(D){
   const c = D.counts;
   const T = [["move","Your move","sec-move",c.move,"hot"],["text","Writing (Text)","sec-wait",c.text],["expert","With expert","sec-wait",c.expert],["fixing","Writer fixing","sec-wait",c.fixing],
-    ["proof","With proofreader","sec-wait",c.proof],["noReply","No reply 3+ business days","sec-noreply",c.noReply,"alarm"],["flagged","Follow-ups flagged","sec-slackw",c.flagged,"alarm"],["silent","Expert silent 7d+","sec-expert",c.silent,"alarm"]];
+    ["proof","With proofreader","sec-wait",c.proof],["noReply","No reply 3+ business days","sec-noreply",c.noReply,"alarm"],["flagged","Follow-ups flagged","sec-slackw",c.flagged,"alarm"],["silent","Expert silent 7d+","sec-expert",c.silent,"alarm"],["late","No document 5+ business days","sec-late",c.late,"alarm"]];
   $("tiles").innerHTML = T.map(([id,l,sec,n,cls]) => `<button class="tile ${n && cls ? cls : ""}" data-act="jump" data-sec="${sec}"><span class="n">${S.jira.at ? n : "–"}</span><span class="l">${l}</span></button>`).join("");
 }
 function render(){
@@ -855,7 +936,7 @@ function render(){
   renderAuto(); renderTiles(D);
   $("pageerr").innerHTML = S.jira.error ? `<div class="err">${esc(errText(S.jira.error, JIRA))}${needsPerm(S.jira.error) ? ` <button class="btn sm" data-act="perms">Permissions</button>` : ""} <button class="btn sm" data-act="refresh">Refresh</button></div>` : "";
   $("b-move").innerHTML = renderMove(D); $("b-noreply").innerHTML = renderNoReply(D); $("b-follow").innerHTML = renderFollow(D);
-  $("b-slackw").innerHTML = renderSlackW(D); $("b-expert").innerHTML = renderExpert(D); $("b-wait").innerHTML = renderWait(D);
+  $("b-slackw").innerHTML = renderSlackW(D); $("b-expert").innerHTML = renderExpert(D); $("b-late").innerHTML = renderLate(D); $("b-wait").innerHTML = renderWait(D);
   $("b-feed").innerHTML = renderFeed(); $("b-log").innerHTML = renderLog(D); $("b-excl").innerHTML = renderExcl();
 }
 
@@ -920,6 +1001,14 @@ document.addEventListener("click", async ev => {
       // Slack once if any ticket just got its 2nd or 3rd note with Auto-Slack on
       if (posted.some(t => t.autoSlack && t.msgNo + 1 <= 3)) { const list = attentionFor(wid, D); posted.forEach(t => { if (!list.some(x => x.key === t.key)) list.push(t); }); await sendSlack(w, list); }
       delete S.running["bulk:"+wid]; await reloadKeys(items.map(a => a.t.key)); break;
+    }
+    case "late": {
+      const t = findT(key); if (!t || !t.writer) break;
+      S.running["late:"+key] = true; render(); await askStatus(t.writer, [t]); delete S.running["late:"+key]; await reloadKeys([key]); break;
+    }
+    case "lateall": {
+      const list = D.writingLate.filter(t => t.writer.id === wid); if (!list.length) break;
+      S.running["late:"+wid] = true; render(); await askStatus(list[0].writer, list); delete S.running["late:"+wid]; await reloadKeys(list.map(t => t.key)); break;
     }
     case "askexp": {
       const t = findT(key); if (!t || !t.expert) break;
