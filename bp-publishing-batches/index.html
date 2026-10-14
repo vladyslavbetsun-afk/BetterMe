@@ -169,7 +169,8 @@ const CLOUD = "657e24cd-f643-4482-aba5-7e848607df28";
 const SITE = "https://newsiteam.atlassian.net";
 const JIRA = "Atlassian", SLACK = "Slack";
 const F = { parts:"customfield_11208", mgr:"customfield_11709" };
-const OKSANA = "712020:7cf474f8-6ae6-439f-8d54-f6a1e3143066";
+// image links count only when Oksana Pidlisna or Karina Sorvachova posts them
+const IMAGE_BY = new Set(["712020:7cf474f8-6ae6-439f-8d54-f6a1e3143066","712020:3584bb79-f831-407e-a40a-02e8084953d5"]);
 const VLAD = "712020:0d312ff6-23a7-4fa4-b5a1-b57be36d9f75";
 const YULIIA = { id:"712020:b345726f-fe25-4239-a7dc-7322d7dbc2ae", name:"Yuliia Koreniuk", slack:"U0AHVPJ0QKA" };
 const BATCH = 4;
@@ -274,7 +275,7 @@ function analyze(issue){
     if (DOC_RE.test(u)) { docs.push({ url:u, by:c.name, at:c.at }); continue; }
     if (/atlassian\.net/i.test(u)) continue;
     if (c.aid === YULIIA.id) { if (!/google\.com/i.test(u)) lives.push({ url:u, at:c.at }); continue; }
-    if ((c.aid === OKSANA || c.aid === S.me) && !LIVE_RE.test(u)) images.push({ url:u, by:c.name, at:c.at });
+    if (IMAGE_BY.has(c.aid) && !LIVE_RE.test(u)) images.push({ url:u, by:c.name, at:c.at });
   }
   // the live article is Yuliia's latest betterme.world link, or else the latest other link she posted
   const live = last(lives.filter(l => LIVE_RE.test(l.url))) || last(lives) || null;
@@ -558,7 +559,7 @@ function render(){
     $("b-"+v).hidden = !open;
     $("sec-"+v).querySelector(".ph").classList.toggle("closed", !open);
   }
-  $("b-img").innerHTML = renderList(withImg, S.q ? "No tickets match the filter." : "No Ready tickets have an image link from you or Oksana yet.");
+  $("b-img").innerHTML = renderList(withImg, S.q ? "No tickets match the filter." : "No Ready tickets have an image link from Oksana or Karina yet.");
   $("b-noimg").innerHTML = renderList(noImg, S.q ? "No tickets match the filter." : "Every Ready ticket has images.");
   $("b-tray").innerHTML = renderTray(); $("b-batches").innerHTML = renderBatches();
   $("b-live").innerHTML = renderLive(live); $("b-log").innerHTML = renderLog(); $("logtools").innerHTML = renderLogTools();

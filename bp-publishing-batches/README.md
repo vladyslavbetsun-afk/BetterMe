@@ -6,7 +6,7 @@ Source of the BP Publishing Batches dashboard, a claude.ai artifact for moving J
 - Connectors: Atlassian (newsiteam Jira) and Slack
 
 What it does:
-- Lists BP tickets in Ready, split into those with an image link in the comments (posted by Vladyslav Betsun or Oksana Pidlisna) and those without. Each ticket shows the latest Google Doc link from its comments.
+- Lists BP tickets in Ready, split into those with an image link in the comments (posted by Oksana Pidlisna or Karina Sorvachova) and those without. Each ticket shows the latest Google Doc link from its comments.
 - Tick up to 4 tickets and create a batch. "Add Yuliia & send Slack" adds Yuliia Koreniuk to Request participants on each ticket, then DMs her "Hi. Here are articles for publishing:" with a bullet list of the ticket links. Choose "Send now" or "Schedule" to have Slack deliver the DM at a set date and time (your local time, 3 minutes to 120 days ahead).
 - When Yuliia posts the live article link (betterme.world) in a ticket's comments, the ticket gets a "Move to Published" button.
 
