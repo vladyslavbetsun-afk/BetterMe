@@ -156,7 +156,7 @@ section.panel.tray{border-color:var(--accent)}
       <section class="panel" id="sec-live"><div class="ph"><h2>Live, move to Published</h2><span class="cnt" id="c-live"></span></div><div class="pb" id="b-live"></div></section>
       <section class="panel tray" id="sec-tray"><div class="ph"><h2>New batch</h2><span class="cnt" id="c-tray"></span></div><div class="pb" id="b-tray"></div></section>
       <section class="panel" id="sec-batches"><div class="ph"><h2>Batches</h2><span class="cnt" id="c-batches"></span></div><div class="pb" id="b-batches"></div></section>
-      <section class="panel" id="sec-log"><div class="ph"><h2>Action log</h2><span class="cnt" id="c-log"></span></div><div class="pb" id="b-log"></div></section>
+      <section class="panel" id="sec-log"><div class="ph"><h2>Action log</h2><span class="cnt" id="c-log"></span><span class="sp" id="logtools"></span></div><div class="pb" id="b-log"></div></section>
     </div>
   </div>
 </div>
@@ -187,7 +187,7 @@ const S = {
   batches: {}, log: [],
   sel: [], q: "",
   show: lsGet("pb.show") || "both", folded: (() => { try { return JSON.parse(lsGet("pb.folded") || "{}") || {}; } catch { return {}; } })(),
-  running: {}, ui: { preview:{}, confirmDel:null, mode:{}, when:{}, whenErr:{} }
+  running: {}, ui: { preview:{}, confirmDel:null, confirmClear:false, clearing:false, mode:{}, when:{}, whenErr:{} }
 };
 
 /* ---------- utils ---------- */
@@ -246,7 +246,7 @@ async function logIt(kind, text){
 async function saveBatch(b){ S.batches[b.id] = b; render(); await dbSet("batches/"+b.id, b); }
 function subscribeDb(){
   S.db.collection("batches").onSnapshot(snap => { const m = {}; snap.docs.forEach(d => m[d.id] = d.data()); S.batches = m; loadBatchTickets(); render(); }, () => {});
-  S.db.collection("log").orderBy("at","desc").limit(150).onSnapshot(snap => { S.log = snap.docs.map(d => d.data()); render(); }, () => {});
+  S.db.collection("log").orderBy("at","desc").limit(150).onSnapshot(snap => { S.log = snap.docs.map(d => ({ id:d.id, ...d.data() })); render(); }, () => {});
 }
 
 /* ---------- Jira load ---------- */
@@ -511,6 +511,21 @@ function renderLive(list){
     <div class="row links">${liveLink(t)}<button class="btn go sm" data-act="publish" data-k="${esc(t.key)}" ${S.running[t.key] ? "disabled" : ""}>${S.running[t.key] ? "Moving…" : "Move to Published"}</button></div>
   </div>`; }).join("");
 }
+function renderLogTools(){
+  if (!S.log.length) return "";
+  if (S.ui.clearing) return `<span class="sub">Clearing…</span>`;
+  if (S.ui.confirmClear) return `<span class="confirm">Clear all ${S.log.length} entries? <button class="btn sm" data-act="clearyes">Clear log</button><button class="btn ghost sm" data-act="clearno">Keep</button></span>`;
+  return `<button class="btn ghost sm" data-act="clear">Clear</button>`;
+}
+// deletes every log entry; batches and Jira are untouched
+async function clearLog(){
+  S.ui.confirmClear = false; S.ui.clearing = true; render();
+  if (S.db) {
+    try { const snap = await S.db.collection("log").get(); for (const d of snap.docs) await S.db.collection("log").doc(d.id).delete(); }
+    catch (e) { toast("Couldn't clear the log: " + (e.message || e.code)); }
+  } else S.log = [];
+  S.ui.clearing = false; render();
+}
 function renderLog(){
   if (!S.log.length) return `<div class="empty">Batches, Slack messages and status changes are listed here.</div>`;
   return `<ul class="log">${S.log.map(l => `<li class="${l.kind === "fail" ? "fail" : ""}"><time>${new Date(l.at).toLocaleString([], { month:"short", day:"numeric", hour:"2-digit", minute:"2-digit" })}</time><span>${esc(l.text)}</span></li>`).join("")}</ul>`;
@@ -546,7 +561,7 @@ function render(){
   $("b-img").innerHTML = renderList(withImg, S.q ? "No tickets match the filter." : "No Ready tickets have an image link from you or Oksana yet.");
   $("b-noimg").innerHTML = renderList(noImg, S.q ? "No tickets match the filter." : "Every Ready ticket has images.");
   $("b-tray").innerHTML = renderTray(); $("b-batches").innerHTML = renderBatches();
-  $("b-live").innerHTML = renderLive(live); $("b-log").innerHTML = renderLog();
+  $("b-live").innerHTML = renderLive(live); $("b-log").innerHTML = renderLog(); $("logtools").innerHTML = renderLogTools();
 }
 
 /* ---------- events ---------- */
@@ -577,6 +592,9 @@ document.addEventListener("click", async ev => {
     case "delyes": { const bt = S.batches[id]; S.ui.confirmDel = null; delete S.batches[id]; render(); await dbDel("batches/"+id); if (bt) await logIt("batch", `Batch ${bt.n} deleted`); break; }
     case "archive": { const bt = S.batches[id]; if (bt) await saveBatch({ ...bt, archived: true }); break; }
     case "publish": await publish(key); break;
+    case "clear": S.ui.confirmClear = true; render(); break;
+    case "clearno": S.ui.confirmClear = false; render(); break;
+    case "clearyes": await clearLog(); break;
   }
 });
 document.addEventListener("change", ev => {
