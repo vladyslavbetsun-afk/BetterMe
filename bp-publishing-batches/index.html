@@ -113,6 +113,7 @@ section.panel.tray{border-color:var(--accent)}
 .preview{background:var(--sunk);border:1px solid var(--line);border-radius:6px;padding:10px;font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere}
 .when{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}
 .when input{background:var(--sunk);border:1px solid var(--line);border-radius:6px;padding:3px 6px;font-size:13px;max-width:100%}
+.warn{font-size:12.5px;color:var(--warn);background:var(--warn-soft);padding:6px 8px;border-radius:6px;display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}
 .confirm{display:inline-flex;gap:6px;align-items:center;font-size:12.5px}
 .live{border-top:1px solid var(--line);padding:10px 0;display:flex;flex-direction:column;gap:5px}
 .live:first-child{border-top:0}
@@ -188,7 +189,7 @@ const S = {
   batches: {}, log: [],
   sel: [], q: "",
   show: lsGet("pb.show") || "both", folded: (() => { try { return JSON.parse(lsGet("pb.folded") || "{}") || {}; } catch { return {}; } })(),
-  running: {}, ui: { preview:{}, confirmDel:null, confirmClear:false, clearing:false, mode:{}, when:{}, whenErr:{} }
+  running: {}, ui: { preview:{}, confirmDel:null, confirmClear:false, clearing:false, mode:{}, when:{}, whenErr:{}, edit:{} }
 };
 
 /* ---------- utils ---------- */
@@ -397,6 +398,30 @@ async function sendBatch(id, skipParts){
   delete S.running[id];
   await reloadKeys(b.keys);
 }
+// Slack's connector can't edit or cancel a scheduled message, so a new time means a new scheduled
+// message; the old one stays listed on the batch until you confirm you deleted it in Slack.
+async function reschedule(id, sendNow){
+  const b = S.batches[id]; if (!b) return;
+  const postAt = sendNow ? null : new Date(S.ui.when[id] || toLocalInput(new Date(b.postAt))).getTime();
+  if (!sendNow) { const er = scheduleError(postAt); if (er) { S.ui.whenErr[id] = er; render(); return; } }
+  S.ui.whenErr[id] = ""; S.running[id] = true; render();
+  const stale = [...(b.stale || []), b.postAt].filter(Boolean);
+  try {
+    if (sendNow) {
+      await call(SLACK, "slack_send_message", { channel_id:YULIIA.slack, message:slackText(b.keys) });
+      await saveBatch({ ...b, sentAt: Date.now(), postAt: null, stale });
+      await logIt("slack", `Batch ${b.n}: sent the Slack DM to Yuliia now instead of ${fmtWhen(b.postAt)}`);
+      toast(`Batch ${b.n} sent to Yuliia`);
+    } else {
+      await call(SLACK, "slack_schedule_message", { channel_id:YULIIA.slack, message:slackText(b.keys), post_at:Math.floor(postAt/1000) });
+      await saveBatch({ ...b, sentAt: Date.now(), postAt, stale });
+      await logIt("slack", `Batch ${b.n}: rescheduled the Slack DM to Yuliia from ${fmtWhen(b.postAt)} to ${fmtWhen(postAt)}`);
+      toast(`Batch ${b.n} rescheduled for ${fmtWhen(postAt)}`);
+    }
+    S.ui.edit[id] = false;
+  } catch (e) { await logIt("fail", `Batch ${b.n}: ${sendNow ? "sending" : "rescheduling"} the Slack DM failed; the message for ${fmtWhen(b.postAt)} is unchanged. ${errText(e, SLACK)}`); }
+  delete S.running[id]; render();
+}
 async function publish(key){
   S.running[key] = true; render();
   try {
@@ -490,13 +515,25 @@ function renderBatches(){
         + (failed ? ` <button class="btn sm" data-act="sendslack" data-b="${esc(b.id)}" ${busy ? "disabled" : ""}>${later ? "Schedule" : "Send"} Slack anyway</button>` : "")
         + ` <button class="btn ghost sm" data-act="preview" data-b="${esc(b.id)}">${S.ui.preview[b.id] ? "Hide message" : "Preview message"}</button>`
         + (S.ui.confirmDel === b.id ? ` <span class="confirm">Delete batch ${b.n}? <button class="btn sm" data-act="delyes" data-b="${esc(b.id)}">Delete</button><button class="btn ghost sm" data-act="delno">Keep</button></span>` : ` <button class="btn ghost sm" data-act="del" data-b="${esc(b.id)}">Delete</button>`);
-    } else if (done) acts = `<button class="btn sm" data-act="archive" data-b="${esc(b.id)}">Archive</button>`;
+    } else if (b.postAt && b.postAt > Date.now()) {
+      if (S.ui.edit[b.id]) {
+        when = `<div class="when"><input type="datetime-local" id="when-${esc(b.id)}" data-act="when" data-b="${esc(b.id)}" value="${esc(S.ui.when[b.id] || toLocalInput(new Date(b.postAt)))}" min="${esc(toLocalInput(new Date()))}" aria-label="New date and time for the Slack message"><span class="sub">your local time</span>
+          ${S.ui.whenErr[b.id] ? `<span class="chip bad">${esc(S.ui.whenErr[b.id])}</span>` : ""}</div>
+          <div class="sub">Slack doesn't let the dashboard change a scheduled message, so it schedules a new one. You'll then delete the old one in Slack.</div>`;
+        acts = `<button class="btn pri sm" data-act="resched" data-b="${esc(b.id)}" ${busy ? "disabled" : ""}>${busy ? "Saving…" : "Reschedule"}</button>`
+          + ` <button class="btn sm" data-act="sendnow" data-b="${esc(b.id)}" ${busy ? "disabled" : ""}>Send now instead</button>`
+          + ` <button class="btn ghost sm" data-act="editno" data-b="${esc(b.id)}">Cancel</button>`;
+      } else acts = `<button class="btn sm" data-act="edit" data-b="${esc(b.id)}">Change time</button>`;
+    }
+    if (done) acts = `<button class="btn sm" data-act="archive" data-b="${esc(b.id)}">Archive</button>`;
+    const stale = (b.stale || []).length ? `<div class="warn">In Slack, delete the old scheduled message${b.stale.length > 1 ? "s" : ""} for ${esc(b.stale.map(fmtWhen).join(" and "))}: open the DM with Yuliia Koreniuk, or go to Drafts &amp; sent → Scheduled. Otherwise she gets the message twice. <button class="btn sm" data-act="staleok" data-b="${esc(b.id)}">I deleted it</button></div>` : "";
     const err = (b.partsFailed || []).length ? `<div class="err">Yuliia wasn't added to Request participants on ${esc(b.partsFailed.join(", "))}. The Slack message hasn't been sent. See the action log for Jira's reason.</div>` : "";
     return `<div class="batch">
       <div class="bh"><strong>Batch ${esc(b.n)}</strong>${chip}<span class="sub">created ${ago(b.createdAt)}</span></div>
       <ul class="bl">${b.keys.map(k => batchTicket(b, k)).join("")}</ul>
       ${err}
       ${S.ui.preview[b.id] && !b.sentAt ? `<div class="preview">${esc(slackText(b.keys))}</div><div class="sub">${S.ui.mode[b.id] === "later" ? "Scheduled" : "Sent"} as a DM to Yuliia Koreniuk on Slack.</div>` : ""}
+      ${stale}
       ${when}
       ${acts ? `<div class="acts">${acts}</div>` : ""}
     </div>`;
@@ -586,6 +623,11 @@ document.addEventListener("click", async ev => {
     case "create": await createBatch(); break;
     case "send": await sendBatch(id, false); break;
     case "sendslack": await sendBatch(id, true); break;
+    case "edit": S.ui.edit[id] = true; S.ui.when[id] = ""; S.ui.whenErr[id] = ""; render(); break;
+    case "editno": S.ui.edit[id] = false; S.ui.whenErr[id] = ""; render(); break;
+    case "resched": await reschedule(id, false); break;
+    case "sendnow": await reschedule(id, true); break;
+    case "staleok": { const bt = S.batches[id]; if (bt) { await saveBatch({ ...bt, stale: [] }); await logIt("slack", `Batch ${bt.n}: old scheduled Slack message marked as deleted`); } break; }
     case "mode": S.ui.mode[id] = b.dataset.v; S.ui.whenErr[id] = ""; render(); break;
     case "preview": S.ui.preview[id] = !S.ui.preview[id]; render(); break;
     case "del": S.ui.confirmDel = id; render(); break;
