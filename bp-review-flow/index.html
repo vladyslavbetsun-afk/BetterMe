@@ -202,7 +202,7 @@ const S = {
   settings: { automation:false, windowDays:14, noteMode:"internal" },
   excluded: {}, links: {}, sent: {}, hidden: {}, overrides: {}, expertAsks: {}, log: [],
   dbReady:false, running:{}, autoBusy:false, lastAuto:null, autoSlackBusy:false, autoSlackTried:{}, assigned:{},
-  ui: { preview:{}, find:{}, confirmClear:false, linkOpen:{} }
+  ui: { preview:{}, find:{}, confirmClear:false, linkOpen:{}, confirmReady:{} }
 };
 
 /* ---------- utils ---------- */
@@ -480,6 +480,8 @@ function analyze(issue){
     T.bd = bizDays(lastC.at);
   }
   T.autoSlack = (S.overrides[T.key] || {}).autoSlack !== false;
+  // once the writer has posted the document, any active ticket can be sent straight to Ready
+  T.canReady = !!linkC && ACTIVE.includes(status);
   return T;
 }
 
@@ -664,6 +666,40 @@ async function askNote(T, target, isExpert){
   try { await write(JIRA, "addCommentToJiraIssue", noteInput(T.key, target, msg)); await logIt("jira", `${T.key}: posted "@${target.name} ${msg}"`, { key:T.key, writerId: !isExpert && T.writer ? T.writer.id : undefined }); return true; }
   catch (e) { await logIt("fail", `${T.key}: note to ${target.name} failed. ${errText(e, JIRA)}`, { key:T.key }); return false; }
 }
+const FLOW = ["Text","Review","Proofreading","Ready"];
+// Walk the ticket through the workflow in order (Text → Review → Proofreading → Ready), one move at a time.
+async function straightToReady(key){
+  const old = findT(key); if (!old) return;
+  S.running["ready:"+key] = true; render();
+  const path = [];
+  try {
+    const fresh = await freshTicket(key);
+    if (!fresh.canReady) { await logIt("fail", `${key}: not sent to Ready: it's now ${fresh.status}${fresh.linkC ? "" : " and has no document from the writer"}. Review it again.`, { key }); }
+    else {
+      let status = fresh.status;
+      for (let hop = 0; hop < 4 && status !== "Ready"; hop++) {
+        const p = await read(JIRA, "getTransitionsForJiraIssue", { cloudId:CLOUD, issueIdOrKey:key });
+        const trs = (p && p.transitions) || [];
+        const want = FLOW.slice(FLOW.indexOf(status) + 1);
+        const tr = want.map(n => trs.find(t => t.to && t.to.name === n)).find(Boolean);
+        if (!tr) throw { code:"tool_error", server:JIRA, message:`Jira offers no move from ${status} toward Ready (available: ${trs.map(t => t.to && t.to.name).join(", ") || "none"})` };
+        await write(JIRA, "transitionJiraIssue", { cloudId:CLOUD, issueIdOrKey:key, transition:{ id:String(tr.id) } });
+        path.push(tr.to.name); status = tr.to.name;
+      }
+      await logIt("manual", `${key}: sent straight to Ready (${[fresh.status, ...path].join(" → ")})`, { key });
+    }
+  } catch (e) {
+    await logIt("fail", `${key}: Straight to Ready stopped${path.length ? " at " + last(path) : ""}. ${errText(e, JIRA)}`, { key });
+  }
+  delete S.running["ready:"+key]; delete S.ui.confirmReady[key];
+  await reloadKeys([key]);
+}
+function readyBtn(t, small){
+  if (!t.canReady) return "";
+  const busy = !!S.running["ready:"+t.key] || !!S.running[t.key]; const sm = small ? " sm" : "";
+  if (S.ui.confirmReady[t.key]) return `<span class="confirm">Send ${esc(t.key)} to Ready? <button class="btn${sm} pri" ${busy?"disabled":""} data-act="readyyes" data-k="${esc(t.key)}">Yes, to Ready</button><button class="btn${sm} ghost" data-act="readyno" data-k="${esc(t.key)}">Cancel</button></span>`;
+  return `<button class="btn${sm}" ${busy?"disabled":""} data-act="ready" data-k="${esc(t.key)}">${busy && S.running["ready:"+t.key] ? "Moving to Ready…" : "Straight to Ready"}</button>`;
+}
 const STATUS_MSG = "Hi. What's the status on this one?";
 function statusSlackText(writer, tickets){
   const name = firstName((S.links[writer.id] || {}).slackName || writer.name);
@@ -782,7 +818,7 @@ function renderMove(D){
       <div class="acts">
         ${t.actions.map(a => `<button class="btn" ${busy||a.disabled?"disabled":""} data-act="step" data-k="${esc(t.key)}" data-s="${a.kind}">${esc(a.label)}</button>`).join("")}
         ${t.actions.length > 1 ? `<button class="btn pri" ${busy||t.actions.some(a=>a.disabled)?"disabled":""} data-act="all" data-k="${esc(t.key)}">Do all steps</button>` : ""}
-        ${catSel}${excludeBtn(t.key)}${busy ? `<span class="sub">Working…</span>` : ""}
+        ${catSel}${readyBtn(t)}${excludeBtn(t.key)}${busy ? `<span class="sub">Working…</span>` : ""}
       </div></div>`;
   }).join("");
 }
@@ -802,7 +838,7 @@ function renderNoReply(D){
     return `<div class="card"><div class="row">${keyLink(t)}<span class="title">${esc(t.title)}</span>${stChip(t.status)}<span class="chip flag">${bdLabel(Math.floor(t.bd))} no reply</span></div>
       <div class="quote"><span class="who">You · ${ago(t.myLast.at)} ago</span>${esc(t.myLast.text.slice(0,200))}</div>
       <div class="acts"><button class="btn" ${!tg||busy?"disabled":""} data-act="ask" data-k="${esc(t.key)}">${label}</button>
-      ${autoSlackBox(t)}${sent && sent.at ? `<span class="sub">Slacked ${ago(sent.at)} ago</span>` : ""}${excludeBtn(t.key)}${busy?`<span class="sub">Working…</span>`:""}</div></div>`;
+      ${autoSlackBox(t)}${readyBtn(t)}${sent && sent.at ? `<span class="sub">Slacked ${ago(sent.at)} ago</span>` : ""}${excludeBtn(t.key)}${busy?`<span class="sub">Working…</span>`:""}</div></div>`;
   }).join("");
 }
 function followRow(a){
@@ -810,7 +846,7 @@ function followRow(a){
     : a.returned ? `<span class="chip flag">no reply 3 business days after Slack</span>`
     : a.bd >= 3 ? `<span class="chip flag">flagged · ${bdLabel(Math.floor(a.bd))}</span>`
     : `<span class="chip soon">flags in ${bdLabel(Math.max(1, Math.ceil(3 - a.bd)))}</span>`;
-  return `<li>${keyLink(a.t)}<span class="t">${esc(shortTitle(a.t.title))}</span><span class="chip">${ORD(a.t.msgNo)} note · ${ago(a.t.myLast.at)} ago</span>${chip}${autoSlackBox(a.t)}${excludeBtn(a.t.key, true)}</li>`;
+  return `<li>${keyLink(a.t)}<span class="t">${esc(shortTitle(a.t.title))}</span><span class="chip">${ORD(a.t.msgNo)} note · ${ago(a.t.myLast.at)} ago</span>${chip}${autoSlackBox(a.t)}${readyBtn(a.t, true)}${excludeBtn(a.t.key, true)}</li>`;
 }
 function renderFollow(D){
   $("c-follow").textContent = D.follow.length || "";
@@ -874,7 +910,7 @@ function renderWait(D){
   $("c-wait").textContent = D.wait.length || "";
   if (S.jira.loading && !S.jira.at) return `<div class="loading">Loading Jira…</div>`;
   if (!D.wait.length) return `<div class="empty">No tickets are waiting on writers, experts or the proofreader.</div>`;
-  return `<div class="scroll"><table class="tbl"><tbody>${D.wait.map(t => `<tr><td>${keyLink(t)}</td><td>${esc(shortTitle(t.title))}<div class="sub">${esc(t.stage)} · waiting on ${esc(t.waitingOn || "—")}</div></td><td>${stChip(t.status)}</td><td class="num">${ago(t.since)}</td><td>${excludeBtn(t.key, true)}</td></tr>`).join("")}</tbody></table></div>`;
+  return `<div class="scroll"><table class="tbl"><tbody>${D.wait.map(t => `<tr><td>${keyLink(t)}</td><td>${esc(shortTitle(t.title))}<div class="sub">${esc(t.stage)} · waiting on ${esc(t.waitingOn || "—")}</div></td><td>${stChip(t.status)}</td><td class="num">${ago(t.since)}</td><td style="white-space:nowrap">${readyBtn(t, true)} ${excludeBtn(t.key, true)}</td></tr>`).join("")}</tbody></table></div>`;
 }
 function renderFeed(){
   const items = S.slack.items.filter(i => !IGNORED_NAMES.some(n => i.head.startsWith(n)) && !(i.key && S.excluded[i.key]));
@@ -1002,6 +1038,9 @@ document.addEventListener("click", async ev => {
       if (posted.some(t => t.autoSlack && t.msgNo + 1 <= 3)) { const list = attentionFor(wid, D); posted.forEach(t => { if (!list.some(x => x.key === t.key)) list.push(t); }); await sendSlack(w, list); }
       delete S.running["bulk:"+wid]; await reloadKeys(items.map(a => a.t.key)); break;
     }
+    case "ready": S.ui.confirmReady[key] = true; render(); break;
+    case "readyno": delete S.ui.confirmReady[key]; render(); break;
+    case "readyyes": await straightToReady(key); break;
     case "late": {
       const t = findT(key); if (!t || !t.writer) break;
       S.running["late:"+key] = true; render(); await askStatus(t.writer, [t]); delete S.running["late:"+key]; await reloadKeys([key]); break;
