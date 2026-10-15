@@ -90,6 +90,8 @@ section.panel.tray{border-color:var(--accent)}
 .links .lbl{color:var(--muted)}
 .chip{font-size:11.5px;padding:1px 7px;border-radius:999px;background:var(--sunk);color:var(--muted);white-space:nowrap;letter-spacing:.01em}
 .chip.ok{background:var(--ok-soft);color:var(--ok);font-weight:600}
+.chip.pub{text-decoration:none;cursor:pointer;border:1px solid transparent}
+.chip.pub:hover{border-color:var(--ok);text-decoration:underline}
 .chip.warn{background:var(--warn-soft);color:var(--warn)}
 .chip.bad{background:var(--bad-soft);color:var(--bad)}
 .chip.vi{background:var(--violet-soft);color:var(--violet)}
@@ -488,7 +490,9 @@ function batchTicket(b, k){
   const t = S.tickets[k];
   if (!t) return `<li><a class="key" href="${SITE}/browse/${esc(k)}" target="_blank" rel="noopener">${esc(k)}</a><span class="t sub">Loading…</span></li>`;
   let state;
-  if (t.status === "Published") state = `<span class="chip ok">Published</span>`;
+  if (t.status === "Published") state = t.live
+    ? `<a class="chip ok pub" href="${esc(t.live.url)}" target="_blank" rel="noopener" title="Open the live article: ${esc(t.live.url)}">Published ↗</a>`
+    : `<span class="chip ok" title="No live article link found in the ticket's comments">Published</span>`;
   else if (t.live) state = `${liveLink(t)} <button class="btn go sm" data-act="publish" data-k="${esc(k)}" ${S.running[k] ? "disabled" : ""}>${S.running[k] ? "Moving…" : "Move to Published"}</button>`;
   else if (b.sentAt) state = `<span class="chip">Waiting for live link</span>`;
   else state = (t.yuliia ? `<span class="chip vi">Participant</span>` : "") + (t.doc ? ` <a href="${esc(t.doc.url)}" target="_blank" rel="noopener">Doc</a>` : "");
