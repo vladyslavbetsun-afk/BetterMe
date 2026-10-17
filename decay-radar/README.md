@@ -5,6 +5,8 @@ Every week, find `/articles/` pages that lost top-3 Google positions (US), confi
 - Spec: [`docs/specs/06-content-decay-radar.md`](docs/specs/06-content-decay-radar.md)
 - Decisions, departures from the spec, and open questions: [`docs/decisions.md`](docs/decisions.md). Read D-02 and D-03 first: the live Ahrefs schema differs from the spec in three places.
 
+There is also a claude.ai artifact version that runs the same rules through your Ahrefs, Atlassian and Notion connectors: [`artifact/`](artifact/README.md), live at https://claude.ai/artifact/DyW4ZB7fwZFzVzoUuWyryS.
+
 This is **Option A** (local CLI and SQLite). Option B (the BP Ops `/decay` module with Postgres) reuses the same package; only `config.py` and `storage.py` change.
 
 ## Setup

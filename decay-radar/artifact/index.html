@@ -1,0 +1,1159 @@
+<title>Decay Radar</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: a weekly triage board. Sticky run bar, a level strip that doubles as the filter, then the page queue with inline drawers; follow-ups and tools sit below. */
+:root{
+  --bg:#f3f6f5; --surface:#ffffff; --sunk:#e8eeec; --line:#d2dbd8; --fg:#13221f; --muted:#566763;
+  --accent:#0e6857; --accent-fg:#ffffff; --accent-soft:#d9eee8;
+  --l0:#66777a; --l1:#1d8048; --l2:#a96d12; --l3:#bf3a2f; --noseo:#6a4bb8;
+  --l0-soft:#e6ebec; --l1-soft:#dcf0e3; --l2-soft:#f7ead2; --l3-soft:#f8dfdc; --noseo-soft:#e9e2f7;
+  --warn:#9a5b00; --warn-soft:#fbecd2; --bad:#b3261e; --bad-soft:#f8dedb;
+  --f-display:"Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --f-body:"IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --r:8px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0e1514; --surface:#162120; --sunk:#111a19; --line:#283735; --fg:#e1ebe8; --muted:#93a7a2;
+  --accent:#4cc2aa; --accent-fg:#06201b; --accent-soft:#163a33;
+  --l0:#9aabad; --l1:#5cc98a; --l2:#e2a84d; --l3:#f07d72; --noseo:#ad97ef;
+  --l0-soft:#223032; --l1-soft:#16352a; --l2-soft:#3a2c14; --l3-soft:#3d1d1a; --noseo-soft:#2b2343;
+  --warn:#e5a54a; --warn-soft:#3a2a12; --bad:#ef7d74; --bad-soft:#3d1c1a; color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --bg:#0e1514; --surface:#162120; --sunk:#111a19; --line:#283735; --fg:#e1ebe8; --muted:#93a7a2;
+  --accent:#4cc2aa; --accent-fg:#06201b; --accent-soft:#163a33;
+  --l0:#9aabad; --l1:#5cc98a; --l2:#e2a84d; --l3:#f07d72; --noseo:#ad97ef;
+  --l0-soft:#223032; --l1-soft:#16352a; --l2-soft:#3a2c14; --l3-soft:#3d1d1a; --noseo-soft:#2b2343;
+  --warn:#e5a54a; --warn-soft:#3a2a12; --bad:#ef7d74; --bad-soft:#3d1c1a; color-scheme:dark;}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:14px/1.5 var(--f-body);margin:0}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--surface)}
+.wrap{max-width:1280px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+a{color:var(--accent)}
+.mono{font-family:var(--f-mono);font-size:12.5px}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0}
+
+/* run bar */
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--surface);border-bottom:1px solid var(--line)}
+.bar .wrap{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;padding-block:12px}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.brand h1{font-size:20px;letter-spacing:-.01em}
+.sweep{width:26px;height:26px;flex:none}
+.window{color:var(--muted);font-size:13px;min-width:0}
+.bar .actions{margin-left:auto;display:flex;flex-wrap:wrap;gap:8px}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:var(--r);padding:7px 12px;cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--sunk)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg);font-weight:600}
+.btn.primary:hover{filter:brightness(1.07)}
+.btn.danger{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 40%,var(--line))}
+.btn:disabled{opacity:.55;cursor:not-allowed}
+.btn.small{padding:4px 9px;font-size:13px}
+
+/* summary strip */
+.summary{padding-block:18px 8px;display:grid;gap:12px}
+.meta{display:flex;flex-wrap:wrap;gap:6px 18px;color:var(--muted);font-size:13px}
+.meta b{color:var(--fg);font-weight:600}
+.levels{display:flex;flex-wrap:wrap;gap:8px}
+.lv{display:flex;align-items:baseline;gap:8px;border:1px solid var(--line);background:var(--surface);border-radius:var(--r);padding:8px 12px;cursor:pointer;min-width:118px;text-align:left}
+.lv .n{font-family:var(--f-display);font-size:22px;font-weight:700;color:var(--c)}
+.lv .t{font-size:12.5px;color:var(--muted);line-height:1.2}
+.lv .t b{display:block;color:var(--fg);font-weight:600;font-size:13px}
+.lv[aria-pressed="true"]{border-color:var(--c);box-shadow:inset 0 0 0 1px var(--c);background:var(--soft)}
+.c-L0{--c:var(--l0);--soft:var(--l0-soft)}.c-L1{--c:var(--l1);--soft:var(--l1-soft)}.c-L2{--c:var(--l2);--soft:var(--l2-soft)}
+.c-L3{--c:var(--l3);--soft:var(--l3-soft)}.c-NOSEO{--c:var(--noseo);--soft:var(--noseo-soft)}
+.slackline{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;font-size:13px}
+.slackline .txt{color:var(--muted);flex:1 1 320px;min-width:0}
+
+/* notices */
+.notice{border-radius:var(--r);padding:10px 12px;margin-block:8px;background:var(--warn-soft);color:var(--fg);border:1px solid color-mix(in srgb,var(--warn) 35%,transparent)}
+.notice.bad{background:var(--bad-soft);border-color:color-mix(in srgb,var(--bad) 35%,transparent)}
+.notice b{color:var(--warn)}.notice.bad b{color:var(--bad)}
+.progress{border:1px solid var(--line);background:var(--surface);border-radius:var(--r);padding:12px 14px;margin-block:8px}
+.progress ol{margin:6px 0 0;padding-left:20px}
+.progress li{margin:2px 0}
+.progress li.done{color:var(--muted)}
+.progress li.now::marker{color:var(--accent)}
+.progress summary{cursor:pointer}
+
+/* queue */
+.toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding-block:10px}
+.toolbar input[type=search],.toolbar select{border:1px solid var(--line);background:var(--surface);border-radius:var(--r);padding:6px 10px}
+.toolbar input[type=search]{flex:1 1 200px;min-width:0}
+.toolbar .sel{margin-left:auto;display:flex;gap:8px;align-items:center}
+.tablewrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
+table{border-collapse:collapse;width:100%}
+th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+thead th{font-size:12px;font-weight:600;color:var(--muted);white-space:nowrap;background:var(--sunk)}
+tr.row{cursor:pointer}
+tr.row:hover td{background:color-mix(in srgb,var(--accent) 5%,transparent)}
+tr.row td.r{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+td.page a{font-weight:500;text-decoration:none}
+td.page .kw{display:block;color:var(--muted);font-size:12.5px}
+.pill{display:inline-block;border-radius:6px;padding:1px 7px;font-weight:600;font-size:12px;color:var(--c);background:var(--soft);border:1px solid color-mix(in srgb,var(--c) 35%,transparent);white-space:nowrap}
+.pos{font-family:var(--f-mono);font-size:12.5px;white-space:nowrap}
+.pos .lost{color:var(--l3)}
+.flag{display:inline-block;border:1px solid var(--line);border-radius:5px;padding:0 6px;margin:0 4px 3px 0;font-size:11.5px;color:var(--muted);white-space:nowrap}
+.flag.hot{color:var(--l3);border-color:color-mix(in srgb,var(--l3) 40%,var(--line))}
+.state{font-size:12.5px;white-space:nowrap}
+.state.proposed{color:var(--accent);font-weight:600}
+tr.drawer td{background:var(--sunk);padding:16px}
+.dgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:18px}
+.dgrid > section{min-width:0}
+.dgrid h3{font-size:13px;margin:0 0 6px;letter-spacing:.02em}
+.dgrid p{margin:0 0 10px}
+.todo{list-style:none;padding:0;margin:0 0 10px}
+.todo li{padding-left:22px;position:relative;margin:3px 0}
+.todo li::before{content:"";position:absolute;left:2px;top:5px;width:11px;height:11px;border:1.5px solid var(--muted);border-radius:3px}
+.todo li.scope{color:var(--muted);font-style:italic}
+.todo li.scope::before{display:none}
+.facts{margin:0 0 10px;padding-left:18px}
+.facts li{margin:2px 0}
+.inner{font-size:12.5px;border:1px solid var(--line);border-radius:6px;overflow-x:auto;margin-bottom:10px;background:var(--surface)}
+.inner th,.inner td{padding:5px 8px}
+.inner th{background:var(--sunk)}
+.spark{display:block;width:100%;max-width:280px;height:64px}
+.actrow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:6px}
+.actrow input,.actrow select{border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:5px 8px;min-width:0}
+.actrow input{flex:1 1 160px}
+.empty{padding:36px 20px;text-align:center;color:var(--muted)}
+.empty h2{color:var(--fg);font-size:18px;margin-bottom:6px}
+.empty p{max-width:62ch;margin:6px auto}
+
+/* lower panels */
+.panels{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;padding-block:22px 40px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;min-width:0}
+.panel h2{font-size:15px;margin-bottom:8px}
+.panel p{margin:0 0 8px;color:var(--muted);font-size:13px}
+.panel ul{margin:0;padding-left:18px}
+.panel li{margin:3px 0;font-size:13px}
+footer{color:var(--muted);font-size:12px;padding-block:0 32px}
+
+/* dialogs */
+dialog{border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--fg);padding:0;width:min(760px,calc(100vw - 32px));max-height:calc(100vh - 48px)}
+dialog::backdrop{background:rgba(8,16,14,.45)}
+.dlg{display:flex;flex-direction:column;max-height:calc(100vh - 50px)}
+.dlg header{padding:14px 18px;border-bottom:1px solid var(--line)}
+.dlg header h2{font-size:17px}
+.dlg .body{padding:14px 18px;overflow:auto}
+.dlg footer{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;padding:12px 18px;border-top:1px solid var(--line);font-size:14px;color:var(--fg)}
+.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px 14px}
+.form label{display:grid;gap:3px;font-size:12.5px;color:var(--muted)}
+.form input,.form select,textarea{border:1px solid var(--line);background:var(--bg);border-radius:6px;padding:6px 8px;color:var(--fg);width:100%}
+textarea{min-height:160px;font-family:var(--f-mono);font-size:12.5px}
+.cardprev{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:10px;background:var(--bg)}
+.cardprev h3{font-size:14px;margin-bottom:4px}
+.cardprev pre{white-space:pre-wrap;word-break:break-word;font-family:var(--f-mono);font-size:12px;margin:6px 0 0;color:var(--muted);max-height:220px;overflow:auto}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;font-size:12.5px}
+.kv dt{color:var(--muted)}.kv dd{margin:0;word-break:break-word}
+.result{font-size:13px;margin:3px 0}
+.result.ok b{color:var(--l1)}.result.bad b{color:var(--bad)}
+.matrix td,.matrix th{text-align:center;padding:4px 8px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:9px 14px;border-radius:8px;font-size:13px;z-index:20;max-width:calc(100vw - 32px)}
+@media (max-width:640px){.bar .actions{margin-left:0}.lv{min-width:0;flex:1 1 30%}}
+@media (prefers-reduced-motion:no-preference){.sweep .arm{transform-origin:13px 13px;animation:spin 3.2s linear infinite}.sweep.idle .arm{animation-play-state:paused}}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+
+<div class="bar"><div class="wrap">
+  <div class="brand">
+    <svg class="sweep idle" id="sweep" viewBox="0 0 26 26" aria-hidden="true">
+      <circle cx="13" cy="13" r="11.5" fill="none" stroke="var(--line)" stroke-width="1.5"/>
+      <circle cx="13" cy="13" r="6.5" fill="none" stroke="var(--line)" stroke-width="1.2"/>
+      <g class="arm"><path d="M13 13 L13 1.5 A11.5 11.5 0 0 1 22.5 6.5 Z" fill="var(--accent)" opacity=".28"/><line x1="13" y1="13" x2="13" y2="1.5" stroke="var(--accent)" stroke-width="1.6"/></g>
+      <circle cx="18.5" cy="17" r="1.7" fill="var(--l3)"/>
+    </svg>
+    <h1>Decay Radar</h1>
+  </div>
+  <div class="window" id="window">betterme.world/articles/ · US · lost top-3</div>
+  <div class="actions">
+    <button class="btn" id="btnFollow" type="button">Check follow-ups</button>
+    <button class="btn" id="btnSettings" type="button">Settings</button>
+    <button class="btn primary" id="btnRun" type="button">Run radar</button>
+  </div>
+</div></div>
+
+<main class="wrap">
+  <section class="summary" aria-label="This week">
+    <div class="meta" id="meta"><span>No run yet</span></div>
+    <div class="levels" id="levels" role="group" aria-label="Filter by level"></div>
+    <div class="slackline"><b id="proposed">Proposed this week: 0 / 15</b><span class="txt" id="slack"></span><button class="btn small" id="btnCopy" type="button">Copy summary</button><button class="btn small" id="btnCsv" type="button">Copy CSV</button></div>
+  </section>
+  <div id="alerts"></div>
+  <div id="progress" class="progress" hidden></div>
+  <div class="toolbar">
+    <input type="search" id="q" placeholder="Filter by keyword or slug" aria-label="Filter by keyword or slug">
+    <select id="stateFilter" aria-label="Filter by state">
+      <option value="active">This run</option><option value="proposed">Proposed</option><option value="watch">Watch</option>
+      <option value="carded">Carded / updated</option><option value="excluded">Excluded</option><option value="all">Everything on the board</option>
+    </select>
+    <div class="sel"><span class="muted" id="selCount">0 selected</span><button class="btn primary small" id="btnCards" type="button" disabled>Create Notion cards</button></div>
+  </div>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th style="width:28px"><span class="muted" title="Select for cards">✓</span></th><th>Page</th><th>Level</th><th>Was → now</th><th class="r">Lost top-3</th><th class="r">Traffic lost</th><th class="r">Priority</th><th>Updated on</th><th>Flags</th><th>State</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+  <div class="panels">
+    <section class="panel"><h2>Follow-ups</h2><p>Pages updated after a card: checked at +14 and +28 days.</p><ul id="followList"><li class="muted">Nothing scheduled yet.</li></ul></section>
+    <section class="panel"><h2>Cards this week</h2><p>Created from this page, deduped per page and ISO week.</p><ul id="cardList"><li class="muted">No cards yet.</li></ul></section>
+    <section class="panel"><h2>Tools</h2><p>One-time imports and the §7 calibration against the old Slipped Pages export.</p>
+      <div class="actrow"><button class="btn small" id="btnImport" type="button">Import "Already suggested"</button><button class="btn small" id="btnCalib" type="button">Calibrate</button></div>
+      <p style="margin-top:10px" id="suggCount"></p>
+    </section>
+  </div>
+  <footer>Decay Radar (spec 06). Rankings from Ahrefs organic keywords (US); page audits from the Ahrefs Site Audit crawl of betterme.world; Jira and Notion checks are read-only until you confirm cards. Source: decay-radar/ in the BetterMe repo.</footer>
+</main>
+
+<dialog id="dlgSettings"><form class="dlg" method="dialog" id="fSettings">
+  <header><h2>Settings</h2></header>
+  <div class="body"><div class="form" id="settingsForm"></div>
+    <p class="muted" style="font-size:12.5px;margin-top:12px">The unit guard counts detection rows, AI Overview rows, Site Audit page reads and Site Audit lookups. Settings are shared with everyone who opens this page.</p></div>
+  <footer><button class="btn" value="cancel" type="submit">Cancel</button><button class="btn" id="btnResetSettings" type="button">Reset to defaults</button><button class="btn primary" id="btnSaveSettings" type="button">Save settings</button></footer>
+</form></dialog>
+
+<dialog id="dlgCards"><div class="dlg">
+  <header><h2 id="cardsTitle">Create Notion cards</h2></header>
+  <div class="body" id="cardsBody"></div>
+  <footer id="cardsFoot"></footer>
+</div></dialog>
+
+<dialog id="dlgImport"><div class="dlg">
+  <header><h2>Import "Already suggested"</h2></header>
+  <div class="body"><p class="muted">Paste the "Article Update Pipeline — Already Suggested (tracking)" doc. Every betterme.world/articles/ URL is recorded; a heading line with a YYYY-MM-DD date sets the date for the lines under it. These pages are not proposed again for 180 days.</p>
+    <textarea id="importText" aria-label="Tracking doc text"></textarea></div>
+  <footer><button class="btn" type="button" data-close="dlgImport">Cancel</button><button class="btn primary" id="btnDoImport" type="button">Import URLs</button></footer>
+</div></dialog>
+
+<dialog id="dlgCalib"><div class="dlg">
+  <header><h2>Calibrate against the old tracker</h2></header>
+  <div class="body"><p class="muted">Run the radar with Settings → fixed dates 2026-10-08 and 2026-08-12 first. Then choose <span class="mono">slipped__pages.json</span> from the old tracker export. Targets: 90% URL overlap and 80% level agreement. Tune thresholds, never rules.</p>
+    <input type="file" id="calibFile" accept=".json,application/json" aria-label="Old tracker export">
+    <div id="calibOut" style="margin-top:12px"></div></div>
+  <footer><button class="btn" type="button" data-close="dlgCalib">Close</button></footer>
+</div></dialog>
+
+<div class="toast" id="toast" hidden></div>
+
+<script>
+"use strict";
+/* ---------- constants ---------- */
+const AHREFS = "Ahrefs", JIRA = "Atlassian", NOTION = "Notion";
+const CLOUD = "657e24cd-f643-4482-aba5-7e848607df28";
+const DS = "1e997cc2-2a80-8086-a8ea-000bcc1073a4", DS_URL = "collection://" + DS;
+const SITE_AUDIT_PROJECT = 3897375;
+const LEVELS = ["L0","L1","L2","L3","NOSEO"];
+const LEVEL_NAMES = { L0:"Hold", L1:"Targeted fix", L2:"Standard refresh", L3:"Full rewrite", NOSEO:"No SEO work" };
+// Stand-ins until 00-shared-reference §6.6 is pasted in (docs/decisions.md D-05).
+const LEVEL_SCOPE = {
+  L0:"No edit this week. Recheck on the date in the reason.",
+  L1:"Targeted fix: answer-first edits to the existing text. No restructure, no new sections beyond Key Takeaways and FAQs.",
+  L2:"Standard refresh: update facts and sources, close structure gaps, align title/H1 with the main keyword. Same URL.",
+  L3:"Full rewrite: writer + expert + Legal, rebuilt to the model shape on the same URL.",
+  NOSEO:"No SEO work. Touch only for a Legal compliance fix."
+};
+const DEFAULTS = {
+  country:"us", target:"betterme.world/articles/", compare_days:28, fixed_date:"", fixed_compare:"",
+  max_rows:300, units_per_row:55, aio_max_rows:100, aio_units_per_row:18, audit_max_pages:60, audit_units_per_page:50,
+  max_units:25000, api_volume_floor:20, min_volume:50, min_volume_core:20, min_traffic_lost:5, wobble_min_traffic_lost:20,
+  confirm_runs:2, severe_traffic_lost:200, hold_recent_days:42, recent_ticket_days:60, cannibalization_max_rank:3,
+  l3_main_now:10, l3_lost_top3:4, l2_age_days:365, l2_lost_top3:2, l2_worst_now:7, l1_worst_now:6, l1_min_faq:4,
+  target_faq:6, direct_min:40, direct_max:60, weekly_card_cap:15, resuggest_after_days:180,
+  card_name_format:"{kw}, update", choose_primary_top:0, recovered_position:3, recovered_traffic_pct:70
+};
+const SETTING_FIELDS = [
+  ["country","Country (ISO code)","text"],["compare_days","Comparison window (days)","number"],
+  ["fixed_date","Fixed report date (blank = yesterday)","date"],["fixed_compare","Fixed comparison date","date"],
+  ["max_rows","Detection rows (cap)","number"],["audit_max_pages","Pages audited per run","number"],["max_units","Unit guard (max units per run)","number"],
+  ["units_per_row","Units per detection row","number"],["min_volume","Volume floor","number"],["min_volume_core","Volume floor, core topics","number"],
+  ["min_traffic_lost","Min. traffic lost per keyword","number"],["severe_traffic_lost","Severe page traffic loss","number"],
+  ["hold_recent_days","Hold after update (days)","number"],["weekly_card_cap","Weekly card cap","number"],
+  ["cannibalization_max_rank","Cannibalization: swapped URL rank ≤","number"],["l2_age_days","Stale after (days)","number"],
+  ["card_name_format","Card name format","text"],["choose_primary_top","Mark top N as (Week)","number"]
+];
+const CORE_TOPICS = { "Wall Pilates":["wall pilates","wall-pilates"], "Chair Yoga":["chair yoga","chair-yoga"], "Calisthenics":["calisthenics"],
+  "Meal Plans":["meal plan","meal-plan"], "Fasting":["fasting","intermittent fasting","intermittent-fasting"] };
+const NUMERIC_TERMS = ["calories","calorie","steps","minutes","reps","sets","grams","macros","kcal"];
+const BANNED = /\b(best|personali[sz]ed)\b/i;
+
+/* ---------- rejection screen (port of betterme-keyword-rejection-screen, Pass A; docs/decisions.md D-06) ---------- */
+const CATEGORIES = {1:"No matching product/flow/equipment",2:"Low search volume",3:"Medical/psychological/clinical topic",4:"Too broad/vague/off-topic",
+  5:"Too advanced/extreme/elite",6:"Extreme/radical diet",7:"Duplicate",8:"Therapy/rehab/healing modality not offered",9:"Legal sign-off required",
+  10:"High SERP competition",11:"Deprioritized/seasonal/not current focus",12:"Unproven superlative claim",13:"'Food item + weight loss' formula minimized",
+  14:"Zero-click/pure-information query",15:"Equipment-tied topic",16:"Bulking/muscle-gain mismatch",17:"Dangerous practice/safety risk",
+  18:"False/unprovable claim risk (FTC/spot-reduction)",19:"Competing/third-party brand terms",20:"Alcohol/period-specific fasting",
+  21:"Single-meal-skipping framed as a practice",22:"Clinical/rehab-adjacent terminology"};
+const PASS_A = [
+  [1,"CAUTION",/\btai ?chi\b/i,"Tai Chi in-app support is an open team decision"],
+  [1,"CAUTION",/\breformer\b(?!.*\bmini\b)/i,"reformer equipment not offered (Mini Reformer is fine)"],
+  [3,"REJECT",/\bchildhood trauma\b/i,"childhood trauma"],[3,"REJECT",/\bautophagy\b/i,"autophagy fasting"],[3,"REJECT",/\bbad knees?\b/i,"'bad knees' qualifier"],
+  [3,"CAUTION",/\bsomatic\b/i,"'somatic' topic; Somatic Exercises is also a live blog category"],
+  [3,"CAUTION",/\b(peri)?menopaus\w*|\bpcos\b|\bthyroid\b|\bhypothyroid\w*|\bhashimoto\w*/i,"hormonal/life-stage condition needs FTC-grade substantiation"],
+  [5,"CAUTION",/\bnavy seals?\b|\bmilitary\b|\bpowerlifting\b|\bprogressive overload\b/i,"advanced/elite framing"],
+  [6,"REJECT",/\bcarnivore\b|\bzero[- ]carb\b|\bprotein[- ]only\b|\bdetox\b|\bcleanse\b|\b(cucumber|tuna|egg|cabbage soup|grapefruit) diet\b/i,"extreme or fad diet"],
+  [6,"REJECT",/\b[1-7]\d{2}[- ]?(calorie|kcal)s?\b/i,"sub-800-calorie plan"],
+  [8,"REJECT",/\bgong\b|\bsound (healing|bath|therapy)\b|\bcore rehab\b/i,"therapy modality not offered"],
+  [9,"CAUTION",/\bpregnan\w*|\bprenatal\b|\btrimester\b/i,"pregnancy needs Legal sign-off"],
+  [11,"CAUTION",/\brecipes?\b|\bmeal prep\b|\bdesserts?\b|\bsmoothie\b/i,"recipe format: standing low priority"],
+  [12,"CAUTION",/\bbest\b|\bguarantee[ds]?\b|#1\b|\bnumber one\b/i,"unproven superlative"],
+  [14,"CAUTION",/\bwhich muscles?\b|\bwhat muscles?\b|\bhow many calories (does|do|in)\b|\bcalories in\b/i,"zero-click single-fact query"],
+  [15,"CAUTION",/\bkettlebell\b|\bresistance bands?\b|\browing machine\b|\belliptical\b|\bstair ?master\b|\bvibration plate\b/i,"equipment-tied; may belong to Store content"],
+  [16,"CAUTION",/\bbulk(ing)?\b|\bmass gain\b|\bgain (muscle )?mass\b|\bweight gain\b|\bgain weight\b/i,"bulking off-ICP"],
+  [17,"REJECT",/\bdry fast\w*|\brefeed\w*/i,"dangerous fasting practice"],
+  [17,"CAUTION",/\bfix (your )?(spine|back|posture)\b|\bspine fix\b/i,"'fix' promise about the spine"],
+  [18,"CAUTION",/\binner thighs?\b|\bslim(mer)?( down)? (your )?(thighs|arms|waist|legs)\b|\barm fat\b|\bbelly fat\b|\bface fat\b|\bchubby cheeks\b|\blove handles\b|\bbubble butt\b|\bv[- ]shaped\b|\bfat fingers\b|\bcardio for glutes\b|\bhip dips\b|\blose (belly|arm|thigh|face|back) fat\b/i,"spot-reduction/shape-change claim"],
+  [20,"REJECT",/\balcohol\b.*\bfast\w*|\bfast\w*.*\balcohol\b|\bperiod fasting\b|\bfasting (on|during) (your )?period\b|\bmenstrual\b.*\bfast\w*/i,"alcohol/period fasting policy"],
+  [21,"REJECT",/\bskipp?(ing)? (breakfast|lunch|dinner|meals?)\b/i,"single-meal skipping as a practice"],
+  [22,"REJECT",/\bbed mobility\b|\bgait training\b|\brom exercises\b|\brange of motion exercises\b|\bpost[- ]?op\b|\bafter surgery\b|\bpost[- ]surgery\b/i,"clinical/rehab audience"]
+];
+const CLAIM_PATTERNS = [["timeline claim",/\bin \d+ days\b/i],["weight-loss outcome",/\blose \d+ (?:lbs|pounds|kg)\b/i],
+  ["spot-reduction (burn fat)",/\bburn (?:belly|arm|thigh) fat\b/i],["spot-reduction (slim)",/\bslim (?:your )?(?:thighs|arms|waist)\b/i],["guarantee",/\bguaranteed\b/i]];
+const CLAIM_CAUTION_CATS = [3,9,17,18];
+
+/* ---------- taxonomy (blog-jira-ticket-creation) ---------- */
+const TAXONOMY = [["Calisthenics for men",/calisthenics.*\b(men|male|guys?)\b|\b(men|male)\b.*calisthenics/i],["Calisthenics for women",/calisthenics.*\b(women|female)\b|\b(women|female)\b.*calisthenics/i],
+  ["Calisthenics",/calisthenics/i],["Wall Pilates",/wall pilates/i],["Pilates Mini Reformer",/mini reformer/i],["Home Pilates",/pilates (at|from) home|home pilates/i],
+  ["Chair Yoga",/chair yoga/i],["Somatic Exercises",/somatic/i],["Meditation",/meditat/i],
+  ["Workout Plans For Men",/workout (plan|program|routine)s?.*\bmen\b|\bmen'?s? workout (plan|program)/i],["Workout Plans For Women",/workout (plan|program|routine)s?.*\bwomen\b|\bwomen'?s? workout (plan|program)/i],
+  ["HIIT Training",/\bhiit\b/i],["Strength Training",/strength training|weight ?lifting/i],["Bodyweight Training",/body ?weight/i],
+  ["Indoor Walking",/indoor walk|walk(ing)? at home|walking in place/i],["Treadmill",/treadmill/i],["Walking",/\bwalk(ing)?\b|steps a day/i],
+  ["Abs Workouts",/\babs?\b|six pack|ab workout/i],["Oblique Workouts",/oblique/i],["Arm Workouts",/\barms?\b|tricep|bicep/i],["Back Workouts",/\bback (workout|exercise)/i],
+  ["Butt Workouts",/\bbutt\b|glute/i],["Chest Workouts",/\bchest\b/i],["Core Workouts",/\bcore\b/i],["Dumbbell Workouts",/dumbbell/i],["Leg Workouts",/\blegs?\b|\bthighs?\b|\bsquats?\b/i],
+  ["Cardio Workouts",/cardio/i],["Keto Breakfast",/keto breakfast/i],["Keto Lunch",/keto lunch/i],["Keto Dinner",/keto dinner/i],["Keto Recipes",/keto recipe/i],["Keto",/\bketo/i],
+  ["Fasting",/fasting|\bomad\b|16:8|\bfast\b/i],["Gluten Free",/gluten/i],["Low Carb",/low[- ]carb/i],["Low Cholesterol",/cholesterol/i],["Mediterranean",/mediterranean/i],
+  ["Paleo",/paleo/i],["Plant Based",/plant[- ]based/i],["Vegan",/\bvegan/i],["Vegetarian",/vegetarian/i],["Meal Plans",/meal plan/i],["Recipes",/recipe/i],
+  ["Food For Weight Loss",/foods? (for|to) (lose weight|weight loss)|fat[- ]burning foods?/i],["Weight Management",/maintain(ing)? weight|weight management|weight maintenance/i],
+  ["Weight Loss Tips",/lose weight|weight loss|losing weight|fat loss|calorie deficit|caloric deficit/i],["Meal Ideas",/\bbreakfast|\blunch|\bdinner|\bsnacks?\b|meal ideas/i],
+  ["Healthy Eating",/healthy eating|nutrition|protein|vitamin|fiber|calorie/i],["Therapy",/therapy|anxiety|stress/i],["Pilates",/pilates/i],["Yoga",/\byoga\b/i],
+  ["Corporate Wellness",/corporate|workplace|employee/i]];
+
+/* ---------- state ---------- */
+const S = { mcp:null, db:null, user:null, dbReady:false, items:{}, runs:[], settings:{...DEFAULTS}, suggestions:{}, cards:{},
+  levelFilter:null, stateFilter:"active", q:"", open:new Set(), selected:new Set(), running:false, progress:null, alerts:[] };
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmt = n => (n == null || isNaN(n)) ? "—" : Math.round(n).toLocaleString("en-US");
+const pos = p => p == null ? "lost" : "#" + p;
+const posWords = p => p == null ? "lost (out of the top 100)" : "#" + p;
+function toast(msg){ const t=$("toast"); t.textContent=msg; t.hidden=false; clearTimeout(toast._t); toast._t=setTimeout(()=>t.hidden=true,4500); }
+
+/* ---------- dates ---------- */
+const MONTHS = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+function isoDay(d){ return d.toISOString().slice(0,10); }
+function todayISO(){ const d=new Date(); return isoDay(new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))); }
+function addDays(iso, n){ const d=new Date(iso+"T00:00:00Z"); d.setUTCDate(d.getUTCDate()+n); return isoDay(d); }
+function daysBetween(a, b){ return Math.round((new Date(b+"T00:00:00Z") - new Date(a+"T00:00:00Z"))/86400000); }
+function isoWeek(iso){ const d=new Date(iso+"T00:00:00Z"); const day=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-day+3);
+  const y=d.getUTCFullYear(); const first=new Date(Date.UTC(y,0,4)); const w=1+Math.round(((d-first)/86400000-3+((first.getUTCDay()+6)%7))/7); return `${y}-W${String(w).padStart(2,"0")}`; }
+const runWeek = reportDate => isoWeek(addDays(reportDate, 1)); // a Tuesday re-run shares Monday's week (D-10)
+function parseDate(s){
+  if (!s) return null; s=String(s).trim();
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/); if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  m = s.match(/^([A-Za-z]{3,9})\.?\s+(\d{1,2}),?\s+(\d{4})$/);
+  if (m && MONTHS[m[1].slice(0,3).toLowerCase()] != null) return isoDay(new Date(Date.UTC(+m[3], MONTHS[m[1].slice(0,3).toLowerCase()], +m[2])));
+  m = s.match(/^(\d{1,2})\s+([A-Za-z]{3,9})\.?\s+(\d{4})$/);
+  if (m && MONTHS[m[2].slice(0,3).toLowerCase()] != null) return isoDay(new Date(Date.UTC(+m[3], MONTHS[m[2].slice(0,3).toLowerCase()], +m[1])));
+  return null;
+}
+
+/* ---------- URLs ---------- */
+const ARTICLE_RE = /^https:\/\/(www\.)?betterme\.world\/articles\/[^/]+\/$/;
+function normalizeUrl(u, articlesOnly=true){
+  if (!u) return null; u=String(u).trim(); if (!u.includes("://")) u="https://"+u.replace(/^\/+/,"");
+  let p; try { p=new URL(u); } catch { return null; }
+  let path=p.pathname||"/"; if (!path.endsWith("/")) path+="/";
+  const out=`https://${p.hostname.toLowerCase()}${path}`;
+  if (articlesOnly) return ARTICLE_RE.test(out) ? out : null;
+  return /^(www\.)?betterme\.world$/.test(p.hostname.toLowerCase()) ? out : null;
+}
+const slugOf = url => url.replace(/\/$/,"").split("/").pop();
+function urlVariants(url){ const a=url, b=url.replace(/\/$/,""); const w=x=>x.replace("https://","https://www."), nw=x=>x.replace("https://www.","https://");
+  return [...new Set([a,b,w(a),w(b),nw(a),nw(b)])]; }
+
+/* ---------- connectors ---------- */
+function extractJson(text){
+  const i=text.indexOf("{"); if (i<0) return null; let depth=0, inStr=false, escp=false;
+  for (let j=i;j<text.length;j++){ const c=text[j];
+    if (inStr){ if (escp) escp=false; else if (c==="\\") escp=true; else if (c==='"') inStr=false; continue; }
+    if (c==='"') inStr=true; else if (c==="{") depth++; else if (c==="}"){ depth--; if (!depth){ try { return JSON.parse(text.slice(i,j+1)); } catch { return null; } } } }
+  return null;
+}
+function payloadOf(res){
+  let p = res && res.payload;
+  if (p && typeof p === "object") return p;
+  if (typeof p === "string"){ try { return JSON.parse(p); } catch { const j=extractJson(p); if (j) return j; } }
+  for (const b of (res && res.content) || []) if (b.type==="text"){ try { return JSON.parse(b.text); } catch { const j=extractJson(b.text); if (j) return j; } }
+  return p;
+}
+function unitsOf(res){
+  let n=0; for (const b of (res && res.content) || []) if (b.type==="text"){ const m=b.text.match(/"units-cost-total-actual"\s*:\s*(\d+)/); if (m) n+=+m[1]; }
+  return n;
+}
+async function call(server, tool, input, ms=110000){
+  if (!S.mcp) throw { code:"not_granted", server, message:"Connectors are not available in this view." };
+  const opt={ cache:false }; try { opt.signal=AbortSignal.timeout(ms); } catch {}
+  return S.mcp.callTool(server, tool, input, opt);
+}
+function errText(e, server){
+  const s=(e&&e.server)||server||"the connector", m=(e&&e.message)||String(e);
+  switch (e && e.code){
+    case "needs_reauth": return `Reconnect ${s} in claude.ai Settings → Connectors, then run again.`;
+    case "server_not_connected": return `Add the ${s} connector in claude.ai Settings → Connectors, then run again.`;
+    case "selection_required": return `Choose which ${s} connector this page should use when claude.ai asks, then run again.`;
+    case "not_in_manifest": case "approval_required": return `${s} isn't allowed for this page yet. Allow it from the page's Permissions menu, then run again.`;
+    case "blocked_by_policy": return `Your organization blocks this ${s} action.`;
+    case "cancelled": return `${s} took too long and the request was stopped. Run again.`;
+    case "not_granted": case "capability_disabled": case "capability_removed": return "Connectors aren't available here. Open Decay Radar in claude.ai while signed in.";
+    case "tool_error": return `${s} reported: ${m.slice(0,300)}`;
+    default: return `${s}: ${m.slice(0,300)}`;
+  }
+}
+
+/* ---------- Ahrefs ---------- */
+const DETECT_SELECT = ["keyword","keyword_prev","volume","volume_prev","best_position","best_position_prev","best_position_diff","best_position_url",
+  "best_position_url_prev","sum_traffic","sum_traffic_prev","serp_features","serp_features_prev","status","is_informational","is_commercial","is_transactional","is_navigational"];
+function detectWhere(floor){ return {and:[{field:"is_best_position_set_top_3_prev",is:["eq",true]},{field:"is_main_position_prev",is:["eq",true]},
+  {or:[{field:"best_position",is:["gt",3]},{field:"best_position",is:"is_null"}]},{field:"volume",is:["gte",floor]}]}; }
+function estimateUnits(cfg){
+  return Math.max(50, cfg.max_rows*cfg.units_per_row) + Math.max(50, cfg.aio_max_rows*cfg.aio_units_per_row)
+       + cfg.audit_max_pages*cfg.audit_units_per_page + 2*50;
+}
+async function ahrefs(tool, input, tally){
+  const res = await call(AHREFS, tool, { ...input, output:"json" });
+  tally.units += unitsOf(res);
+  return payloadOf(res) || {};
+}
+
+/* ---------- detection (§3–§4) ---------- */
+function coreTopic(...texts){
+  const hay=texts.filter(Boolean).join(" ").toLowerCase();
+  for (const [topic, needles] of Object.entries(CORE_TOPICS))
+    if (needles.some(n => new RegExp("(?<![a-z])"+n.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"(?![a-z])").test(hay))) return topic;
+  return null;
+}
+function classifyRow(cfg, row, aioLost){
+  const urlPrev=normalizeUrl(row.best_position_url_prev); if (!urlPrev) return [null,"not_article"];
+  if (row.is_navigational) return [null,"navigational"];
+  const keyword=row.keyword || row.keyword_prev || "";
+  const volume=+((row.volume!=null)?row.volume:row.volume_prev) || 0;
+  const topic=coreTopic(keyword, urlPrev); const floor=topic?cfg.min_volume_core:cfg.min_volume;
+  if (volume<floor) return [null,"low_volume"];
+  const was=row.best_position_prev; let now=row.best_position;
+  const lost = now==null || row.status==="right"; if (lost) now=null;
+  const tPrev=+row.sum_traffic_prev||0, tNow=lost?0:(+row.sum_traffic||0), tLost=tPrev-tNow;
+  if (!lost && tLost<cfg.min_traffic_lost) return [null,"low_traffic_lost"];
+  if (was===3 && now===4 && tLost<cfg.wobble_min_traffic_lost) return [null,"wobble_3_to_4"];
+  let swappedTo=null;
+  if (!lost && row.best_position_url){ const u=normalizeUrl(row.best_position_url,false); if (u && u!==urlPrev) swappedTo=u; }
+  const serp=new Set(row.serp_features||[]), serpPrev=new Set(row.serp_features_prev||[]);
+  return [{ keyword, url:urlPrev, volume, was, now, trafficPrev:tPrev, trafficNow:tNow, kind: lost?"lost":(swappedTo?"swapped":"dropped"),
+    aioAppeared: serp.has("ai_overview") && !serpPrev.has("ai_overview"), aioCitationLost: aioLost.has(keyword+"|"+urlPrev), swappedTo,
+    commercial:!!(row.is_commercial||row.is_transactional), coreTopic:topic }, ""];
+}
+function detect(cfg, rows, aioRows){
+  const aioLost=new Set((aioRows||[]).map(r => (r.keyword||r.keyword_prev||"")+"|"+normalizeUrl(r.best_position_url_prev)));
+  const signals=[], dropped={}, seen=new Set();
+  for (const r of rows){ const [s,why]=classifyRow(cfg,r,aioLost);
+    if (!s){ dropped[why]=(dropped[why]||0)+1; continue; }
+    const k=s.keyword+"|"+s.url; if (seen.has(k)) continue; seen.add(k); signals.push(s); }
+  return { signals, dropped };
+}
+function aggregate(signals){
+  const pages={};
+  for (const s of signals) (pages[s.url] ||= []).push(s);
+  return Object.entries(pages).map(([url, sigs]) => {
+    sigs.sort((a,b)=> b.volume-a.volume || b.trafficPrev-a.trafficPrev);
+    const main=sigs[0]; const swaps=sigs.filter(s=>s.swappedTo); const sw=swaps[0];
+    return { url, slug:slugOf(url),
+      lostKeywords: sigs.map(s=>({kw:s.keyword, vol:s.volume, was:s.was, now:s.now, trafficPrev:s.trafficPrev, trafficNow:s.trafficNow, kind:s.kind})),
+      lostTop3:sigs.length, lostEntirely:sigs.filter(s=>s.now==null).length,
+      trafficLost:sigs.reduce((a,s)=>a+Math.max(s.trafficPrev-s.trafficNow,0),0),
+      mainKeyword:main.keyword, mainWas:main.was, mainNow:main.now, mainCommercial:main.commercial,
+      worstNow: sigs.some(s=>s.now==null) ? null : Math.max(...sigs.map(s=>s.now)),
+      aioAppeared:sigs.some(s=>s.aioAppeared), aioCitationLost:sigs.some(s=>s.aioCitationLost),
+      swappedTo: sw ? sw.swappedTo : null, swappedRank: sw ? Math.min(...swaps.filter(s=>s.swappedTo===sw.swappedTo).map(s=>s.now)) : null,
+      swappedKeyword: sw ? sw.keyword : null,
+      intentMix: sigs.filter(s=>s.commercial).length/sigs.length, coreTopic: sigs.map(s=>s.coreTopic).find(Boolean) || null };
+  });
+}
+
+/* ---------- audit from the Site Audit crawl (§6) ---------- */
+function words(t){ return (String(t||"").match(/[A-Za-z0-9’']+/g)||[]).length; }
+function parsePageText(html, url, cfg, today){
+  const doc=new DOMParser().parseFromString(`<body>${html}</body>`, "text/html");
+  const a={ status:"ok", h1:null, updatedOn:null, ageDays:null, wordCount:0, keyTakeaways:false, faqCount:0, qH2:0, qH2Answered:0, qMissing:[],
+    tables:0, imagesMissingAlt:null, internalLinks:0, claimFlags:[] };
+  const h1=doc.querySelector("h1"); a.h1=h1?h1.textContent.trim():null;
+  const all=doc.body.textContent.replace(/\s+/g," ");
+  const m=all.match(/Updated on[:\s]+([A-Za-z]{3,9}\.?\s+\d{1,2},?\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4})/i);
+  if (m){ a.updatedOn=parseDate(m[1]); if (a.updatedOn) a.ageDays=daysBetween(a.updatedOn, today); }
+  // Main content: from the H1 to the disclaimer / sources block.
+  const els=[...doc.body.querySelectorAll("*")];
+  const start=h1?els.indexOf(h1):0;
+  const endEl=els.find((e,i)=>i>start && /^H[2-4]$/.test(e.tagName) && /^(disclaimer|sources)\b/i.test(e.textContent.trim()));
+  const end=endEl?els.indexOf(endEl):els.length;
+  const content=els.slice(start+1,end);
+  const tops=content.filter(e=>!content.includes(e.parentElement));
+  const text=tops.map(e=>e.textContent).join(" ");
+  a.wordCount=words(text);
+  const heads=content.filter(e=>/^H[2-4]$/.test(e.tagName));
+  a.keyTakeaways=heads.some(h=>/key\s+takeaways?/i.test(h.textContent));
+  const faqIdx=heads.findIndex(h=>h.tagName==="H2" && /\b(faq|faqs|frequently asked questions)\b/i.test(h.textContent));
+  if (faqIdx>=0){ for (let i=faqIdx+1;i<heads.length;i++){ if (heads[i].tagName==="H2") break; a.faqCount++; } }
+  for (const h of heads){ if (h.tagName!=="H2") continue; const q=h.textContent.trim(); if (!q.endsWith("?") || /\b(faq|frequently asked)/i.test(q)) continue;
+    a.qH2++; const hi=els.indexOf(h); let ans=null;
+    for (let i=hi+1;i<end;i++){ const e=els[i]; if (/^H[1-4]$/.test(e.tagName)) break;
+      if (e.tagName==="P" && e.textContent.trim() && !/See also$/.test(e.textContent.trim())){ ans=e; break; } }
+    const n=ans?words(ans.textContent):0;
+    if (n>=cfg.direct_min && n<=cfg.direct_max) a.qH2Answered++; else a.qMissing.push(q);
+  }
+  a.tables=content.filter(e=>e.tagName==="TABLE").length;
+  a.internalLinks=content.filter(e=>e.tagName==="A" && /betterme\.world\/articles\/[^/]+\/?$/.test(e.getAttribute("href")||"") && normalizeUrl(e.getAttribute("href"))!==url).length;
+  const imgs=content.filter(e=>e.tagName==="IMG"); if (imgs.length) a.imagesMissingAlt=imgs.filter(i=>!(i.getAttribute("alt")||"").trim()).length;
+  for (const [name, rx] of CLAIM_PATTERNS) if (rx.test(text)) a.claimFlags.push(name);
+  return a;
+}
+
+/* ---------- Jira (read-only) ---------- */
+function articleUrlsFromDescription(desc){
+  const out=new Set();
+  for (let line of String(desc||"").split(/\n/)){
+    line=line.replace(/<custom[^>]*>([\s\S]*?)<\/custom>/g,"$1").replace(/\*\*/g,"").trim();
+    if (!/^\W*(original article|article)\W*:/i.test(line)) continue;
+    for (const u of line.match(/https?:\/\/[^\s)\]>"'|]+/g)||[]){ const n=normalizeUrl(u); if (n) out.add(n); }
+  }
+  return out;
+}
+async function jiraCheck(pages, cfg, today, note){
+  const map={}; const slugs=pages.map(p=>p.slug);
+  for (let i=0;i<slugs.length;i+=4){
+    const batch=slugs.slice(i,i+4);
+    const jql=`project = BP AND (${batch.map(s=>`text ~ "${s.replace(/"/g,"")}"`).join(" OR ")}) ORDER BY created DESC`;
+    let issues=[];
+    try {
+      const res=await call(JIRA,"searchJiraIssuesUsingJql",{ cloudId:CLOUD, jql, maxResults:100,
+        fields:["summary","description","status","statuscategorychangedate","updated"], responseContentFormat:"markdown" });
+      const p=payloadOf(res)||{}; issues=(p.issues&&(p.issues.nodes||p.issues))||p.nodes||[];
+    } catch(e){ note(errText(e,JIRA)); return null; }
+    for (const iss of issues){
+      const f=iss.fields||{}; const urls=articleUrlsFromDescription(f.description);
+      const status=(f.status&&f.status.name)||""; const changed=(f.statuscategorychangedate||f.updated||"").slice(0,10);
+      for (const u of urls){ const e=(map[u] ||= {open:null, recent:null});
+        if (!/^published$/i.test(status)){ if (!e.open) e.open={key:iss.key, status, url:iss.webUrl}; }
+        else if (changed){ const days=daysBetween(changed, today); if (days<=cfg.recent_ticket_days && !e.recent) e.recent={key:iss.key, days, url:iss.webUrl}; }
+      }
+    }
+  }
+  return map;
+}
+
+/* ---------- Notion ---------- */
+async function notionCards(urls){
+  const map={};
+  for (let i=0;i<urls.length;i+=15){
+    const batch=urls.slice(i,i+15); const params=batch.flatMap(urlVariants).slice(0,100);
+    const res=await call(NOTION,"notion-query-data-sources",{ data:{ data_source_urls:[DS_URL],
+      query:`SELECT url, "Name", "Status", "URL 1", "New/Upd", "date:Date:start", createdTime FROM "${DS_URL}" WHERE "URL 1" IN (${params.map(()=>"?").join(",")}) ORDER BY createdTime DESC`, params } });
+    const p=payloadOf(res)||{};
+    for (const r of p.results||[]){ const u=normalizeUrl(r["URL 1"]); if (!u) continue; (map[u] ||= []).push(r); }
+  }
+  return map;
+}
+const openCardOf = rows => (rows||[]).find(r => !/^done$/i.test(r.Status||""));
+function notionPageId(url){ const m=String(url||"").replace(/-/g,"").match(/([0-9a-f]{32})(?:[?#]|$)/i); return m?m[1]:null; }
+
+/* ---------- screen, level, priority (§6–§8) ---------- */
+function screenText(...texts){
+  const hay=texts.filter(Boolean).join(" | "); const matches=[], seen=new Set();
+  for (const [cat, verdict, rx, note] of PASS_A) if (rx.test(hay) && !seen.has(cat+verdict)){ seen.add(cat+verdict); matches.push({cat, name:CATEGORIES[cat], verdict, note}); }
+  matches.sort((x,y)=>(y.verdict==="REJECT")-(x.verdict==="REJECT") || x.cat-y.cat);
+  return { verdict: matches.some(m=>m.verdict==="REJECT")?"REJECT":(matches.length?"CAUTION":"PASS"), matches };
+}
+function inferCategory(kw, slug){
+  for (const t of [kw, slug.replace(/-/g," ")]) for (const [leaf, rx] of TAXONOMY) if (rx.test(t||"")) return leaf;
+  return null;
+}
+function installIntent(kw, commercial){
+  const k=kw.toLowerCase().trim();
+  const HIGH=/\b(workout plan|workout program|program|plan|challenge|meal plan|for beginners|beginner|app|routine|schedule|how to start|day \d+|\d+[- ]day)\b/;
+  const LOW=/^(what is|what are|what does|does|do|is it true|can you)\b|\bdoes .+ work\b|\bhow many calories\b|\bcalories in\b|\bwhich muscles?\b|\bwhat muscles?\b|\bmeaning\b|\bdefinition\b/;
+  if (LOW.test(k) && !HIGH.test(k)) return "LOW";
+  if (HIGH.test(k) || commercial) return "HIGH";
+  return "MEDIUM";
+}
+function numericTerms(page){ const kws=" "+page.lostKeywords.map(k=>k.kw.toLowerCase()).join(" ")+" "; return NUMERIC_TERMS.filter(t=>kws.includes(" "+t)); }
+function missingStructure(cfg, a){
+  if (!a || a.status!=="ok") return [];
+  const m=[]; if (!a.keyTakeaways) m.push("Key Takeaways"); if (a.faqCount<cfg.l1_min_faq) m.push(`${cfg.l1_min_faq}+ FAQs (has ${a.faqCount})`);
+  if (a.qH2>a.qH2Answered) m.push("direct answers under question H2s"); return m;
+}
+function l1Items(cfg, p, a){
+  const kw=p.mainKeyword, items=[]; const ok=a&&a.status==="ok";
+  if (ok && !a.keyTakeaways) items.push("Add Key Takeaways after the intro");
+  if (ok && a.qMissing.length) items.push(`Add a ${cfg.direct_min}–${cfg.direct_max} word direct answer under: `+a.qMissing.map(q=>`'${q}'`).join("; "));
+  if (!ok || a.faqCount<cfg.target_faq) items.push(`Add ${ok?cfg.target_faq-a.faqCount:"up to "+cfg.target_faq} FAQs from live People Also Ask for '${kw}'`);
+  if (ok && a.imagesMissingAlt) items.push(`Add alt text to ${a.imagesMissingAlt} images`);
+  if (p.aioAppeared || p.aioCitationLost) items.push(`Open the section on '${kw}' with a self-contained answer an AI Overview can cite`);
+  items.push(`1 internal link to/from ${p.cluster || p.coreTopic || "the same topic cluster"}`);
+  items.push("Change 'Updated on' only if answers changed");
+  return items;
+}
+function checklistFor(cfg, level, p, a, flags){
+  if (level==="L1") return [LEVEL_SCOPE.L1, ...l1Items(cfg,p,a)];
+  if (level==="L2"){ const items=[LEVEL_SCOPE.L2, ...l1Items(cfg,p,a)]; const kw=p.mainKeyword.toLowerCase(); const ok=a&&a.status==="ok";
+    const title=(a&&a.title)||"", h1=(a&&a.h1)||"";
+    if (!ok || !(title.toLowerCase().includes(kw) && h1.toLowerCase().includes(kw))) items.push(`Put '${p.mainKeyword}' in title/H1/first sentence (currently: ${title||h1||"unknown"})`);
+    const nums=numericTerms(p); if (ok && a.tables===0 && nums.length) items.push(`Add a table for ${nums.join(", ")}`);
+    items.push("Refresh sources older than 2 years"); return items; }
+  if (level==="L3"){ const items=[LEVEL_SCOPE.L3,"Writer + expert + Legal"]; if (flags&&flags.length) items.push("Remove claims: "+flags.join(", "));
+    return items.concat(["Rebuild to model shape: Key Takeaways, PAA headings, 5 FAQs, tables, current sources","Same URL, never a new slug"]); }
+  if (level==="NOSEO") return [LEVEL_SCOPE.NOSEO];
+  return [LEVEL_SCOPE.L0];
+}
+function assignLevel(cfg, c){
+  const p=c.page, a=c.audit||{status:"none"}, s=c.screen, ok=a.status==="ok";
+  const recheck=addDays(c.today,28);
+  const reject=s.matches.find(m=>m.verdict==="REJECT");
+  if (reject) return { level:"NOSEO", rule:1, tag:"rejected", why:`Topic hits rejection pattern #${reject.cat} (${reject.name}). Touch only for a Legal compliance fix.`,
+    checklist:[LEVEL_SCOPE.NOSEO, `Legal compliance check against pattern #${reject.cat} (${reject.name})`] };
+  if (a.httpCode && (a.httpCode===404 || a.httpCode===410 || a.redirect)){
+    const target=a.redirect||("HTTP "+a.httpCode);
+    return { level:"NOSEO", rule:1, tag:"merged", why:`Page ${a.redirect?"redirects to "+target+" (merged)":"returns "+target} — rejection category n/a. Check the redirect. Touch only for a Legal compliance fix.`,
+      checklist:[LEVEL_SCOPE.NOSEO, `Check redirect (${target})`] };
+  }
+  if (c.openTicket || c.openCard){
+    const ref=[c.openTicket&&c.openTicket.key, c.openCard&&"Notion card"].filter(Boolean).join(" / ");
+    return { level:"L0", rule:2, tag:"in_pipeline", why:`Already in the pipeline: ${ref}. Recheck after it's published.`, checklist:[LEVEL_SCOPE.L0, `Recheck after ${ref} is published.`] };
+  }
+  if (ok && a.ageDays!=null && a.ageDays<cfg.hold_recent_days)
+    return { level:"L0", rule:3, tag:"recent", why:`Updated ${a.ageDays} days ago. Rankings need 4–6 weeks to settle. Recheck on ${recheck}.`, checklist:[LEVEL_SCOPE.L0, `Recheck on ${recheck}.`] };
+  if (c.recentTicket)
+    return { level:"L0", rule:3, tag:"recent", why:`${c.recentTicket.key} was published ${c.recentTicket.days} days ago. Rankings need 4–6 weeks to settle. Recheck on ${recheck}.`, checklist:[LEVEL_SCOPE.L0, `Recheck on ${recheck}.`] };
+  if (!c.confirmed)
+    return { level:"L0", rule:4, tag:"watch", why:"First-week drop. Waiting for a second weekly confirmation.", checklist:[LEVEL_SCOPE.L0, "Recheck after next Monday's run."] };
+  if (p.swappedTo && p.swappedRank!=null && p.swappedRank<=cfg.cannibalization_max_rank){
+    const kw=p.swappedKeyword||p.mainKeyword;
+    return { level:"L0", rule:5, tag:"cannibalization", why:`Another BetterMe page (${p.swappedTo}) now holds the top 3. Decide which page owns '${kw}' before editing.`,
+      checklist:[LEVEL_SCOPE.L0, `Human decision: which page owns '${kw}' (${p.url} or ${p.swappedTo}).`] };
+  }
+  const claimCats=s.matches.filter(m=>m.verdict==="CAUTION" && CLAIM_CAUTION_CATS.includes(m.cat));
+  const flags=[...((ok&&a.claimFlags)||[]), ...(((a.title||"")+" "+(a.h1||"")).match(/\bbest\b/i)?["'best' in title/H1"]:[]), ...claimCats.map(m=>`pattern #${m.cat} ${m.note}`)];
+  if (flags.length) return { level:"L3", rule:6, tag:"claims", why:`Contains claim risk (${flags.join(", ")}). Needs writer + expert + Legal and a rebuild to the model shape.`, checklist:checklistFor(cfg,"L3",p,a,flags) };
+  if (p.mainNow==null || p.mainNow>cfg.l3_main_now || p.lostTop3>=cfg.l3_lost_top3)
+    return { level:"L3", rule:7, tag:"collapsed", why:`Main keyword fell from #${p.mainWas} to ${posWords(p.mainNow)}. ${p.lostTop3>1?"Multiple top-3 losses suggest":"It suggests"} the page no longer matches intent.`, checklist:checklistFor(cfg,"L3",p,a,[]) };
+  const worst=p.worstNow, parts=[];
+  if (ok && a.ageDays!=null && a.ageDays>cfg.l2_age_days) parts.push(`Last updated ${Math.floor(a.ageDays/30)} months ago`);
+  const nums=numericTerms(p); if (ok && a.tables===0 && nums.length) parts.push(`no table for a numeric topic (${nums.join(", ")})`);
+  if (p.lostTop3>=cfg.l2_lost_top3 && (worst==null?101:worst)>=cfg.l2_worst_now) parts.push(`${p.lostTop3} keywords slipped to ${posWords(worst)}`);
+  if (parts.length) return { level:"L2", rule:8, tag:"stale", why:`${parts.join(" / ")}. Needs facts, sources, structure.`, checklist:checklistFor(cfg,"L2",p,a) };
+  const missing=missingStructure(cfg,a), aio=p.aioAppeared||p.aioCitationLost;
+  if ((worst!=null && worst<=cfg.l1_worst_now && missing.length) || aio){
+    let why=`Slipped to ${posWords(worst)}`+(missing.length?`, page missing ${missing.join(", ")}`:"")+".";
+    if (aio) why+=` AI Overview ${[p.aioAppeared&&"appeared", p.aioCitationLost&&"citation lost"].filter(Boolean).join(" and ")}.`;
+    return { level:"L1", rule:9, tag:"answer_first", why:why+" Quick answer-first fixes should recover it.", checklist:checklistFor(cfg,"L1",p,a) };
+  }
+  if (worst!=null && worst>=4 && worst<=10)
+    return { level:"L2", rule:10, tag:"depth", why:`Slipped to ${posWords(worst)} despite a complete structure. Refresh content depth and freshness.`, checklist:checklistFor(cfg,"L2",p,a) };
+  return { level:"L2", rule:11, tag:"fallback", why:`Slipped to ${posWords(worst)}. Refresh content depth and freshness.`, checklist:checklistFor(cfg,"L2",p,a) };
+}
+function priorityOf(cfg, traffic, intent, core, conf, level){
+  const iw={HIGH:1.5,MEDIUM:1.0,LOW:0.6}[intent], ef={L0:1,L1:1.2,L2:1,L3:0.7,NOSEO:0}[level];
+  return Math.round(traffic*iw*(core?1.3:1)*conf*ef*100)/100;
+}
+const escalate = l => ({L1:"L2",L2:"L3"})[l] || l;
+
+/* ---------- db ---------- */
+async function dbSet(path, data){ if (!S.db) return; try { await S.db.doc(path).set(data); } catch(e){ toast("Couldn't save: "+(e.message||e.code)); throw e; } }
+function cfg(){ return { ...DEFAULTS, ...S.settings }; }
+function subscribeDb(){
+  const db=S.db;
+  const coll=(name, fn) => db.collection(name).onSnapshot(snap => { const m={}; snap.docs.forEach(d=>m[d.id]=d.data()); fn(m); render(); }, () => {});
+  coll("items", m => { S.items=m; S.dbReady=true; });
+  coll("suggestions", m => S.suggestions=m);
+  coll("cards", m => S.cards=m);
+  db.collection("runs").orderBy("at","desc").limit(40).onSnapshot(snap => { S.runs=snap.docs.map(d=>({id:d.id, ...d.data()})); render(); }, () => {});
+  db.doc("settings/main").onSnapshot(d => { S.settings = d.exists ? {...DEFAULTS, ...d.data()} : {...DEFAULTS}; render(); }, () => {});
+}
+
+/* ---------- the weekly run ---------- */
+function stepper(){
+  const steps=[]; S.progress=steps;
+  return { add(t){ steps.forEach(s=>s.done=true); steps.push({t, done:false}); render(); }, note(t){ steps.push({t, done:true, note:true}); render(); },
+    end(){ steps.forEach(s=>s.done=true); render(); } };
+}
+async function runRadar(){
+  if (S.running) return;
+  if (!S.mcp){ S.alerts=[{bad:true, text:errText({code:"not_granted"})}]; render(); return; }
+  const c=cfg(), today=todayISO();
+  const date=c.fixed_date || addDays(today,-1), compared=c.fixed_compare || addDays(date,-c.compare_days);
+  const week=runWeek(date), runId=`${date}_${c.country}_${Date.now().toString(36)}`;
+  const tally={units:0}; const notes=[]; S.alerts=[]; S.running=true; $("sweep").classList.remove("idle");
+  const st=stepper(); const t0=Date.now();
+  const runDoc={ date, compared, country:c.country, week, at:new Date().toISOString(), status:"running", units:0, rows:0, pages:0 };
+  try {
+    const est=estimateUnits(c);
+    if (est>c.max_units){
+      const msg=`Unit guard: this run could cost up to ${fmt(est)} Ahrefs units, above the ${fmt(c.max_units)} limit. Lower the detection rows or pages audited, or raise the limit in Settings.`;
+      await dbSet("runs/"+runId, {...runDoc, status:"aborted", error:msg, estimate:est});
+      S.alerts=[{bad:true, text:msg}]; return;
+    }
+    st.add(`Ahrefs: keywords that lost top-3 (${c.country.toUpperCase()}, ${compared} → ${date})`);
+    const base={ target:c.target, mode:"prefix", country:c.country, date, date_compared:compared };
+    const det=await ahrefs("site-explorer-organic-keywords", { ...base, select:DETECT_SELECT.join(","), where:JSON.stringify(detectWhere(c.api_volume_floor)),
+      order_by:"sum_traffic_prev:desc", limit:c.max_rows }, tally);
+    const rows=det.keywords||[];
+    st.add(`Ahrefs: AI Overview citations lost (${rows.length} keyword rows so far)`);
+    const aioW=detectWhere(c.api_volume_floor); aioW.and.push({field:"positions_kinds_prev",list_is:{any:["eq","ai_overview_found"]}},{not:{field:"positions_kinds",list_is:{any:["eq","ai_overview_found"]}}});
+    let aioRows=[];
+    try { aioRows=(await ahrefs("site-explorer-organic-keywords", { ...base, select:"keyword,keyword_prev,best_position_url_prev", where:JSON.stringify(aioW), limit:c.aio_max_rows }, tally)).keywords||[]; }
+    catch(e){ notes.push("AI Overview check failed: "+errText(e,AHREFS)); }
+    const { signals, dropped }=detect(c, rows, aioRows);
+    const pages=aggregate(signals).sort((x,y)=>y.trafficLost-x.trafficLost);
+    st.note(`${signals.length} keyword signals on ${pages.length} pages after noise filters`);
+
+    // Pages we watch for an update even when they are no longer slipping (§11).
+    const watched=Object.values(S.items).filter(it=>["proposed","carded","in_progress"].includes(it.state) && !pages.some(p=>p.url===it.url));
+
+    st.add(`Jira: open or recent update tickets for ${pages.length} pages`);
+    const jira=pages.length ? await jiraCheck(pages, c, today, t=>notes.push(t)) : {};
+    st.add("Notion: open cards in Articles");
+    let notion={};
+    try { notion=pages.length ? await notionCards(pages.map(p=>p.url)) : {}; } catch(e){ notes.push("Notion check failed: "+errText(e,NOTION)); notion=null; }
+
+    // Audit: Site Audit lookup for every page, page text for pages not already in the pipeline.
+    const auditTargets=[...pages.filter(p=>!(jira&&jira[p.url]&&jira[p.url].open) && !(notion&&openCardOf(notion[p.url]))).map(p=>p.url), ...watched.map(w=>w.url)].slice(0, c.audit_max_pages);
+    st.add(`Ahrefs Site Audit: auditing ${auditTargets.length} pages`);
+    const explorer={};
+    const allUrls=[...new Set([...pages.map(p=>p.url), ...watched.map(w=>w.url)])];
+    for (let i=0;i<allUrls.length;i+=40){
+      const batch=allUrls.slice(i,i+40);
+      try {
+        const res=await ahrefs("site-audit-page-explorer", { project_id:SITE_AUDIT_PROJECT, select:"url,http_code,final_redirect,title,h1,content_nr_word",
+          where:JSON.stringify({or:batch.map(u=>({field:"url",is:["eq",u]}))}), limit:batch.length }, tally);
+        for (const r of res.pages||[]){ const u=normalizeUrl(r.url); if (u) explorer[u]=r; }
+      } catch(e){ notes.push("Site Audit lookup failed: "+errText(e,AHREFS)); break; }
+    }
+    const audits={}; let crawlDate=null;
+    const queue=auditTargets.filter(u=>explorer[u]);
+    for (const u of auditTargets) if (!explorer[u]) audits[u]={status:"not_crawled"};
+    let done=0;
+    async function worker(){ while (queue.length){ const u=queue.shift(); const ex=explorer[u];
+      const title=Array.isArray(ex.title)?ex.title[0]:ex.title;
+      const httpCode=ex.http_code, redirect=ex.final_redirect && normalizeUrl(ex.final_redirect,false)!==u ? ex.final_redirect : null;
+      if (redirect || httpCode===404 || httpCode===410){ audits[u]={status:"redirect", httpCode, redirect, title}; continue; }
+      try {
+        const res=await ahrefs("site-audit-page-content", { project_id:SITE_AUDIT_PROJECT, target_url:u, select:"crawl_datetime,page_text" }, tally);
+        const pc=res["page-content"]||res; crawlDate=crawlDate||(pc.crawl_datetime||"").slice(0,10);
+        audits[u]={ ...parsePageText(pc.page_text||"", u, c, today), httpCode, title, crawledAt:(pc.crawl_datetime||"").slice(0,10) };
+      } catch(e){ audits[u]={status:"error", error:errText(e,AHREFS), httpCode, title}; }
+      done++; if (done%5===0) st.note(`… ${done} pages audited`);
+    } }
+    await Promise.all([worker(), worker(), worker()]);
+
+    st.add("Levels, priority and proposals");
+    // Weekly confirmation chain: latest ok run per week, newest first, current run at the head (D-10).
+    const weeks=[week]; for (const r of S.runs.filter(r=>r.status==="ok" && r.country===c.country)) if (!weeks.includes(r.week)) weeks.push(r.week);
+    const escalatedUrls=new Set();
+    const results=[];
+    for (const p of pages){
+      const prev=S.items[p.slug]||{};
+      const seenWeeks=[...new Set([week, ...(prev.weeks||[])])].slice(0,12);
+      let conf=0; for (const w of weeks){ if (seenWeeks.includes(w)) conf++; else break; }
+      const severe=p.lostEntirely>0 || p.trafficLost>=c.severe_traffic_lost;
+      const confirmed=conf>=c.confirm_runs || severe;
+      const audit=audits[p.url] || (explorer[p.url] ? {status:"skipped", httpCode:explorer[p.url].http_code, title:Array.isArray(explorer[p.url].title)?explorer[p.url].title[0]:explorer[p.url].title} : {status:"not_crawled"});
+      p.cluster=inferCategory(p.mainKeyword,p.slug)||p.coreTopic;
+      const screen=screenText(audit.title, audit.h1, p.mainKeyword, p.slug.replace(/-/g," "));
+      const j=jira?jira[p.url]||{}:{}; const nc=notion?openCardOf(notion[p.url]):null;
+      const ownCard=!nc && prev.notionUrl && ["carded","in_progress"].includes(prev.state) ? {url:prev.notionUrl} : null;
+      const ctx={ page:p, audit, screen, today, confirmed, openTicket:j.open, openCard:nc||ownCard, recentTicket:j.recent };
+      let res=assignLevel(c, ctx);
+      const itemNotes=[...notes];
+      if (audit.status==="not_crawled") itemNotes.push("Audit unavailable: page not in the latest Site Audit crawl. Age, structure and claim checks were skipped.");
+      if (audit.status==="error") itemNotes.push("Audit failed: "+audit.error);
+      if (!jira) itemNotes.push("Jira check failed this run.");
+      // §11 escalation: a page that did not recover is re-proposed one level up, inside the hold window.
+      if (prev.followupOutcome==="not_recovered" && !["carded","in_progress","updated"].includes(prev.state) && res.tag==="recent" && ["L1","L2","L3"].includes(prev.level)){
+        res={ level:prev.level, rule:12, tag:"escalated", why:`Not recovered 4 weeks after the update; escalated to ${prev.level}. ${res.why.split(". ")[0]}.`, checklist:checklistFor(c,prev.level,p,audit,audit.claimFlags||[]) };
+        escalatedUrls.add(p.url);
+      }
+      const intent=installIntent(p.mainKeyword, p.mainCommercial);
+      const confVal=confirmed?1:0.5;
+      const effective=(prev.override&&prev.override.level)||res.level;
+      const prio=priorityOf(c, p.trafficLost, intent, !!p.coreTopic, confVal, effective);
+      let state;
+      if (prev.state==="excluded") state="excluded";
+      else if (res.level==="NOSEO") state="noseo";
+      else if (["carded","in_progress","updated"].includes(prev.state)) state=prev.state;
+      else state=confirmed?"confirmed":"watch";
+      // Update detection on a page we carded or proposed (§11).
+      let updatedOnNew=prev.updatedOnNew||null, followups=prev.followups||[];
+      if (["proposed","carded","in_progress"].includes(prev.state) && audit.status==="ok" && audit.updatedOn && prev.audit && prev.audit.updatedOn && audit.updatedOn>prev.audit.updatedOn){
+        state="updated"; updatedOnNew=audit.updatedOn; followups=[14,28].map(d=>({label:`+${d}d`, due:addDays(audit.updatedOn,d), outcome:null}));
+      }
+      const flags=[]; if (p.aioAppeared||p.aioCitationLost) flags.push("AIO"); if (p.swappedTo) flags.push("cannibalization");
+      if (res.tag==="claims") flags.push("claims"); if (!confirmed) flags.push("watch"); if (["not_crawled","error"].includes(audit.status)) flags.push("no audit");
+      results.push({ slug:p.slug, doc:{ url:p.url, slug:p.slug, firstRun:prev.firstRun||runId, lastRun:runId, weeks:seenWeeks, confirmations:conf, confirmed,
+        state, level:res.level, rule:res.rule, tag:res.tag, why:res.why, checklist:res.checklist, priority:prio, intent, page:p,
+        audit:{...audit, qMissing:(audit.qMissing||[]).slice(0,8)}, screen, jira:j, notionOpen:nc?{url:nc.url, status:nc.Status, name:nc.Name}:null,
+        flags, notes:itemNotes, override:prev.override||null, excluded:prev.excluded||null, notionUrl:prev.notionUrl||(nc&&nc.url)||null,
+        cardLevel:prev.cardLevel||null, cardWeek:prev.cardWeek||null, updatedOnNew, followups, followupOutcome:prev.followupOutcome||null,
+        history:[...(prev.history||[]).filter(h=>h.date!==date), {date, now:p.mainNow}].slice(-12) } });
+    }
+    // Watched pages that dropped out of the signals: only update detection.
+    for (const w of watched){
+      const a=audits[w.url]; if (!a || a.status!=="ok" || !a.updatedOn || !w.audit || !w.audit.updatedOn || a.updatedOn<=w.audit.updatedOn) continue;
+      results.push({ slug:w.slug, doc:{ ...w, state:"updated", updatedOnNew:a.updatedOn, audit:{...a, qMissing:(a.qMissing||[]).slice(0,8)},
+        followups:[14,28].map(d=>({label:`+${d}d`, due:addDays(a.updatedOn,d), outcome:null})) } });
+    }
+    // §8 proposals: top N confirmed L1–L3 by priority, skipping recently suggested pages unless escalated.
+    const cut=addDays(today,-c.resuggest_after_days);
+    const cands=results.filter(r=>["confirmed","proposed"].includes(r.doc.state) && ["L1","L2","L3"].includes((r.doc.override&&r.doc.override.level)||r.doc.level))
+      .filter(r=>{ const sg=S.suggestions[r.slug]; return !(sg && sg.first>=cut) || escalatedUrls.has(r.doc.url); })
+      .sort((x,y)=>y.doc.priority-x.doc.priority);
+    cands.forEach((r,i)=>{ r.doc.state = i<c.weekly_card_cap ? "proposed" : "confirmed"; });
+    st.add(`Saving ${results.length} pages`);
+    for (const r of results) await dbSet("items/"+r.slug, r.doc);
+    const lv={}; for (const l of LEVELS) lv[l]=results.filter(r=>r.doc.lastRun===runId && r.doc.level===l).length;
+    await dbSet("runs/"+runId, { ...runDoc, status:"ok", units:tally.units, estimate:est, rows:rows.length, aioRows:aioRows.length, pages:pages.length,
+      signals:signals.length, dropped, levels:lv, proposed:Math.min(cands.length,c.weekly_card_cap), trafficAtRisk:pages.reduce((a,p)=>a+p.trafficLost,0),
+      crawlDate, notes:notes.slice(0,10), seconds:Math.round((Date.now()-t0)/1000) });
+    S.stateFilter="active"; st.end();
+    if (notes.length) S.alerts=notes.map(t=>({text:t}));
+    toast(`Run saved: ${pages.length} pages, ${fmt(tally.units)} units.`);
+  } catch(e){
+    const msg=errText(e, e&&e.server||AHREFS);
+    S.alerts=[{bad:true, text:"The run stopped: "+msg}];
+    try { await dbSet("runs/"+runId, {...runDoc, status:"error", error:msg, units:tally.units}); } catch {}
+  } finally { S.running=false; $("sweep").classList.add("idle"); render(); }
+}
+
+/* ---------- follow-ups (§11) ---------- */
+function evaluate(c, base, mainKw, results){
+  const lost=base.reduce((a,k)=>a+Math.max((k.trafficPrev||0)-(k.trafficNow||0),0),0), baseNow=base.reduce((a,k)=>a+(k.trafficNow||0),0);
+  const now=base.reduce((a,k)=>a+((results[k.kw]||{}).traffic||0),0), regained=now-baseNow, mainPos=(results[mainKw]||{}).position;
+  if ((mainPos!=null && mainPos<=c.recovered_position) || (lost>0 && regained/lost*100>=c.recovered_traffic_pct)) return "recovered";
+  let improved=regained>0; for (const k of base){ const p=(results[k.kw]||{}).position; if (p!=null && (k.now==null || p<k.now)) improved=true; }
+  return improved?"partial":"not_recovered";
+}
+async function runFollowups(){
+  if (!S.mcp){ toast(errText({code:"not_granted"})); return; }
+  const c=cfg(), today=todayISO(), tally={units:0}; let n=0;
+  for (const it of Object.values(S.items)){
+    const due=(it.followups||[]).filter(f=>!f.checkedAt && f.due<=today); if (!due.length) continue;
+    const kws=it.page.lostKeywords.map(k=>k.kw);
+    let rows=[];
+    try { rows=(await ahrefs("site-explorer-organic-keywords", { target:it.url, mode:"exact", country:c.country, date:addDays(today,-1),
+      select:"keyword,best_position,sum_traffic,serp_features", where:JSON.stringify({or:kws.map(k=>({field:"keyword",is:["eq",k]}))}), limit:Math.max(kws.length,1) }, tally)).keywords||[]; }
+    catch(e){ toast(errText(e,AHREFS)); return; }
+    const results={}; for (const r of rows) results[r.keyword]={position:r.best_position, traffic:r.sum_traffic||0, aio:(r.serp_features||[]).includes("ai_overview")};
+    const outcome=evaluate(c, it.page.lostKeywords, it.page.mainKeyword, results);
+    const followups=(it.followups||[]).map(f=>due.includes(f)?{...f, checkedAt:today, outcome, results}:f);
+    const final=due.some(f=>f.label==="+28d");
+    const upd={...it, followups};
+    let msg=`Decay radar follow-up (${today}): ${outcome.replace("_"," ")}.`;
+    if (final){ upd.followupOutcome=outcome;
+      if (outcome==="not_recovered"){ const nl=escalate(it.cardLevel||it.level); upd.level=nl; upd.state="not_recovered"; upd.override=null; msg+=` Escalated to ${nl}; re-proposed next week.`; }
+      else upd.state=outcome; }
+    await dbSet("items/"+it.slug, upd); n++;
+    const pid=notionPageId(it.notionUrl);
+    if (pid){ try { await call(NOTION,"notion-create-comment",{ page_id:pid, markdown:msg }); } catch(e){ toast("Notion comment failed: "+errText(e,NOTION)); } }
+  }
+  toast(n ? `${n} follow-up check${n>1?"s":""} done (${fmt(tally.units)} units).` : "No follow-up checks are due today.");
+}
+
+/* ---------- Notion cards (§10) ---------- */
+function mdEsc(s){ return String(s??"").replace(/([\\*~`$\[\]<>{}|^])/g,"\\$1"); }
+function cardFor(c, it, rank, today){
+  const level=(it.override&&it.override.level)||it.level; const a=it.audit||{};
+  let n=null; if (c.card_name_format.includes("{n}")){ const wc=a.wordCount||0; n=Math.round(wc/100)*100; }
+  const name=c.card_name_format.replace("{kw}", it.page.mainKeyword).replace("{n}", n);
+  const category=inferCategory(it.page.mainKeyword, it.slug);
+  const props={ "Name":name, "New/Upd":"Update", "Status":"Not started", "URL 1":it.url, "date:Date:start":today, "date:Date:is_datetime":0 };
+  if (category) props["Blog Category"]=category;
+  if (c.choose_primary_top && rank<=c.choose_primary_top) props["Choose Primary"]="(Week)";
+  const rows=it.page.lostKeywords.map(k=>`\t<tr>\n\t\t<td>${mdEsc(k.kw)}</td>\n\t\t<td>${k.vol}</td>\n\t\t<td>${pos(k.was)} → ${pos(k.now)}</td>\n\t\t<td>${Math.max((k.trafficPrev||0)-(k.trafficNow||0),0)}</td>\n\t</tr>`).join("\n");
+  const checklist=(level===it.level?it.checklist:checklistFor(c,level,it.page,a,a.claimFlags||[]));
+  const body=[`## Decay radar — ${level} ${LEVEL_NAMES[level]}`, mdEsc(it.override?`${it.why} Level set to ${level} by hand: ${it.override.reason}`:it.why),
+    `<table header-row="true">\n\t<tr>\n\t\t<td>Keyword</td>\n\t\t<td>Volume</td>\n\t\t<td>Was → now</td>\n\t\t<td>Traffic lost</td>\n\t</tr>\n${rows}\n</table>`,
+    ...checklist.map(x=>`- [ ] ${mdEsc(x)}`),
+    `- Updated on: ${a.updatedOn||"unknown"}`, `- Words: ${a.wordCount||"unknown"}`, `- FAQs: ${a.faqCount??"unknown"}`, `- Key Takeaways: ${a.status==="ok"?(a.keyTakeaways?"yes":"no"):"unknown"}`,
+    `Generated by Decay Radar run ${mdEsc(it.lastRun)} on ${today}`].join("\n");
+  return { slug:it.slug, url:it.url, level, props, body, category, name, mainNow:it.page.mainNow, mainKeyword:it.page.mainKeyword, auditUpdatedOn:a.updatedOn||null };
+}
+function openCardsDialog(){
+  const c=cfg(), today=todayISO();
+  const items=[...S.selected].map(s=>S.items[s]).filter(Boolean).sort((x,y)=>(y.priority||0)-(x.priority||0));
+  const cards=items.map((it,i)=>cardFor(c,it,i+1,today));
+  S.pendingCards=cards;
+  $("cardsTitle").textContent=`Create ${cards.length} Notion card${cards.length>1?"s":""}`;
+  $("cardsBody").innerHTML=`<p class="muted">Each card goes to the Articles database exactly as shown. Pages that already have an open card get a comment instead, and a page is carded at most once per ISO week (${isoWeek(today)}).</p>`+
+    cards.map(cd=>`<div class="cardprev"><h3>${esc(cd.name)} <span class="pill c-${cd.level}">${cd.level}</span></h3>
+      <dl class="kv">${Object.entries(cd.props).map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v)}${k==="Blog Category"?" <span class='muted'>(inferred)</span>":""}</dd>`).join("")}</dl>
+      <pre>${esc(cd.body)}</pre></div>`).join("");
+  $("cardsFoot").innerHTML=`<button class="btn" type="button" data-close="dlgCards">Cancel</button><button class="btn primary" type="button" id="btnConfirmCards">Create ${cards.length} card${cards.length>1?"s":""} in Notion</button>`;
+  $("dlgCards").showModal();
+}
+async function createCards(){
+  const cards=S.pendingCards||[]; const today=todayISO(), week=isoWeek(today); const out=[];
+  $("btnConfirmCards").disabled=true; $("btnConfirmCards").textContent="Creating…";
+  const log=t=>{ out.push(t); $("cardsBody").innerHTML=out.join(""); };
+  for (const cd of cards){
+    const key=`${cd.slug}__${week}`, prior=S.cards[key];
+    if (prior && prior.notionUrl){ log(`<p class="result"><b>Skipped</b> ${esc(cd.name)}: already carded this week.</p>`); continue; }
+    try {
+      const existing=await notionCards([cd.url]); const open=openCardOf(existing[cd.url]);
+      if (open && prior){ // our pending write from an interrupted attempt: adopt it (D-12)
+        await finishCard(cd, key, week, today, open.url, "adopted"); log(`<p class="result ok"><b>Adopted</b> ${esc(cd.name)} from an interrupted attempt. <a href="${esc(open.url)}" target="_blank" rel="noopener">Open</a></p>`); continue; }
+      if (open){
+        const pid=notionPageId(open.url);
+        await call(NOTION,"notion-create-comment",{ page_id:pid, markdown:`Decay radar ${today}: still slipping, now ${pos(cd.mainNow)} for '${mdEsc(cd.mainKeyword)}'.` });
+        log(`<p class="result"><b>Commented</b> on the open card for ${esc(cd.slug)} instead of creating a duplicate. <a href="${esc(open.url)}" target="_blank" rel="noopener">Open</a></p>`); continue; }
+      await dbSet("cards/"+key, { url:cd.url, slug:cd.slug, week, notionUrl:null, at:new Date().toISOString(), name:cd.name, level:cd.level, pending:true });
+      await call(NOTION,"notion-create-pages",{ parent:{ type:"data_source_id", data_source_id:DS }, pages:[{ properties:cd.props, content:cd.body }], allow_async:false });
+      // Re-fetch and verify Name, URL 1, Status, New/Upd, Date.
+      let row=null;
+      for (let tries=0; tries<3 && !row; tries++){ if (tries) await new Promise(r=>setTimeout(r,2500)); row=((await notionCards([cd.url]))[cd.url]||[])[0]; }
+      if (!row){ log(`<p class="result bad"><b>Check Notion</b> ${esc(cd.name)}: created, but the card was not found on re-fetch.</p>`); continue; }
+      const bad=[]; if ((row.Name||"")!==cd.props.Name) bad.push(`Name is "${row.Name}"`); if (normalizeUrl(row["URL 1"])!==cd.url) bad.push(`URL 1 is ${row["URL 1"]}`);
+      if (row.Status!=="Not started") bad.push(`Status is ${row.Status}`); if (row["New/Upd"]!=="Update") bad.push(`New/Upd is ${row["New/Upd"]}`);
+      if ((row["date:Date:start"]||"").slice(0,10)!==today) bad.push(`Date is ${row["date:Date:start"]}`);
+      await finishCard(cd, key, week, today, row.url, "created");
+      log(`<p class="result ${bad.length?"bad":"ok"}"><b>${bad.length?"Created, check fields":"Created and verified"}</b> ${esc(cd.name)}${cd.category?` · category ${esc(cd.category)} (inferred)`:""}${bad.length?": "+esc(bad.join("; ")):""}. <a href="${esc(row.url)}" target="_blank" rel="noopener">Open</a></p>`);
+    } catch(e){ log(`<p class="result bad"><b>Failed</b> ${esc(cd.name)}: ${esc(errText(e, e.server||NOTION))} Run "Create Notion cards" again: the page checks Notion first, so it will not duplicate.</p>`); }
+  }
+  S.selected.clear();
+  $("cardsFoot").innerHTML=`<button class="btn primary" type="button" data-close="dlgCards">Done</button>`;
+  render();
+}
+async function finishCard(cd, key, week, today, notionUrl, how){
+  await dbSet("cards/"+key, { url:cd.url, slug:cd.slug, week, notionUrl, at:new Date().toISOString(), name:cd.name, level:cd.level, how });
+  const it=S.items[cd.slug]; if (it) await dbSet("items/"+cd.slug, { ...it, state:"carded", notionUrl, cardLevel:cd.level, cardWeek:week, cardAt:today });
+  if (!S.suggestions[cd.slug]) await dbSet("suggestions/"+cd.slug, { url:cd.url, first:today, source:"decay-radar" });
+}
+
+/* ---------- row actions ---------- */
+async function setOverride(slug, level, reason){
+  const it=S.items[slug]; if (!it) return;
+  if (!reason.trim()){ toast("Add a reason for the level change."); return; }
+  const c=cfg(); const a=it.audit||{};
+  await dbSet("items/"+slug, { ...it, override:{ level, reason:reason.trim(), at:todayISO() }, checklist:level===it.level?it.checklist:checklistFor(c,level,it.page,a,a.claimFlags||[]),
+    priority:priorityOf(c, it.page.trafficLost, it.intent, !!it.page.coreTopic, it.confirmed?1:0.5, level) });
+  toast(`Level set to ${level}.`);
+}
+async function setExcluded(slug, reason){
+  const it=S.items[slug]; if (!it) return;
+  if (!reason.trim()){ toast("Add a reason for excluding the page."); return; }
+  await dbSet("items/"+slug, { ...it, state:"excluded", excluded:{ reason:reason.trim(), at:todayISO() } }); S.selected.delete(slug); toast("Excluded until you include it again.");
+}
+async function include(slug){ const it=S.items[slug]; if (!it) return; await dbSet("items/"+slug, { ...it, state:"confirmed", excluded:null }); toast("Included again; the next run re-evaluates it."); }
+
+/* ---------- render ---------- */
+function latestRun(){ return S.runs.find(r=>r.status==="ok") || null; }
+function visibleItems(){
+  const run=latestRun(); const all=Object.values(S.items);
+  let list=all.filter(it=>{
+    switch (S.stateFilter){
+      case "active": return run && it.lastRun===run.id;
+      case "proposed": return it.state==="proposed";
+      case "watch": return it.state==="watch";
+      case "carded": return ["carded","in_progress","updated","recovered","partial","not_recovered"].includes(it.state);
+      case "excluded": return it.state==="excluded";
+      default: return true;
+    }});
+  if (S.levelFilter) list=list.filter(it=>((it.override&&it.override.level)||it.level)===S.levelFilter);
+  if (S.q){ const q=S.q.toLowerCase(); list=list.filter(it=>it.slug.includes(q) || (it.page.mainKeyword||"").toLowerCase().includes(q)); }
+  return list.sort((x,y)=>(y.priority||0)-(x.priority||0));
+}
+function slackText(){
+  const run=latestRun(); if (!run) return "No run yet.";
+  const d=new Date(run.at); const label=d.toLocaleDateString("en-US",{month:"short",day:"numeric"});
+  const lv=run.levels||{}; const parts=LEVELS.filter(l=>lv[l]).map(l=>`${lv[l]} ${l}`);
+  const created=Object.values(S.cards).filter(c=>c.week===isoWeek(todayISO()) && c.notionUrl).length;
+  return `Decay radar (${label}): ${run.pages} pages lost top-3 · ${parts.join(", ")||"no pages"} · est. ${fmt(run.trafficAtRisk)} visits/mo at risk · ${created} Notion cards created.`;
+}
+function spark(history){
+  const pts=(history||[]).filter(h=>h.date); if (pts.length<2) return "";
+  const W=280,H=64,P=8, max=Math.max(20,...pts.map(h=>h.now==null?20:h.now));
+  const x=i=>P+i*(W-2*P)/(pts.length-1), y=v=>P+((v==null?max:v)-1)*(H-2*P)/(max-1);
+  const path=pts.map((h,i)=>`${i?"L":"M"}${x(i).toFixed(1)},${y(h.now).toFixed(1)}`).join(" ");
+  const last=pts[pts.length-1];
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" role="img" aria-label="Main keyword position by run"><line x1="${P}" x2="${W-P}" y1="${y(3)}" y2="${y(3)}" stroke="var(--line)" stroke-dasharray="3 3"/>
+    <text x="${W-P}" y="${y(3)-3}" text-anchor="end" font-size="9" fill="var(--muted)">top 3</text><path d="${path}" fill="none" stroke="var(--accent)" stroke-width="1.8"/>
+    <circle cx="${x(pts.length-1)}" cy="${y(last.now)}" r="3" fill="var(--accent)"/></svg>`;
+}
+function drawer(it){
+  const p=it.page, a=it.audit||{}, lvl=(it.override&&it.override.level)||it.level;
+  const kwRows=p.lostKeywords.map(k=>`<tr><td>${esc(k.kw)}</td><td class="num">${fmt(k.vol)}</td><td class="pos">${pos(k.was)} → <span class="${k.now==null?"lost":""}">${pos(k.now)}</span></td><td class="num">${fmt(k.trafficPrev)} → ${fmt(k.trafficNow)}</td><td>${esc(k.kind)}</td></tr>`).join("");
+  const facts = a.status==="ok" ? `<li>Updated on ${esc(a.updatedOn||"unknown")}${a.ageDays!=null?` (${a.ageDays} days ago)`:""} · crawl ${esc(a.crawledAt||"")}</li>
+      <li>${fmt(a.wordCount)} words · ${a.faqCount} FAQs · Key Takeaways ${a.keyTakeaways?"yes":"no"}</li>
+      <li>Question H2s answered in ${S.settings.direct_min||40}–${S.settings.direct_max||60} words: ${a.qH2Answered}/${a.qH2}</li>
+      <li>Tables ${a.tables} · internal article links ${a.internalLinks}</li>
+      <li>Claim flags: ${esc((a.claimFlags||[]).join(", ")||"none")}</li>`
+    : `<li>${a.status==="redirect"?`Redirects to ${esc(a.redirect||"HTTP "+a.httpCode)}.`:a.status==="not_crawled"?"Not in the latest Site Audit crawl, so age, structure and claims were not checked.":a.status==="skipped"?"Not audited (already in the pipeline).":esc(a.error||"No audit.")}</li>`;
+  const screen=it.screen.matches.length?it.screen.matches.map(m=>`#${m.cat} ${m.name}: ${m.note} (${m.verdict})`).join("; "):"PASS";
+  const jira=[it.jira&&it.jira.open&&`open <a href="${esc(it.jira.open.url)}" target="_blank" rel="noopener">${esc(it.jira.open.key)}</a> (${esc(it.jira.open.status)})`,
+    it.jira&&it.jira.recent&&`published <a href="${esc(it.jira.recent.url)}" target="_blank" rel="noopener">${esc(it.jira.recent.key)}</a> ${it.jira.recent.days} days ago`].filter(Boolean).join(" · ")||"none";
+  const notion=it.notionUrl?`<a href="${esc(it.notionUrl)}" target="_blank" rel="noopener">card</a>${it.notionOpen?` (${esc(it.notionOpen.status)})`:""}`:"none";
+  const fups=(it.followups||[]).map(f=>`${f.label} due ${f.due}: ${f.outcome||"pending"}`).join(" · ");
+  const lvOpts=LEVELS.map(l=>`<option value="${l}" ${l===lvl?"selected":""}>${l} · ${LEVEL_NAMES[l]}</option>`).join("");
+  return `<tr class="drawer"><td colspan="10"><div class="dgrid">
+    <section><h3>Why ${esc(lvl)} · rule ${it.rule}</h3><p>${esc(it.why)}</p>
+      ${it.override?`<p class="muted">Set to ${esc(it.override.level)} by hand (table said ${esc(it.level)}): ${esc(it.override.reason)}</p>`:""}
+      <h3>Checklist</h3><ul class="todo">${(it.override&&it.override.level!==it.level?checklistFor(cfg(),lvl,p,a,a.claimFlags||[]):it.checklist).map((c,i)=>`<li class="${i===0?"scope":""}">${esc(c)}</li>`).join("")}</ul></section>
+    <section><h3>Lost keywords</h3><div class="inner"><table><thead><tr><th>Keyword</th><th>Vol</th><th>Was → now</th><th>Traffic</th><th>Kind</th></tr></thead><tbody>${kwRows}</tbody></table></div>
+      <h3>Main keyword by run</h3>${spark(it.history)||`<p class="muted">One run so far.</p>`}${fups?`<p class="muted">Follow-ups: ${esc(fups)}</p>`:""}</section>
+    <section><h3>Audit</h3><ul class="facts">${facts}<li>Screen: ${esc(screen)}</li><li>Install intent ${esc(it.intent)} · confirmations ${it.confirmations}</li>
+      <li>Jira: ${jira} · Notion: ${notion}</li>${(it.notes||[]).map(n=>`<li class="muted">${esc(n)}</li>`).join("")}</ul>
+      <h3>Actions</h3>
+      <div class="actrow"><select data-ovl="${esc(it.slug)}" aria-label="Level">${lvOpts}</select><input data-ovr="${esc(it.slug)}" placeholder="Reason (required)" aria-label="Reason for level change"><button class="btn small" type="button" data-act="override" data-slug="${esc(it.slug)}">Change level</button></div>
+      <div class="actrow">${it.state==="excluded"?`<button class="btn small" type="button" data-act="include" data-slug="${esc(it.slug)}">Include again</button><span class="muted">Excluded: ${esc(it.excluded&&it.excluded.reason)}</span>`
+        :`<input data-exr="${esc(it.slug)}" placeholder="Reason (required)" aria-label="Reason for excluding"><button class="btn small danger" type="button" data-act="exclude" data-slug="${esc(it.slug)}">Exclude</button>`}</div>
+    </section></div></td></tr>`;
+}
+function render(){
+  const c=cfg(), run=latestRun(), last=S.runs[0];
+  $("window").textContent = run ? `${c.target} · ${run.country.toUpperCase()} · ${run.compared} → ${run.date} · ${run.week}` : `${c.target} · ${c.country.toUpperCase()} · lost top-3`;
+  $("btnRun").disabled=S.running; $("btnRun").textContent=S.running?"Running…":"Run radar";
+  $("meta").innerHTML = run ? [`<span>Last run <b>${esc(new Date(run.at).toLocaleString("en-GB",{dateStyle:"medium",timeStyle:"short"}))}</b></span>`,
+      `<span><b>${fmt(run.pages)}</b> pages · <b>${fmt(run.signals)}</b> keywords lost top-3</span>`, `<span><b>${fmt(run.trafficAtRisk)}</b> visits/mo at risk</span>`,
+      `<span><b>${fmt(run.units)}</b> Ahrefs units</span>`, run.crawlDate?`<span>Site Audit crawl <b>${esc(run.crawlDate)}</b></span>`:""].join("")
+    : `<span>${S.dbReady||!S.db?"No run yet. Run radar pulls this week's top-3 losses from Ahrefs.":"Loading the board…"}</span>`;
+  const counts={}; for (const l of LEVELS) counts[l]=0;
+  for (const it of Object.values(S.items)) if (run && it.lastRun===run.id) counts[(it.override&&it.override.level)||it.level]++;
+  $("levels").innerHTML=LEVELS.map(l=>`<button type="button" class="lv c-${l}" data-level="${l}" aria-pressed="${S.levelFilter===l}"><span class="n num">${counts[l]}</span><span class="t"><b>${l}</b>${LEVEL_NAMES[l]}</span></button>`).join("");
+  const proposed=Object.values(S.items).filter(it=>it.state==="proposed").length;
+  $("proposed").textContent=`Proposed this week: ${proposed} / ${c.weekly_card_cap}`;
+  $("slack").textContent=slackText();
+  const alerts=[...S.alerts]; if (last && last!==run && last.status!=="running" && last.error) alerts.unshift({bad:true, text:`Latest run ${last.status}: ${last.error}`});
+  $("alerts").innerHTML=alerts.map(a=>`<div class="notice ${a.bad?"bad":""}">${esc(a.text)}</div>`).join("");
+  const pg=$("progress"); pg.hidden=!(S.running || (S.progress && S.progress.length));
+  if (S.progress){ const ol=`<ol>${S.progress.map(s=>`<li class="${s.done?"done":"now"}">${esc(s.t)}</li>`).join("")}</ol>`;
+    pg.innerHTML = S.running ? `<b>Running the radar</b>${ol}` : `<details><summary><b>Last run steps</b> <span class="muted">(${S.progress.length})</span></summary>${ol}</details>`; }
+  // queue
+  const list=visibleItems();
+  if (!list.length){
+    $("rows").innerHTML=`<tr><td colspan="10"><div class="empty">${!run?`<h2>No run yet</h2><p>Run radar asks Ahrefs which betterme.world articles lost top-3 Google positions (US) over the last ${c.compare_days} days, audits each page from the Site Audit crawl, checks Jira and Notion, and levels every page L0–L3 or NOSEO with a reason and a checklist.</p><p>Nothing is written to Notion until you select pages and confirm the cards.</p>`
+      :`<p>No pages match this filter.</p>`}</div></td></tr>`;
+  } else {
+    $("rows").innerHTML=list.map(it=>{ const p=it.page, a=it.audit||{}, lvl=(it.override&&it.override.level)||it.level;
+      const cardable=["L1","L2","L3"].includes(lvl) && !["carded","in_progress","excluded","noseo"].includes(it.state);
+      const flags=(it.flags||[]).map(f=>`<span class="flag ${f==="claims"||f==="cannibalization"?"hot":""}">${esc(f)}</span>`).join("")+(it.override?`<span class="flag">override</span>`:"");
+      return `<tr class="row" data-slug="${esc(it.slug)}" tabindex="0" aria-expanded="${S.open.has(it.slug)}">
+        <td>${cardable?`<input type="checkbox" data-pick="${esc(it.slug)}" ${S.selected.has(it.slug)?"checked":""} aria-label="Select ${esc(it.slug)} for a card">`:""}</td>
+        <td class="page"><a href="${esc(it.url)}" target="_blank" rel="noopener">${esc(it.slug)}</a><span class="kw">${esc(p.mainKeyword)}</span></td>
+        <td><span class="pill c-${lvl}">${lvl}</span></td>
+        <td class="pos">${pos(p.mainWas)} → <span class="${p.mainNow==null?"lost":""}">${pos(p.mainNow)}</span></td>
+        <td class="r">${p.lostTop3}</td><td class="r">${fmt(p.trafficLost)}</td><td class="r">${fmt(it.priority)}</td>
+        <td class="mono">${esc(a.updatedOn||"—")}</td><td>${flags}</td><td class="state ${esc(it.state)}">${esc(it.state.replace("_"," "))}</td></tr>`
+        + (S.open.has(it.slug)?drawer(it):""); }).join("");
+  }
+  $("selCount").textContent=`${S.selected.size} selected`; $("btnCards").disabled=!S.selected.size || !S.mcp;
+  $("q").value!==S.q && ($("q").value=S.q); $("stateFilter").value=S.stateFilter;
+  // lower panels
+  const fl=Object.values(S.items).filter(it=>(it.followups||[]).length).sort((x,y)=>(x.followups[0].due>y.followups[0].due?1:-1));
+  $("followList").innerHTML=fl.length?fl.map(it=>`<li><a href="${esc(it.url)}" target="_blank" rel="noopener">${esc(it.slug)}</a>: ${it.followups.map(f=>`${f.label} ${f.due} ${f.outcome?"· "+f.outcome.replace("_"," "):""}`).join(", ")}</li>`).join(""):`<li class="muted">Nothing scheduled yet. A carded page gets checks when its "Updated on" date changes.</li>`;
+  const wk=isoWeek(todayISO()); const cards=Object.values(S.cards).filter(x=>x.week===wk);
+  $("cardList").innerHTML=cards.length?cards.map(x=>`<li>${x.notionUrl?`<a href="${esc(x.notionUrl)}" target="_blank" rel="noopener">${esc(x.name)}</a>`:esc(x.name)+" <span class='muted'>(pending)</span>"} <span class="pill c-${esc(x.level)}">${esc(x.level)}</span></li>`).join(""):`<li class="muted">No cards created in ${wk}.</li>`;
+  $("suggCount").textContent=`${Object.keys(S.suggestions).length} pages on the "already suggested" list.`;
+}
+
+/* ---------- settings, import, calibration ---------- */
+function openSettings(){
+  const c=cfg();
+  $("settingsForm").innerHTML=SETTING_FIELDS.map(([k,label,type])=>`<label for="set_${k}">${esc(label)}<input id="set_${k}" data-k="${k}" type="${type}" value="${esc(c[k])}"></label>`).join("")
+    + `<p class="muted" style="grid-column:1/-1;font-size:12.5px;margin:4px 0 0">Estimated units at these settings: <b id="estUnits">${fmt(estimateUnits(c))}</b> of ${fmt(c.max_units)}.</p>`;
+  $("dlgSettings").showModal();
+}
+async function saveSettings(){
+  const next={...S.settings};
+  for (const el of $("settingsForm").querySelectorAll("input[data-k]")){ const k=el.dataset.k; next[k]= el.type==="number" ? Number(el.value) : el.value.trim(); }
+  if (!/^[a-z]{2}$/i.test(next.country)){ toast("Country must be a two-letter code, such as us."); return; }
+  next.country=next.country.toLowerCase();
+  if (!String(next.card_name_format).includes("{kw}")){ toast("The card name format needs {kw}."); return; }
+  try { await dbSet("settings/main", next); S.settings=next; $("dlgSettings").close(); toast("Settings saved."); render(); } catch {}
+}
+async function doImport(){
+  const text=$("importText").value; let current=todayISO(), n=0;
+  for (const line of text.split(/\n/)){
+    const dm=line.match(/(20\d\d-\d\d-\d\d)/); if (dm && /^\s*#/.test(line)) current=dm[1];
+    for (const u of line.match(/https?:\/\/(?:www\.)?betterme\.world\/articles\/[^\s)\]>"'|]+/gi)||[]){
+      const url=normalizeUrl(u); if (!url) continue; const slug=slugOf(url);
+      if (!S.suggestions[slug]){ await dbSet("suggestions/"+slug, { url, first:current, source:"tracking-doc" }); n++; }
+    }
+  }
+  $("dlgImport").close(); toast(`Imported ${n} URL${n===1?"":"s"}.`);
+}
+function normLevel(v){ if (v==null) return null; const s=String(v).toUpperCase().replace(/[\s-]/g,""); if (s.startsWith("NOSEO")) return "NOSEO"; const m=s.match(/L?([0-3])/); return m?"L"+m[1]:null; }
+function calibrate(data){
+  const recs=Array.isArray(data)?data:(data.pages||data.items||data.rows||Object.entries(data).map(([k,v])=>typeof v==="object"?{...v,url:k}:{url:k,level:v}));
+  const labels={}; for (const r of recs){ const u=normalizeUrl(r.url||r.page||r.URL||r.page_url); if (u) labels[u]={level:normLevel(r.level||r.Level), why:r.why||r.reason||""}; }
+  const run=latestRun(); const radar={}; for (const it of Object.values(S.items)) if (run && it.lastRun===run.id) radar[it.url]=it;
+  const both=Object.keys(labels).filter(u=>radar[u]); const M={}; LEVELS.forEach(a=>{M[a]={}; LEVELS.forEach(b=>M[a][b]=0);});
+  let agree=0, n=0; const dis=[];
+  for (const u of both){ const want=labels[u].level, got=(radar[u].override&&radar[u].override.level)||radar[u].level; if (!M[want]) continue; n++; M[want][got]++;
+    if (want===got) agree++; else dis.push({u, want, why:labels[u].why, got, rule:radar[u].rule, gwhy:radar[u].why}); }
+  const L=Object.keys(labels).length;
+  $("calibOut").innerHTML=`<p><b>URL overlap:</b> ${both.length}/${L} = ${L?(100*both.length/L).toFixed(1):0}% (target 90%) · <b>Level agreement:</b> ${n?(100*agree/n).toFixed(1):0}% (target 80%)</p>
+    <p class="muted">Compared with run ${esc(run?run.compared+" → "+run.date:"none")}. Rows: old tracker; columns: radar.</p>
+    <div class="inner"><table class="matrix"><thead><tr><th></th>${LEVELS.map(l=>`<th>${l}</th>`).join("")}</tr></thead><tbody>${LEVELS.map(a=>`<tr><th>${a}</th>${LEVELS.map(b=>`<td class="num">${M[a][b]}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
+    ${dis.length?`<h3 style="font-size:13px;margin:10px 0 4px">Disagreements</h3>`+dis.map(d=>`<div class="cardprev"><b>${esc(slugOf(d.u))}</b><p class="result">Tracker ${esc(d.want)}: ${esc(d.why)}</p><p class="result">Radar ${esc(d.got)} (rule ${d.rule}): ${esc(d.gwhy)}</p></div>`).join(""):""}
+    ${L-both.length?`<p class="muted">${L-both.length} tracker pages were not found by this run.</p>`:""}`;
+}
+function csv(){
+  const head=["url","level","state","priority","main_keyword","was","now","lost_top3","traffic_lost","updated_on","flags","why"];
+  const q=v=>`"${String(v??"").replace(/"/g,'""')}"`;
+  return [head.join(","), ...visibleItems().map(it=>[it.url,(it.override&&it.override.level)||it.level,it.state,it.priority,it.page.mainKeyword,it.page.mainWas,pos(it.page.mainNow),it.page.lostTop3,it.page.trafficLost,(it.audit||{}).updatedOn||"",(it.flags||[]).join(" "),it.why].map(q).join(","))].join("\n");
+}
+async function copy(text, done){ try { await navigator.clipboard.writeText(text); toast(done); } catch { toast("Copy isn't available here; select the text instead."); } }
+
+/* ---------- events ---------- */
+$("btnRun").addEventListener("click", runRadar);
+$("btnFollow").addEventListener("click", runFollowups);
+$("btnSettings").addEventListener("click", openSettings);
+$("btnSaveSettings").addEventListener("click", saveSettings);
+$("btnResetSettings").addEventListener("click", () => { S.settings={...DEFAULTS}; openSettings(); });
+$("settingsForm").addEventListener("input", () => { const t={...cfg()}; for (const el of $("settingsForm").querySelectorAll("input[type=number]")) t[el.dataset.k]=Number(el.value); const e=$("estUnits"); if (e) e.textContent=fmt(estimateUnits(t)); });
+$("btnCopy").addEventListener("click", () => copy(slackText(), "Summary copied."));
+$("btnCsv").addEventListener("click", () => copy(csv(), "CSV copied."));
+$("btnCards").addEventListener("click", openCardsDialog);
+$("btnImport").addEventListener("click", () => $("dlgImport").showModal());
+$("btnDoImport").addEventListener("click", doImport);
+$("btnCalib").addEventListener("click", () => $("dlgCalib").showModal());
+$("calibFile").addEventListener("change", e => { const f=e.target.files[0]; if (!f) return; const r=new FileReader();
+  r.onload=() => { try { calibrate(JSON.parse(r.result)); } catch { $("calibOut").innerHTML=`<p class="result bad"><b>Couldn't read that file.</b> Choose the JSON export of the old tracker.</p>`; } }; r.readAsText(f); });
+$("q").addEventListener("input", e => { S.q=e.target.value.trim(); render(); });
+$("stateFilter").addEventListener("change", e => { S.stateFilter=e.target.value; render(); });
+$("levels").addEventListener("click", e => { const b=e.target.closest(".lv"); if (!b) return; S.levelFilter = S.levelFilter===b.dataset.level ? null : b.dataset.level; render(); });
+document.addEventListener("click", e => {
+  const close=e.target.closest("[data-close]"); if (close){ $(close.dataset.close).close(); return; }
+  if (e.target.id==="btnConfirmCards"){ createCards(); return; }
+  const act=e.target.closest("[data-act]");
+  if (act){ const slug=act.dataset.slug;
+    if (act.dataset.act==="override"){ const lv=document.querySelector(`[data-ovl="${CSS.escape(slug)}"]`).value, r=document.querySelector(`[data-ovr="${CSS.escape(slug)}"]`).value; setOverride(slug, lv, r); }
+    if (act.dataset.act==="exclude") setExcluded(slug, document.querySelector(`[data-exr="${CSS.escape(slug)}"]`).value);
+    if (act.dataset.act==="include") include(slug);
+    return; }
+  if (e.target.matches("[data-pick]")){ const s=e.target.dataset.pick; e.target.checked?S.selected.add(s):S.selected.delete(s); render(); return; }
+  const row=e.target.closest("tr.row");
+  if (row && !e.target.closest("a,input,button,select")){ const s=row.dataset.slug; S.open.has(s)?S.open.delete(s):S.open.add(s); render(); }
+});
+document.addEventListener("keydown", e => { const row=e.target.closest && e.target.closest("tr.row"); if (row && e.key==="Enter" && e.target===row){ const s=row.dataset.slug; S.open.has(s)?S.open.delete(s):S.open.add(s); render(); } });
+
+/* ---------- boot ---------- */
+render();
+(async () => {
+  const use=n => (window.claude && window.claude.use) ? window.claude.use(n).catch(()=>null) : Promise.resolve(null);
+  const [mcp, db, user]=await Promise.all([use("mcp"), use("db"), use("user")]);
+  S.mcp=mcp; S.db=db; S.user=user;
+  if (db) subscribeDb(); else { S.dbReady=true; S.alerts.push({text:"The shared board isn't available in this view, so runs won't be saved. Open Decay Radar in claude.ai while signed in."}); }
+  if (!mcp) S.alerts.push({bad:true, text:errText({code:"not_granted"})});
+  render();
+})();
+</script>
