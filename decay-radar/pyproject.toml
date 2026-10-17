@@ -1,0 +1,14 @@
+[project]
+name = "decay-radar"
+version = "0.1.0"
+description = "Content Decay Radar: weekly detection of BetterMe articles that lost top-3 Google positions (spec 06)"
+requires-python = ">=3.11"
+dependencies = ["requests>=2.31", "beautifulsoup4>=4.12", "lxml>=5", "python-dotenv>=1.0"]
+
+[project.optional-dependencies]
+postgres = ["psycopg[binary]>=3.1"]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

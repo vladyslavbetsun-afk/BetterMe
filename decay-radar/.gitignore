@@ -1,0 +1,9 @@
+.env
+.venv/
+decay.db
+decay-report.html
+decay-report.csv
+__pycache__/
+.pytest_cache/
+import/*
+!import/README.md
