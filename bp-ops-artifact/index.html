@@ -1,0 +1,808 @@
+<title>BP Ops</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a working console. Sticky header with tabs, a thin data-health line, then one dense panel per tab. */
+:root {
+  --bg: #f3f5f8; --panel: #ffffff; --ink: #172031; --muted: #5d6a7e; --line: #dde2ea; --soft: #eef1f6;
+  --accent: #2e55c4; --accent-soft: #e4ebfb; --accent-ink: #ffffff;
+  --good: #1d7f4a; --good-bg: #e2f3e9; --warn: #a3620a; --warn-bg: #fbefd9; --bad: #b9352b; --bad-bg: #fbe5e2;
+  --s-open: #7b8798; --s-text: #2e55c4; --s-review: #7b4cc9; --s-proof: #c0612b; --s-ready: #1d7f4a; --s-pub: #3d4757;
+  --f-ui: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #12161d; --panel: #1a2029; --ink: #e5e9f0; --muted: #96a2b4; --line: #2b333f; --soft: #212834;
+  --accent: #86a4f3; --accent-soft: #24304a; --accent-ink: #0e1420;
+  --good: #57c487; --good-bg: #173022; --warn: #e2a64a; --warn-bg: #33270f; --bad: #ef7b70; --bad-bg: #3a1c19;
+  --s-open: #7f8a9b; --s-text: #86a4f3; --s-review: #b393ef; --s-proof: #ee9a69; --s-ready: #57c487; --s-pub: #aab5c4;
+  color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #12161d; --panel: #1a2029; --ink: #e5e9f0; --muted: #96a2b4; --line: #2b333f; --soft: #212834;
+  --accent: #86a4f3; --accent-soft: #24304a; --accent-ink: #0e1420;
+  --good: #57c487; --good-bg: #173022; --warn: #e2a64a; --warn-bg: #33270f; --bad: #ef7b70; --bad-bg: #3a1c19;
+  --s-open: #7f8a9b; --s-text: #86a4f3; --s-review: #b393ef; --s-proof: #ee9a69; --s-ready: #57c487; --s-pub: #aab5c4;
+  color-scheme: dark }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.45 var(--f-ui); margin: 0; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--panel); }
+a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+button { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 7px; padding: 5px 11px; cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button.sm, a.btn.sm { padding: 2px 8px; font-size: 12px; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+a.btn { display: inline-block; border: 1px solid var(--line); border-radius: 7px; padding: 5px 11px; color: var(--ink); background: var(--panel); }
+select, input[type=range] { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 7px; padding: 4px 6px; max-width: 100%; }
+input[type=range] { padding: 0; accent-color: var(--accent); width: 100%; border: 0; }
+.wrap { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); max-width: 1320px; margin: 0 auto; }
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--panel); border-bottom: 1px solid var(--line); }
+header.top .wrap { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.brand { font-weight: 700; letter-spacing: .01em; padding-block: 12px; display: flex; gap: 8px; align-items: baseline; }
+.brand small { font: 500 11px var(--f-mono); color: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
+nav.tabs { display: flex; gap: 2px; flex-wrap: wrap; }
+nav.tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; color: var(--muted); padding: 13px 10px 11px; }
+nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+.scope { margin-left: auto; display: flex; gap: 6px; align-items: center; padding-block: 8px; }
+.health { background: var(--soft); border-bottom: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+.health .wrap { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; padding-block: 6px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; background: var(--s-open); margin-right: 5px; vertical-align: 1px; }
+.dot.ok { background: var(--good); } .dot.busy { background: var(--warn); } .dot.err { background: var(--bad); }
+main.wrap { padding-block: 18px 40px; }
+h1 { font-size: 20px; margin: 0 0 4px; text-wrap: balance; } h2 { font-size: 15px; margin: 26px 0 8px; text-wrap: balance; }
+h3 { font-size: 13px; margin: 0 0 8px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+.lede { color: var(--muted); margin: 0 0 16px; max-width: 75ch; }
+.sub { color: var(--muted); font-size: 12px; }
+.mono, .key { font-family: var(--f-mono); font-size: 12px; }
+.key { white-space: nowrap; font-weight: 500; }
+.kpis { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; min-width: 0; }
+.kpi .l { color: var(--muted); font-size: 12px; }
+.kpi .v { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; margin-top: 2px; }
+.kpi.hot { border-color: var(--accent); background: linear-gradient(var(--accent-soft), var(--panel) 70%); }
+.kpi.bad .v { color: var(--bad); }
+.grid2 { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-width: 0; }
+.tw { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+th { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; background: var(--soft); white-space: nowrap; }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+.st { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; color: var(--panel); white-space: nowrap; }
+.st-Open { background: var(--s-open); } .st-Text { background: var(--s-text); } .st-Review { background: var(--s-review); }
+.st-Proofreading { background: var(--s-proof); } .st-Ready { background: var(--s-ready); } .st-Published { background: var(--s-pub); }
+.tag { display: inline-block; padding: 1px 7px; border-radius: 6px; font-size: 11px; background: var(--soft); border: 1px solid var(--line); margin: 1px 3px 1px 0; white-space: nowrap; }
+.tag.good { background: var(--good-bg); color: var(--good); border-color: transparent; }
+.tag.warn { background: var(--warn-bg); color: var(--warn); border-color: transparent; }
+.tag.bad { background: var(--bad-bg); color: var(--bad); border-color: transparent; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 6px; min-width: 0; }
+.card + .card { margin-top: 8px; }
+.card .title { font-weight: 600; overflow-wrap: anywhere; }
+.todo { border-left: 3px solid var(--accent); background: var(--soft); border-radius: 6px; padding: 8px 10px; font-size: 13px; display: grid; gap: 6px; }
+pre.msg { white-space: pre-wrap; word-break: break-word; margin: 0; font: 12px/1.5 var(--f-mono); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+.note { background: var(--accent-soft); border-radius: 8px; padding: 10px 12px; font-size: 13px; margin: 0 0 16px; max-width: 95ch; }
+.err-box { background: var(--bad-bg); color: var(--ink); border: 1px solid var(--bad); border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; display: grid; gap: 6px; }
+.empty { color: var(--muted); font-size: 13px; padding: 6px 0; }
+.legal { font-size: 12px; color: var(--muted); }
+.list { display: grid; gap: 6px; }
+.li { display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline; font-size: 13px; }
+.li .t { overflow-wrap: anywhere; min-width: 0; }
+.skeleton { color: var(--muted); padding: 30px 0; }
+svg text { fill: var(--muted); font: 10px var(--f-mono); }
+.whatif { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+.sentence { font-size: 15px; margin: 12px 0 0; }
+details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+.toast { position: fixed; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-size: 13px; z-index: 20; }
+@media (prefers-reduced-motion: no-preference) { .kpi, .card { transition: border-color .15s; } }
+</style>
+
+<header class="top"><div class="wrap">
+  <div class="brand">BP Ops <small>Blog pipeline · live from Jira</small></div>
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button role="tab" data-tab="flow" aria-selected="true">Flow</button>
+    <button role="tab" data-tab="review" aria-selected="false">Review</button>
+    <button role="tab" data-tab="load" aria-selected="false">Load</button>
+    <button role="tab" data-tab="publish" aria-selected="false">Publish</button>
+    <button role="tab" data-tab="assign" aria-selected="false">Assign</button>
+  </nav>
+  <div class="scope">
+    <label class="sub" for="scope">Tickets</label>
+    <select id="scope"><option value="mine">Where I'm a manager</option><option value="all">All BP</option></select>
+    <button id="refresh" class="sm">Refresh</button>
+  </div>
+</div></header>
+<div class="health"><div class="wrap" id="health"><span><span class="dot"></span>Connecting to Jira…</span></div></div>
+<main class="wrap" id="main"><div class="skeleton">Loading BP tickets from Jira…</div></main>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+"use strict";
+/* ---------- constants (docs/specs/00-shared-reference.md) ---------- */
+const SERVER = "Atlassian";
+const CLOUD = "657e24cd-f643-4482-aba5-7e848607df28";
+const SITE = "https://newsiteam.atlassian.net";
+const F = { author:"customfield_11710", expert:"customfield_11711", proof:"customfield_11712", parts:"customfield_11208", mgr:"customfield_11709" };
+const FIELDS = ["summary","status","comment","created","updated",F.author,F.expert,F.proof,F.parts,F.mgr];
+const OWNER = "712020:0d312ff6-23a7-4fa4-b5a1-b57be36d9f75";
+const TIM = { id:"70121:f5089ddd-2808-4286-a217-02dd8bda85e9", name:"Tim Jones" };
+const OKSANA = "712020:7cf474f8-6ae6-439f-8d54-f6a1e3143066", KARINA = "712020:3584bb79-f831-407e-a40a-02e8084953d5";
+const YULIIA = { id:"712020:b345726f-fe25-4239-a7dc-7322d7dbc2ae", slack:"U0AHVPJ0QKA" };
+const IGNORED = new Set([OKSANA, YULIIA.id]);
+const IMAGE_BY = new Set([OKSANA, KARINA]);
+const EXPERTS = [
+  { id:"712020:78a486c4-c1e4-4bc0-bba9-4676513ecb28", name:"Carter Lee", cat:"fitness", fee:50 },
+  { id:"5de4fe878389de0cd335416b", name:"Garett Reid", cat:"fitness", fee:50 },
+  { id:"712020:43ac8bef-1645-465e-9909-5bbb7ee20fa5", name:"Angelica Galvan", cat:"nutrition", fee:50 },
+  { id:"712020:87a66480-0c2d-4444-be68-26bb3afbbd60", name:"Maria Eugenia Corrarello", cat:"nutrition", fee:20 }
+];
+const EXPERT_BY = Object.fromEntries(EXPERTS.map(e => [e.id, e]));
+const WRITERS = [
+  { id:"70121:064c601e-cbf1-4550-8d17-8fea2b338118", name:"Zindzy Gracia", niche:"exercise", unit:"word", rate:0.03, slack:"U02A60PF739" },
+  { id:"712020:51b52722-9eb1-4aa8-8b6d-527b045f3913", name:"Eve Chalicha", niche:"exercise", unit:"word", rate:0.035, slack:"U02BABJ64DN" },
+  { id:"712020:4e42fbfd-ec2b-414f-99d4-41dfb6faa417", name:"Jeremy Mukhwana", niche:"both", unit:"word", rate:0.03, slack:"U02ALU6SQSF" },
+  { id:"712020:4e7281a8-604f-46bd-9f0e-61aa6a42030b", name:"Samuel Nderitu Munuhe", niche:"any", unit:"word", rate:0.04, slack:"U02AZB589JM" },
+  { id:"6348b6fe94b0b260830778d6", name:"Eva De Angelis", niche:"nutrition", unit:"word", rate:0.11, noReview:true },
+  { id:"712020:44ae3ce5-c8c9-43b3-b106-63585b9a2edf", name:"Maria Lourdes Rubiolo", niche:"nutrition", unit:"word", rate:0.10, noReview:true },
+  { id:"70121:fb24c986-30fc-4274-b096-e53d17aad7a4", name:"Anoshia Riaz", niche:"any", unit:"word", rate:0.04, slack:"U058J380M40" },
+  { id:"712020:cd6750f8-c67c-425d-a302-5df85069691b", name:"Srijoni Gupta Roy", niche:"any", unit:"word", rate:0.08, slack:"U05RXE73VPX" },
+  { id:"712020:502524c1-2ded-482c-92d0-19f23c66eb0a", name:"Stephanie Wright", niche:"any", unit:"article", rate:200, noReview:true },
+  { id:"712020:49c3c2b9-1390-4df0-a4c9-6461502d6d74", name:"Giulia Ralph", niche:"both", unit:"word", rate:0.12, noReview:true },
+  { id:"612fcdbd9976c30069467dad", name:"Brenda Peralta", niche:"both", unit:"article", rate:100, rateMax:120, noReview:true },
+  { id:"628756b3bd640f0068afa6a9", name:"Nataliia Lutsiv", niche:"any", unit:"word", rate:0.06 },
+  { id:"712020:bff933c8-cc5b-49af-8cd5-adc27df2c921", name:"Clare Kamau", niche:"any", unit:"article", rate:32.5, slack:"U02AE0M1VPY" }
+];
+const WRITER_BY = Object.fromEntries(WRITERS.map(w => [w.id, w]));
+const ACTIVE = ["Text","Review","Proofreading"];
+const STAGES = ["Open","Text","Review","Proofreading","Ready"];
+const FLOW_DAYS = 15;
+const DAY = 864e5;
+const FIT_KW = ["workout","exercise","exercises","yoga","squat","squats","pilates","push up","push-up","pushup","pull up","pull-up","pullup","plank","cardio","abs","stretch","stretches","stretching","walking","walk","running","run","hiit","calisthenics","strength","muscle","muscles","glute","glutes","lunge","lunges","burpee","deadlift","gym","fitness","training","core","dumbbell","kettlebell","jump","steps","posture","mobility","flexibility","somatic","barre","tai chi","treadmill","cycling","swimming","body composition","toning","tone","arm","arms","leg","legs","belly fat","reps","sets","warm up","cool down","swings","endurance","miles"];
+const NUT_KW = ["diet","diets","meal","meals","snack","snacks","drink","drinks","food","foods","recipe","recipes","calorie","calories","protein","carb","carbs","keto","fasting","eat","eating","nutrition","nutrient","vitamin","vitamins","fruit","fruits","vegetable","vegetables","smoothie","smoothies","juice","tea","coffee","sugar","breakfast","lunch","dinner","good for you","healthy fats","fiber","cheese","bread","rice","pasta","pepperoni","egg","eggs","oatmeal","yogurt","supplement","supplements","hydration","water","alcohol","wine","beer","sauce","salad","soup","nuts","chocolate","milk","grocery","menu","dessert","bars","shake","shakes","dieta","calorias","macronutrients","whiskey","banana","bananas","cucumber","carrot","broccoli"];
+const NOTE_RE = /please address/i;
+const DOC_RE = /^https:\/\/docs\.google\.com\/document\//i;
+const LIVE_RE = /^https?:\/\/(www\.)?betterme\.world\//i;
+
+/* ---------- state ---------- */
+const S = {
+  tab: lsGet("bpops.tab") || "flow", scope: lsGet("bpops.scope") || "mine",
+  mcp: null, db: null, user: null, owner: false, canWrite: true,
+  raw: [], me: null, at: null, loading: false, err: null,
+  changelog: {}, clBusy: 0, flow: { inflow: {}, outflow: {}, days: [], busy: false, err: null },
+  excluded: {}, overrides: {}, batches: {}, nudges: {}, sel: new Set(), assignKey: null, ui: { rate: null, inflow: 0 }
+};
+function lsGet(k){ try { return localStorage.getItem(k); } catch { return null; } }
+function lsSet(k, v){ try { localStorage.setItem(k, v); } catch {} }
+
+/* ---------- small helpers ---------- */
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+const last = a => a[a.length - 1];
+const parseT = s => s ? Date.parse(String(s).replace(/([+-]\d\d)(\d\d)$/, "$1:$2")) : 0;
+const shortTitle = t => String(t || "").split(",")[0].trim();
+const firstName = n => { const x = String(n || "").split(/[\s.]+/)[0]; return x ? x[0].toUpperCase() + x.slice(1).toLowerCase() : "there"; };
+const url = key => `${SITE}/browse/${key}`;
+const dmLink = slack => slack ? `https://slack.com/app_redirect?channel=${slack}` : null;
+function ago(t){ if (!t) return "—"; const d = Date.now() - t; if (d < 36e5) return Math.max(1, Math.round(d / 6e4)) + "m ago"; if (d < DAY) return Math.round(d / 36e5) + "h ago"; return Math.floor(d / DAY) + "d ago"; }
+function bizDays(from, to = Date.now()){
+  let ms = 0, t = from;
+  while (t < to) { const d = new Date(t), n = new Date(t); n.setHours(24, 0, 0, 0); const end = Math.min(n.getTime(), to); const wd = d.getDay(); if (wd !== 0 && wd !== 6) ms += end - t; t = end; }
+  return ms / DAY;
+}
+const bdLabel = n => n == null ? "—" : (n = Math.max(0, n), n < 1 ? n.toFixed(1) : Math.floor(n)) + " business day" + (Math.floor(n) === 1 ? "" : "s");
+function ymd(d){ const p = n => String(n).padStart(2, "0"); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; }
+function lastBizDays(n){ const out = []; const d = new Date(); d.setHours(0,0,0,0); while (out.length < n) { if (d.getDay() % 6) out.unshift(new Date(d)); d.setDate(d.getDate() - 1); } return out; }
+function addBiz(n){ const d = new Date(); let left = Math.ceil(n); while (left > 0) { d.setDate(d.getDate() + 1); if (d.getDay() % 6) left--; } return d; }
+const fmtDate = d => d.toLocaleDateString("en-US", { month:"short", day:"numeric" });
+const money = (lo, hi) => { const f = n => "$" + Math.round(n).toLocaleString("en-US"); return Math.round(lo) === Math.round(hi) ? f(lo) : `${f(lo)}–${Math.round(hi).toLocaleString("en-US")}`; };
+function median(xs){ if (!xs.length) return 0; const s = [...xs].sort((a, b) => a - b); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; }
+function pct(xs, p){ if (!xs.length) return null; const s = [...xs].sort((a, b) => a - b); const k = (s.length - 1) * p, lo = Math.floor(k), hi = Math.min(lo + 1, s.length - 1); return s[lo] + (s[hi] - s[lo]) * (k - lo); }
+function fnv(str){ let h = 0x811c9dc5; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(36); }
+function toast(msg){ const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast._t); toast._t = setTimeout(() => t.hidden = true, 3500); }
+async function copy(text, btn){
+  try { await navigator.clipboard.writeText(text); if (btn) { const o = btn.textContent; btn.textContent = "Copied"; setTimeout(() => btn.textContent = o, 1400); } }
+  catch { const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select(); toast("Press Ctrl/Cmd+C to copy"); setTimeout(() => ta.remove(), 8000); }
+}
+
+/* ---------- rules (00 §6) ---------- */
+function categoryOf(title){
+  const t = " " + String(title || "").toLowerCase().replace(/[^a-z0-9\s-]/g, " ").replace(/\s+/g, " ") + " ";
+  const hit = kw => t.includes(" " + kw + " ");
+  const f = FIT_KW.filter(hit).length, n = NUT_KW.filter(hit).length;
+  if (f && !n) return "fitness"; if (n && !f) return "nutrition";
+  return f > n + 1 ? "fitness" : n > f + 1 ? "nutrition" : null;
+}
+function wordCount(title){
+  let m = String(title || "").match(/(\d[\d,]*)\s*[-–]\s*(\d[\d,]*)\s*words?/i);
+  if (m) return { min: +m[1].replace(/,/g, ""), max: +m[2].replace(/,/g, "") };
+  m = String(title || "").match(/(\d[\d,]*)\s*words?\b/i);
+  if (m) { const n = +m[1].replace(/,/g, ""); return { min: n, max: n }; }
+  return null; // "12k" is never read as words
+}
+function priceFor(w, t){
+  let lo, hi;
+  if (w.unit === "article") { lo = w.rate; hi = w.rateMax || w.rate; }
+  else { if (!t.wc) return null; lo = Math.round(t.wc.min * w.rate); hi = Math.round(t.wc.max * w.rate); }
+  if (!w.noReview) { if (t.cat === "fitness") { lo += 50; hi += 50; } else { lo += 20; hi += 50; } }
+  return money(lo, hi);
+}
+function fits(w, cat){ if (!cat || w.niche === "any" || w.niche === "both") return true; return (cat === "fitness" && w.niche === "exercise") || (cat === "nutrition" && w.niche === "nutrition"); }
+function urlsIn(body){
+  const s = String(body || "").replace(/<custom[^>]*>([\s\S]*?)<\/custom>/g, " $1 ");
+  const out = []; for (const m of s.matchAll(/https?:\/\/[^\s<>"'\])|]+/g)) { const u = m[0].replace(/[.,;:!?)]+$/, ""); if (!out.includes(u)) out.push(u); }
+  return out;
+}
+const clean = body => String(body || "").replace(/<custom[^>]*>([\s\S]*?)<\/custom>/g, "$1").replace(/[​‌]/g, "").replace(/\s+/g, " ").trim();
+const person = u => u && u.accountId ? { id: u.accountId, name: u.displayName || "Unknown" } : null;
+const nameOf = (id, fb) => (WRITER_BY[id] && WRITER_BY[id].name) || (EXPERT_BY[id] && EXPERT_BY[id].name) || fb || "someone";
+
+/* ---------- analysis: ported from BP Review Flow (legacy/bp-review-flow.html) ---------- */
+function analyze(issue){
+  const f = issue.fields || {};
+  const writer = person(f[F.author]), expert = person(f[F.expert]), proof = person(f[F.proof]);
+  const parts = (Array.isArray(f[F.parts]) ? f[F.parts] : []).map(person).filter(Boolean);
+  const mgrRaw = f[F.mgr]; const mgrs = (Array.isArray(mgrRaw) ? mgrRaw : mgrRaw ? [mgrRaw] : []).map(person).filter(Boolean);
+  const me = S.me || OWNER;
+  const status = (f.status && f.status.name) || "?";
+  const expIds = new Set(EXPERTS.map(e => e.id)); if (expert) expIds.add(expert.id);
+  const rawC = (f.comment && f.comment.comments) || [];
+  const allC = rawC.map(c => ({ aid: c.author && c.author.accountId, name: (c.author && c.author.displayName) || "?", at: parseT(c.created), body: c.body || "", id: c.id }));
+  const cs = allC.filter(c => !IGNORED.has(c.aid)).map(c => ({
+    ...c, role: c.aid === me ? "me" : writer && c.aid === writer.id ? "writer" : c.aid === TIM.id ? "tim" : expIds.has(c.aid) ? "expert" : "other",
+    text: clean(c.body), link: /https?:\/\//.test(c.body), mentions: [...c.body.matchAll(/data-type="mention"[^>]*>@([^<]+)</g)].map(m => m[1].trim())
+  })).sort((a, b) => a.at - b.at);
+  const people = {}; [writer, expert, proof, ...parts, ...mgrs].filter(Boolean).forEach(p => people[p.name] = p);
+  cs.forEach(c => { if (c.aid) people[c.name] = { id: c.aid, name: c.name }; });
+  const summary = f.summary || "";
+  const T = { key: issue.key, title: summary, status, url: url(issue.key), writer, expert, proof, parts, mine: mgrs.some(m => m.id === me), cs,
+    created: parseT(f.created), updated: parseT(f.updated), actions: [], warnings: [], trigger: null, stage: status, waitingOn: null, since: null,
+    wc: wordCount(summary), type: /,\s*update\b/i.test(summary) ? "update" : "new" };
+  // images, doc and live link (BP Publishing Batches rules) use every comment, including Oksana's and Yuliia's
+  T.images = []; T.doc = null; const lives = [];
+  for (const c of allC.sort((a, b) => a.at - b.at)) for (const u of urlsIn(c.body)) {
+    if (DOC_RE.test(u)) { T.doc = u; continue; }
+    if (/atlassian\.net/i.test(u)) continue;
+    if (c.aid === YULIIA.id) { if (!/google\.com/i.test(u)) lives.push(u); continue; }
+    if (IMAGE_BY.has(c.aid) && !LIVE_RE.test(u)) T.images.push(u);
+  }
+  T.live = last(lives.filter(u => LIVE_RE.test(u))) || null;
+  T.lastActivity = allC.length ? Math.max(...allC.map(c => c.at)) : T.updated;
+  const ov = S.overrides[issue.key] || {};
+  T.category = ov.category || (expert && EXPERT_BY[expert.id] ? EXPERT_BY[expert.id].cat : null) || categoryOf(summary);
+  T.catAuto = !ov.category;
+
+  const linkC = last(cs.filter(c => c.role === "writer" && c.link)) || (!writer ? last(cs.filter(c => c.role === "other" && c.link)) : null);
+  T.linkC = linkC;
+  const afterLink = linkC ? cs.filter(c => c.at > linkC.at) : cs;
+  const expC = afterLink.filter(c => c.role === "expert");
+  const lastExp = last(expC), firstExp = expC[0];
+  const wName = writer ? (WRITER_BY[writer.id] || writer).name : "the writer";
+
+  if (status === "Text") {
+    if (linkC) {
+      let target = null;
+      if (ov.expertId) target = EXPERT_BY[ov.expertId] || null;
+      else if (expert) target = EXPERT_BY[expert.id] || { id: expert.id, name: expert.name };
+      else if (T.category) target = pickExpert(T.category);
+      if (!target) T.warnings.push("Pick a category or expert");
+      if (!writer) T.warnings.push("No Author on ticket");
+      T.planExpert = target;
+      const setAlready = target && expert && expert.id === target.id;
+      const inParts = target && parts.some(p => p.id === target.id);
+      const steps = [];
+      if (target && !setAlready) steps.push(`Set Expert = ${target.name}`);
+      if (target && !inParts) steps.push(`Add ${target.name} to Request participants`);
+      steps.push("Move to Review");
+      T.actions.push({ kind: "assign", label: target ? `Move to Review with ${target.name}` : "Move to Review (choose an expert first)", steps, disabled: !target });
+      T.trigger = linkC; T.stage = "Article link posted";
+    } else {
+      T.stage = "Writing"; T.waitingOn = wName;
+      const cl = S.changelog[issue.key];
+      T.assignedAt = writer && cl ? assignedFrom(cl, writer.id) : null;
+      T.since = T.assignedAt || (last(cs) || {}).at || T.created;
+      if (T.assignedAt && bizDays(T.assignedAt) >= 5 && !cs.some(c => c.role === "me" && c.at > T.assignedAt)) T.writingLate = true;
+    }
+  } else if (status === "Review") {
+    if (lastExp) {
+      const note = cs.find(c => c.role === "me" && c.at > firstExp.at);
+      T.actions.push({ kind: "toProof", label: "Move to Proofreading", steps: ["Move to Proofreading"] });
+      if (note) { T.trigger = note; T.stage = "Note sent, still in Review"; }
+      else {
+        T.actions.push({ kind: "note", label: `Post note tagging ${wName}`, steps: [`Post the note below on the ticket${S.noteMode === "standard" ? "" : " as an internal note"}`],
+          comment: writer ? `@${writer.name} Hi. Please address the comments. Thanks.` : null, disabled: !writer });
+        if (!writer) T.warnings.push("No Author on ticket");
+        if (/\?/.test(lastExp.text)) T.warnings.push("Expert's last comment looks like a question");
+        T.trigger = lastExp; T.stage = "Expert commented";
+      }
+    } else {
+      T.stage = "With expert"; T.waitingOn = expert ? nameOf(expert.id, expert.name) : "expert"; T.since = linkC ? linkC.at : ((last(cs) || {}).at || T.created);
+      if (linkC && (Date.now() - linkC.at) / DAY > 7) {
+        const recentAsk = cs.some(c => c.role === "me" && c.at > linkC.at && (Date.now() - c.at) / DAY < 7);
+        if (!recentAsk) T.expertSilent = true;
+      }
+    }
+  } else if (status === "Proofreading") {
+    const anyExp = cs.filter(c => c.role === "expert"), lastAny = last(anyExp);
+    const note = lastAny ? cs.find(c => c.role === "me" && c.at > lastAny.at) : last(cs.filter(c => c.role === "me" && NOTE_RE.test(c.text)));
+    if (!anyExp.length) T.warnings.push("Ticket is in Proofreading but has no expert comment");
+    const base = note ? note.at : (lastAny ? lastAny.at : 0);
+    const timC = last(cs.filter(c => c.role === "tim" && c.at > base));
+    if (timC) { T.actions.push({ kind: "toReady", label: "Move to Ready", steps: ["Move to Ready"] }); T.trigger = timC; T.stage = "Proofreading done"; }
+    else if (!note) {
+      if (anyExp.length) {
+        T.actions.push({ kind: "note", label: `Post note tagging ${wName}`, steps: ["Post the note below on the ticket"], comment: writer ? `@${writer.name} Hi. Please address the comments. Thanks.` : null, disabled: !writer });
+        if (!writer) T.warnings.push("No Author on ticket");
+        T.trigger = lastAny; T.stage = "Note to writer missing"; T.manualOnly = true;
+      } else { T.stage = "Check manually"; T.waitingOn = "you"; T.since = (last(cs) || {}).at || T.created; }
+    } else if (proof && proof.id === TIM.id) {
+      T.stage = "With proofreader"; T.waitingOn = TIM.name; T.since = (cs.find(c => c.role === "writer" && c.at > note.at) || note).at;
+    } else {
+      const reply = cs.find(c => c.role === "writer" && c.at > note.at);
+      if (reply) { T.actions.push({ kind: "addTim", label: "Add Tim Jones as proofreader", steps: ["Set Proofreader = Tim Jones", "Add Tim Jones to Request participants"] }); T.trigger = reply; T.stage = "Writer addressed comments"; }
+      else { T.stage = "Writer fixing"; T.waitingOn = wName; T.since = note.at; }
+    }
+  }
+  // follow-up facts: the run of my comments at the end of the thread
+  const run = []; for (let i = cs.length - 1; i >= 0 && cs[i].role === "me"; i--) run.unshift(cs[i]);
+  if (run.length) {
+    T.myLast = last(run); T.msgNo = run.length;
+    const tagged = [...run].reverse().flatMap(c => c.mentions).map(n => people[n] || null).filter(Boolean)[0] || null;
+    T.target = tagged || writer;
+    T.targetIsExpert = !!(T.target && (EXPERT_BY[T.target.id] || (expert && T.target.id === expert.id)));
+    T.toWriter = !!(T.target && writer && T.target.id === writer.id);
+    T.bd = bizDays(T.myLast.at);
+  }
+  T.autoSlack = ov.autoSlack !== false;
+  T.canReady = !!linkC && ACTIVE.includes(status);
+  return T;
+}
+function pickExpert(cat){
+  const counts = {}; for (const t of S.all || []) if (t.status === "Review" && t.expert) counts[t.expert.id] = (counts[t.expert.id] || 0) + 1;
+  return EXPERTS.filter(e => e.cat === cat).sort((a, b) => (counts[a.id] || 0) - (counts[b.id] || 0))[0] || null;
+}
+// latest time the current Author was set as Author or added to Request participants (the later of the two)
+function assignedFrom(histories, wid){
+  let authorAt = 0, partsAt = 0;
+  for (const h of histories) { const at = parseT(h.created); for (const it of h.items || []) {
+    if (it.fieldId === F.author && it.to === wid) authorAt = Math.max(authorAt, at);
+    if (it.fieldId === F.parts && String(it.to || "").includes(wid) && !String(it.from || "").includes(wid)) partsAt = Math.max(partsAt, at);
+  } }
+  return Math.max(authorAt, partsAt) || null;
+}
+function enteredReady(histories){
+  let at = 0; for (const h of histories) for (const it of h.items || []) if (it.fieldId === "status" && it.toString === "Ready") at = Math.max(at, parseT(h.created));
+  return at || null;
+}
+function sentMap(){
+  const m = {}; for (const n of Object.values(S.nudges)) if (n.sentAt && n.writerId) { m[n.writerId] = m[n.writerId] || {}; for (const k of n.keys || []) m[n.writerId][k] = Math.max(m[n.writerId][k] || 0, n.sentAt); }
+  return m;
+}
+function derive(){
+  const ts = S.tickets.filter(t => !S.excluded[t.key]);
+  const sent = sentMap();
+  const move = ts.filter(t => t.actions.length);
+  const wait = ts.filter(t => !t.actions.length && ACTIVE.includes(t.status)).sort((a, b) => (a.since || 0) - (b.since || 0));
+  const noReply = ts.filter(t => t.myLast && t.msgNo === 1 && t.bd >= 3);
+  const asks = ts.filter(t => t.myLast && t.msgNo >= 2 && t.toWriter).map(t => {
+    const sAt = (sent[t.writer.id] || {})[t.key]; const after = sAt && sAt > t.myLast.at;
+    const paused = after && bizDays(sAt) < 3, returned = after && bizDays(sAt) >= 3;
+    return { t, wid: t.writer.id, bd: t.bd, sAt, paused, returned, flagged: !paused && (t.bd >= 3 || returned) };
+  });
+  return { ts, move, wait, noReply, follow: asks.filter(a => !a.flagged), flagged: asks.filter(a => a.flagged),
+    silent: ts.filter(t => t.expertSilent), late: ts.filter(t => t.writingLate) };
+}
+function attentionFor(wid, D){
+  const m = new Map(); D.noReply.filter(t => t.writer && t.writer.id === wid && t.toWriter).forEach(t => m.set(t.key, t)); D.flagged.filter(a => a.wid === wid).forEach(a => m.set(a.t.key, a.t));
+  return [...m.values()];
+}
+function nudgeText(wid, tickets){
+  const w = WRITER_BY[wid]; const sent = Object.values(S.nudges).filter(n => n.writerId === wid && n.sentAt);
+  const earliest = Math.min(...tickets.map(t => t.myLast ? t.myLast.at : Date.now()));
+  const again = sent.some(n => n.sentAt > earliest);
+  const lines = tickets.map(t => `• <${t.url}|${t.key} ${shortTitle(t.title)}>`).join("\n");
+  return { again, text: `Hi ${firstName(w ? w.name : (tickets[0].writer || {}).name)}, hope you're doing well! ${again ? "Just checking in again on the edits for these tickets:" : "Just following up on the edits for these tickets:"}\n${lines}\n\nCould you share an update on where they stand when you get a chance? Thank you!` };
+}
+
+/* ---------- Jira reads (Atlassian connector, read-only) ---------- */
+const CACHE = { staleTime: 60000, gcTime: 86400000 };
+async function call(tool, input, opts){ return (await S.mcp.callTool(SERVER, tool, input, { cache: { ...CACHE, ...(opts || {}) } })).payload; }
+async function searchAll(jql, fields, refresh){
+  let out = [], token, me = null, storedAt = null;
+  for (let i = 0; i < 12; i++) {
+    const input = { cloudId: CLOUD, jql, fields, maxResults: 100, responseContentFormat: "markdown" };
+    if (token) input.nextPageToken = token;
+    const res = await S.mcp.callTool(SERVER, "searchJiraIssuesUsingJql", input, { cache: { ...CACHE, refresh: !!refresh } });
+    const p = res.payload || {};
+    if (res.cache && !storedAt) storedAt = res.cache.storedAt;
+    me = me || (p.context && p.context.atlassianAccountId);
+    const nodes = (p.issues && p.issues.nodes) || [];
+    out = out.concat(nodes);
+    const pi = p.issues && p.issues.pageInfo;
+    if (pi && pi.hasNextPage && pi.endCursor) token = pi.endCursor; else break;
+  }
+  return { issues: out, me, storedAt };
+}
+async function load(refresh){
+  if (S.loading || !S.mcp) return;
+  S.loading = true; S.err = null; renderHealth();
+  try {
+    const { issues, me, storedAt } = await searchAll(`project = BP AND status in ("Open","Text","Review","Proofreading","Ready") ORDER BY updated DESC`, FIELDS, refresh);
+    S.raw = issues; S.me = me || OWNER; S.at = storedAt || Date.now();
+    reanalyze();
+    loadChangelogs(refresh); loadFlow(refresh);
+  } catch (e) { S.err = e; }
+  S.loading = false; render();
+}
+function reanalyze(){
+  S.all = S.raw.map(i => ({ status: ((i.fields || {}).status || {}).name, expert: person((i.fields || {})[F.expert]) }));
+  const all = S.raw.map(analyze);
+  S.allTickets = all;
+  S.tickets = S.scope === "mine" ? all.filter(t => t.mine) : all;
+}
+// change history only where it matters: who-was-assigned-when (Writing) and when each Ready ticket entered Ready
+async function loadChangelogs(refresh){
+  const need = S.allTickets.filter(t => (t.status === "Ready") || (t.status === "Text" && t.stage === "Writing" && t.writer)).map(t => t.key).filter(k => !S.changelog[k] || refresh).slice(0, 120);
+  if (!need.length) return;
+  S.clBusy = need.length; renderHealth();
+  let i = 0;
+  const worker = async () => { while (i < need.length) { const key = need[i++];
+    try {
+      const p = await call("getJiraIssue", { cloudId: CLOUD, issueIdOrKey: key, fields: ["summary"], expand: "changelog", responseContentFormat: "markdown" }, { staleTime: 300000, refresh: !!refresh });
+      const nodes = p && p.issues && (Array.isArray(p.issues) ? p.issues : p.issues.nodes);
+      const issue = (nodes && nodes[0]) || p;
+      S.changelog[key] = (issue && issue.changelog && issue.changelog.histories) || [];
+    } catch { S.changelog[key] = S.changelog[key] || null; }
+    S.clBusy--; } };
+  await Promise.all([worker(), worker(), worker(), worker()]);
+  reanalyze(); render();
+}
+// throughput from per-day counts: into Ready (inflow) and into Published (outflow)
+async function loadFlow(refresh){
+  const days = lastBizDays(FLOW_DAYS); S.flow.days = days; S.flow.busy = true; S.flow.err = null; renderHealth();
+  const jobs = [];
+  for (const d of days) { const n = new Date(d); n.setDate(n.getDate() + 1);
+    for (const [k, st] of [["inflow", "Ready"], ["outflow", "Published"]]) jobs.push({ k, day: ymd(d), jql: `project = BP AND status CHANGED TO "${st}" DURING ("${ymd(d)}", "${ymd(n)}")` }); }
+  let i = 0;
+  const worker = async () => { while (i < jobs.length) { const j = jobs[i++];
+    try { const isToday = j.day === ymd(new Date());
+      const p = await call("searchJiraIssuesUsingJql", { cloudId: CLOUD, jql: j.jql, searchResultMode: "count" }, { staleTime: isToday ? 60000 : 300000, refresh: !!refresh && isToday });
+      S.flow[j.k][j.day] = (p.issues && p.issues.totalCount) || 0;
+    } catch (e) { S.flow.err = e; } } };
+  await Promise.all([worker(), worker(), worker()]);
+  S.flow.busy = false; render();
+}
+
+/* ---------- shared state (artifact db) ---------- */
+function subscribeDb(){
+  const sub = (name, key) => S.db.collection(name).onSnapshot(snap => { const m = {}; snap.docs.forEach(d => m[d.id] = d.data()); S[key] = m; if (S.raw.length) { reanalyze(); } render(); }, () => {});
+  sub("exclusions", "excluded"); sub("overrides", "overrides"); sub("batches", "batches"); sub("nudges", "nudges");
+}
+async function dbSet(path, data){
+  if (!S.db) { toast("Saving isn't available in this view"); return false; }
+  try { await S.db.doc(path).set(data); return true; }
+  catch (e) { if (e && e.code === "invalid_argument") { S.canWrite = false; render(); toast("You can view this page but not change its saved data"); } else toast("Couldn't save: " + ((e && e.message) || e)); return false; }
+}
+async function dbDel(path){ if (!S.db) return; try { await S.db.doc(path).delete(); } catch (e) { toast("Couldn't save: " + ((e && e.message) || e)); } }
+
+/* ---------- rendering ---------- */
+const keyLink = t => `<a class="key" href="${esc(t.url || url(t.key))}" target="_blank" rel="noopener">${esc(t.key)}</a>`;
+const stChip = s => `<span class="st st-${esc(s)}">${esc(s)}</span>`;
+function errMsg(e){
+  const code = e && e.code;
+  if (code === "server_not_connected") return "Atlassian isn't connected for you. Add it in claude.ai Settings → Connectors, then press Refresh.";
+  if (code === "needs_reauth") return "Your Atlassian connection has expired. Reconnect it in claude.ai Settings → Connectors, then press Refresh.";
+  if (code === "selection_required") return "You have more than one Atlassian connector. Choose one when claude.ai asks, then press Refresh.";
+  if (code === "not_in_manifest" || code === "approval_required") return "This page needs your permission to read Jira through your Atlassian connector. Press Allow and read Jira.";
+  if (code === "blocked_by_policy") return "Your organization's policy blocks this Jira tool for you.";
+  if (code === "tool_error") return "Jira answered with an error: " + String(e.message || "").slice(0, 300);
+  if (code === "server_unavailable") return "Jira didn't answer in time. Press Refresh to try again.";
+  return "Couldn't read Jira" + (e && e.message ? ": " + String(e.message).slice(0, 200) : "") + ". Press Refresh to try again.";
+}
+function renderHealth(){
+  const h = [];
+  if (!S.mcp) h.push(`<span><span class="dot ${S.mcpChecked ? "err" : "busy"}"></span>${S.mcpChecked ? "Jira connector unavailable in this view" : "Connecting to Jira…"}</span>`);
+  else if (S.loading) h.push(`<span><span class="dot busy"></span>Reading BP tickets…</span>`);
+  else if (S.err) h.push(`<span><span class="dot err"></span>Jira read failed</span>`);
+  else if (S.at) h.push(`<span><span class="dot ok"></span>${S.raw.length} open BP tickets · read ${ago(S.at)}</span>`);
+  if (S.clBusy > 0) h.push(`<span><span class="dot busy"></span>Reading change history (${S.clBusy} left)</span>`);
+  if (S.flow.busy) h.push(`<span><span class="dot busy"></span>Counting daily flow…</span>`); else if (S.flow.err) h.push(`<span><span class="dot err"></span>Some daily counts failed</span>`);
+  h.push(`<span><span class="dot ${S.db ? "ok" : ""}"></span>${S.db ? (S.canWrite ? "Shared notes on" : "Shared notes read-only") : "Shared notes off"}</span>`);
+  h.push(`<span>Read-only: nothing here changes Jira</span>`);
+  $("health").innerHTML = h.join("");
+}
+function render(){
+  renderHealth();
+  document.querySelectorAll("nav.tabs button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.tab === S.tab)));
+  $("scope").value = S.scope;
+  const main = $("main");
+  if (!S.mcp) { main.innerHTML = S.mcpChecked ? `<div class="err-box"><strong>Jira isn't reachable from this view.</strong><span>Open this page in claude.ai while signed in, with the Atlassian connector added in Settings → Connectors.</span></div>` : `<div class="skeleton">Connecting to Jira…</div>`; return; }
+  if (S.err && !S.raw.length) { main.innerHTML = `<div class="err-box"><strong>${esc(errMsg(S.err))}</strong><div class="row"><button class="primary" data-act="allow">Allow and read Jira</button></div></div>`; return; }
+  if (!S.raw.length) { main.innerHTML = `<div class="skeleton">${S.loading ? "Loading BP tickets from Jira…" : "No open BP tickets found."}</div>`; return; }
+  const errTop = S.err ? `<div class="err-box"><span>${esc(errMsg(S.err))} Showing the last data read ${esc(ago(S.at))}.</span></div>` : "";
+  main.innerHTML = errTop + ({ flow: renderFlow, review: renderReview, load: renderLoad, publish: renderPublish, assign: renderAssign }[S.tab])();
+  if (S.tab === "flow") updateWhatIf();
+}
+
+/* ----- Flow (spec 04) ----- */
+function flowStats(){
+  const ready = S.tickets.filter(t => t.status === "Ready");
+  ready.forEach(t => { const cl = S.changelog[t.key]; t.readyAt = cl ? enteredReady(cl) : null; t.readyAge = t.readyAt ? bizDays(t.readyAt) : null; });
+  const days = S.flow.days.map(ymd);
+  const inflow = days.map(d => S.flow.inflow[d]), outflow = days.map(d => S.flow.outflow[d]);
+  const known = outflow.slice(-10).filter(x => x != null);
+  const med = median(known), mean = known.length ? known.reduce((a, b) => a + b, 0) / known.length : 0;
+  const rate = med || mean;
+  const monday = new Date(); monday.setHours(0,0,0,0); monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+  let inW = 0, outW = 0; days.forEach((d, i) => { if (new Date(d + "T00:00") >= monday) { inW += inflow[i] || 0; outW += outflow[i] || 0; } });
+  const ages = ready.map(t => t.readyAge).filter(x => x != null);
+  return { ready, days, inflow, outflow, rate, med, mean, inW, outW, ages, withImg: ready.filter(t => t.images.length).length };
+}
+function renderFlow(){
+  const f = flowStats(); S._flow = f;
+  const wip = {}; STAGES.forEach(s => wip[s] = S.tickets.filter(t => t.status === s).length);
+  const clear = f.rate > 0 ? fmtDate(addBiz(f.ready.length / f.rate)) : "—";
+  const hist = { "0–1": 0, "2–3": 0, "4–5": 0, "6–10": 0, ">10": 0 };
+  f.ages.forEach(a => { hist[a < 2 ? "0–1" : a < 4 ? "2–3" : a < 6 ? "4–5" : a <= 10 ? "6–10" : ">10"]++; });
+  if (S.ui.rate == null && f.rate) S.ui.rate = Math.max(1, Math.round(f.rate));
+  const rows = [...f.ready].sort((a, b) => (b.readyAge || 0) - (a.readyAge || 0)).map(t => `<tr><td>${keyLink(t)}</td><td>${esc(t.title)}</td><td>${t.type}</td>
+    <td class="n">${t.readyAge == null ? "…" : Math.floor(t.readyAge)}</td><td>${t.images.length ? '<span class="tag good">images</span>' : '<span class="tag bad">none</span>'}</td>
+    <td>${batchOf(t.key) ? "Batch " + batchOf(t.key).n : ""}</td></tr>`).join("");
+  return `<h1>Publishing capacity &amp; flow</h1>
+  <p class="lede">Tickets and stages only; nothing here measures a named person. Throughput is counted from Jira day by day for the last ${FLOW_DAYS} business days.</p>
+  <div class="kpis">
+    <div class="kpi hot"><div class="l">Ready backlog</div><div class="v">${f.ready.length}</div><div class="sub">${f.withImg} with images · ${f.ready.length - f.withImg} without</div></div>
+    <div class="kpi"><div class="l">Published per day (10-day ${f.med ? "median" : "average"})</div><div class="v">${S.flow.busy && !f.rate ? "…" : f.rate.toFixed(1)}</div><div class="sub">median ${f.med} · average ${f.mean.toFixed(1)}</div></div>
+    <div class="kpi"><div class="l">Backlog clears at this rate</div><div class="v">${clear}</div><div class="sub">${f.rate > 0 ? Math.ceil(f.ready.length / f.rate) + " business days" : "no publishing in the last 10 days"}</div></div>
+    <div class="kpi"><div class="l">Net flow this week</div><div class="v">${(f.inW - f.outW >= 0 ? "+" : "") + (f.inW - f.outW)}</div><div class="sub">${f.inW} into Ready · ${f.outW} published</div></div>
+  </div>
+  <h2>Work in progress</h2>
+  <div class="row">${STAGES.map(s => `<span class="tag">${stChip(s)} ${wip[s]}</span>`).join("")}</div>
+  <div class="grid2" style="margin-top:14px">
+    <div class="panel"><h3>Into Ready vs published, by business day</h3>${ioChart(f)}</div>
+    <div class="panel"><h3>How long Ready tickets have waited</h3>${histChart(hist)}<p class="sub">p50 ${fmtN(pct(f.ages, .5))} · p90 ${fmtN(pct(f.ages, .9))} · oldest ${fmtN(f.ages.length ? Math.max(...f.ages) : null)} business days</p></div>
+  </div>
+  <div class="panel" style="margin-top:14px"><h3>What if</h3>
+    <div class="whatif">
+      <label for="wRate">Publishing per day: <strong id="wRateV"></strong><input id="wRate" type="range" min="1" max="15" step="1" value="${S.ui.rate || 5}"></label>
+      <label for="wIn">Extra inflow per day: <strong id="wInV"></strong><input id="wIn" type="range" min="0" max="10" step="1" value="${S.ui.inflow}"></label>
+    </div>
+    <div class="kpis" style="margin-top:12px">
+      <div class="kpi"><div class="l">Clears on</div><div class="v" id="wClear">—</div></div>
+      <div class="kpi"><div class="l">Backlog in 2 weeks</div><div class="v" id="w2">—</div></div>
+      <div class="kpi"><div class="l">Backlog in 4 weeks</div><div class="v" id="w4">—</div></div>
+    </div>
+    <p class="sentence" id="wSentence"></p>
+    <div class="row" style="margin-top:8px"><button class="sm" data-act="copy-flow">Copy summary for Slack</button></div>
+  </div>
+  <h2>Ready queue (${f.ready.length})</h2>
+  <div class="tw"><table><thead><tr><th>Key</th><th>Title</th><th>Type</th><th class="n">Days in Ready</th><th>Images</th><th>Batch</th></tr></thead><tbody>${rows || `<tr><td colspan="6" class="empty">Nothing in Ready.</td></tr>`}</tbody></table></div>`;
+}
+const fmtN = n => n == null ? "—" : (Math.round(n * 10) / 10).toString();
+function ioChart(f){
+  const W = 560, H = 190, pl = 26, pb = 34, pt = 10, n = f.days.length;
+  if (!n) return `<p class="empty">Counting…</p>`;
+  const max = Math.max(2, ...f.inflow.map(x => x || 0), ...f.outflow.map(x => x || 0));
+  const bw = (W - pl - 8) / n, y = v => pt + (H - pt - pb) * (1 - v / max);
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Tickets into Ready and published per business day">`;
+  for (let g = 0; g <= max; g += Math.max(1, Math.ceil(max / 4))) s += `<line x1="${pl}" x2="${W - 4}" y1="${y(g)}" y2="${y(g)}" stroke="var(--line)"/><text x="${pl - 6}" y="${y(g) + 3}" text-anchor="end">${g}</text>`;
+  f.days.forEach((d, i) => {
+    const x = pl + i * bw + 3, w = (bw - 8) / 2, a = f.inflow[i], b = f.outflow[i];
+    if (a != null) s += `<rect x="${x}" y="${y(a)}" width="${w}" height="${y(0) - y(a)}" rx="2" fill="var(--s-ready)"><title>${d}: ${a} into Ready</title></rect>`;
+    if (b != null) s += `<rect x="${x + w + 1}" y="${y(b)}" width="${w}" height="${y(0) - y(b)}" rx="2" fill="var(--s-pub)"><title>${d}: ${b} published</title></rect>`;
+    if (i % 2 === (n - 1) % 2) s += `<text x="${x + w}" y="${H - pb + 14}" text-anchor="middle">${d.slice(5).replace("-", "/")}</text>`;
+  });
+  s += `<rect x="${pl}" y="${H - 14}" width="10" height="8" fill="var(--s-ready)"/><text x="${pl + 14}" y="${H - 7}">into Ready</text><rect x="${pl + 90}" y="${H - 14}" width="10" height="8" fill="var(--s-pub)"/><text x="${pl + 104}" y="${H - 7}">published</text></svg>`;
+  return s;
+}
+function histChart(hist){
+  const W = 420, H = 170, pb = 24, pt = 14, keys = Object.keys(hist), max = Math.max(1, ...Object.values(hist)), bw = W / keys.length;
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Ready tickets by business days waited">`;
+  keys.forEach((k, i) => { const v = hist[k], h = (H - pt - pb) * v / max, x = i * bw + 8;
+    s += `<rect x="${x}" y="${H - pb - h}" width="${bw - 16}" height="${Math.max(h, 1)}" rx="3" fill="var(--s-ready)"/><text x="${x + (bw - 16) / 2}" y="${H - pb - h - 4}" text-anchor="middle">${v}</text><text x="${x + (bw - 16) / 2}" y="${H - 8}" text-anchor="middle">${k} d</text>`; });
+  return s + "</svg>";
+}
+function updateWhatIf(){
+  const f = S._flow; if (!f || !$("wRate")) return;
+  const r = +$("wRate").value, inf = +$("wIn").value, net = r - inf, n = f.ready.length;
+  S.ui.rate = r; S.ui.inflow = inf;
+  $("wRateV").textContent = r; $("wInV").textContent = inf;
+  const after = d => Math.max(0, Math.round(n - net * d));
+  $("w2").textContent = after(10); $("w4").textContent = after(20);
+  $("wClear").textContent = net > 0 ? fmtDate(addBiz(n / net)) : "never";
+  const cur = f.rate, clears = x => x - inf > 0 ? "clears on " + fmtDate(addBiz(n / (x - inf))) : "doesn't clear";
+  $("wSentence").textContent = `At the current ${cur.toFixed(1)}/day the backlog of ${n} ${clears(cur)}. At ${r}/day it ${clears(r)}.`;
+}
+function flowSummary(){
+  const f = S._flow, n = f.ready.length;
+  return [`• Ready backlog: ${n} (${f.withImg} with images)`, `• Publishing throughput: ${f.rate.toFixed(1)}/day (10-day ${f.med ? "median" : "average"})`,
+    `• Net flow this week: ${(f.inW - f.outW >= 0 ? "+" : "") + (f.inW - f.outW)}`,
+    `• At ${f.rate.toFixed(1)}/day the backlog of ${n} ${f.rate > 0 ? "clears on " + fmtDate(addBiz(n / f.rate)) : "doesn't clear"}.`,
+    `• Ready without images: ${n - f.withImg}`].join("\n");
+}
+
+/* ----- Review ----- */
+function todoBox(t, a){
+  const steps = a.steps.map(s => `<li>${esc(s)}</li>`).join("");
+  return `<div class="todo"><div><strong>${esc(a.label)}</strong>${a.disabled ? ' <span class="tag warn">needs a decision first</span>' : ""}</div>
+    <ol style="margin:0;padding-left:20px">${steps}</ol>
+    ${a.comment ? `<pre class="msg">${esc(a.comment)}</pre>` : ""}
+    <div class="row">${a.comment ? `<button class="sm" data-act="copy" data-text="${esc(a.comment)}">Copy note</button>` : ""}<a class="btn sm" href="${esc(t.url)}" target="_blank" rel="noopener">Do it in Jira ↗</a></div></div>`;
+}
+function tline(t){ return `<div class="row">${keyLink(t)} ${stChip(t.status)} <span class="title">${esc(t.title)}</span></div>
+  <div class="sub">${t.writer ? "Writer " + esc(nameOf(t.writer.id, t.writer.name)) + " · " : ""}${t.category ? esc(t.category) + (t.catAuto ? " (auto)" : "") : "category unclear"}</div>`; }
+function renderReview(){
+  const D = derive();
+  const counts = [["Your move", D.move.length, 1], ["1st note unanswered", D.noReply.length], ["Follow-up due", D.flagged.length], ["Expert quiet 7+ days", D.silent.length], ["No doc after 5 business days", D.late.length], ["Waiting", D.wait.length]];
+  const moves = D.move.map(t => `<div class="card">${tline(t)}
+    <div class="sub">${esc(t.stage)}${t.trigger ? " · " + esc(nameOf(t.trigger.aid, t.trigger.name)) + " " + ago(t.trigger.at) : ""}</div>
+    ${t.warnings.map(w => `<span class="tag warn">${esc(w)}</span>`).join("")}
+    ${t.trigger ? `<details><summary>Trigger comment</summary><pre class="msg">${esc(t.trigger.text.slice(0, 1200))}</pre></details>` : ""}
+    ${t.actions.map(a => todoBox(t, a)).join("")}
+    ${t.canReady ? `<details><summary>Straight to Ready</summary><div class="todo">In Jira, move ${esc(t.key)} through each remaining stage: ${esc([t.status, ...["Review","Proofreading","Ready"].slice(Math.max(0, ["Text","Review","Proofreading"].indexOf(t.status)))].join(" → "))}. <a href="${esc(t.url)}" target="_blank" rel="noopener">Open ↗</a></div></details>` : ""}
+    <div class="row">${ovControls(t)}<button class="sm" data-act="exclude" data-k="${esc(t.key)}" data-title="${esc(t.title)}" ${S.canWrite && S.db ? "" : "disabled"}>Hide from queue</button></div></div>`).join("");
+  const writers = new Map(); D.noReply.filter(t => t.toWriter).concat(D.flagged.map(a => a.t)).forEach(t => t.writer && writers.set(t.writer.id, t.writer));
+  const drafts = Object.entries(S.nudges).filter(([, n]) => !n.sentAt).sort((a, b) => (b[1].createdAt || 0) - (a[1].createdAt || 0));
+  const draftCards = drafts.map(([id, n]) => { const w = WRITER_BY[n.writerId];
+    return `<div class="card"><div class="row"><strong>To ${esc(w ? w.name : n.writerName || "writer")}</strong><span class="sub">drafted ${ago(n.createdAt)} · ${esc((n.keys || []).join(", "))}</span></div>
+    <pre class="msg">${esc(n.text)}</pre>
+    <div class="row"><button class="sm" data-act="copy" data-text="${esc(n.text)}">Copy</button>${w && w.slack ? `<a class="btn sm" href="${dmLink(w.slack)}" target="_blank" rel="noopener">Open DM ↗</a>` : `<span class="sub">No Slack ID on file for this writer</span>`}
+    <button class="sm primary" data-act="sent" data-id="${esc(id)}">I sent it</button><button class="sm" data-act="discard" data-id="${esc(id)}">Discard</button></div></div>`; }).join("");
+  return `<h1>Review flow</h1>
+  <p class="note">Read-only: each step lists what to do in Jira, with the note to copy. Slack nudges are drafts you send yourself; the page saves each draft once per writer, ticket set and day, so a double click can't make two.</p>
+  <div class="kpis">${counts.map(([l, v, hot]) => `<div class="kpi ${hot ? "hot" : ""}"><div class="l">${l}</div><div class="v">${v}</div></div>`).join("")}</div>
+  <h2>Your move (${D.move.length})</h2>${moves || `<p class="empty">Nothing needs a step right now.</p>`}
+  <h2>Slack nudges to writers</h2>
+  <div class="row">${[...writers.values()].map(w => `<button class="sm" data-act="draft" data-w="${esc(w.id)}" ${S.canWrite && S.db ? "" : "disabled"}>Draft for ${esc(nameOf(w.id, w.name))}</button>`).join("") || `<span class="empty">No writer needs a nudge.</span>`}</div>
+  <div style="margin-top:10px">${draftCards}</div>
+  <div class="grid2" style="margin-top:14px">
+    <div class="panel"><h3>1st note unanswered, 3+ business days (${D.noReply.length})</h3><div class="list">${D.noReply.map(t => `<div class="li">${keyLink(t)}<span class="t">${esc(shortTitle(t.title))}</span><span class="sub">to ${esc(t.target ? nameOf(t.target.id, t.target.name) : "?")} · ${bdLabel(t.bd)}</span></div>`).join("") || `<span class="empty">none</span>`}</div></div>
+    <div class="panel"><h3>Follow-up due, 2nd+ note (${D.flagged.length})</h3><div class="list">${D.flagged.map(a => `<div class="li">${keyLink(a.t)}<span class="t">${esc(shortTitle(a.t.title))}</span><span class="sub">note ${a.t.msgNo} · ${bdLabel(a.bd)}${a.returned ? " · Slacked " + ago(a.sAt) + ", still nothing" : ""}</span></div>`).join("") || `<span class="empty">none</span>`}</div>
+      <h3 style="margin-top:12px">Counting down (${D.follow.length})</h3><div class="list">${D.follow.map(a => `<div class="li">${keyLink(a.t)}<span class="sub">note ${a.t.msgNo} · ${bdLabel(a.bd)}${a.paused ? " · paused after Slack " + ago(a.sAt) : ""}</span></div>`).join("") || `<span class="empty">none</span>`}</div></div>
+    <div class="panel"><h3>Expert quiet 7+ days (${D.silent.length})</h3><div class="list">${D.silent.map(t => `<div class="li">${keyLink(t)}<span class="t">${esc(shortTitle(t.title))}</span><span class="sub">with ${esc(t.waitingOn)} since ${ago(t.since)}</span><button class="sm" data-act="copy" data-text="${esc("@" + t.waitingOn + " Hi. Any news on the ticket?")}">Copy chase</button></div>`).join("") || `<span class="empty">none</span>`}</div></div>
+    <div class="panel"><h3>No document 5+ business days after assignment (${D.late.length})</h3><div class="list">${D.late.map(t => `<div class="li">${keyLink(t)}<span class="t">${esc(shortTitle(t.title))}</span><span class="sub">${esc(t.waitingOn)} · assigned ${ago(t.assignedAt)}</span><button class="sm" data-act="copy" data-text="${esc("@" + (t.writer ? t.writer.name : "") + " Hi. What's the status on this one?")}">Copy status ask</button></div>`).join("") || `<span class="empty">${S.clBusy > 0 ? "Reading assignment history…" : "none"}</span>`}</div></div>
+  </div>
+  <h2>Waiting (${D.wait.length})</h2>
+  <div class="tw"><table><thead><tr><th>Key</th><th>Title</th><th>Stage</th><th>Waiting on</th><th>Since</th></tr></thead><tbody>
+  ${D.wait.map(t => `<tr><td>${keyLink(t)}</td><td>${esc(t.title)}</td><td>${esc(t.stage)}</td><td>${esc(t.waitingOn || "")}</td><td class="sub">${ago(t.since)}</td></tr>`).join("") || `<tr><td colspan="5" class="empty">Nothing waiting.</td></tr>`}</tbody></table></div>
+  ${Object.keys(S.excluded).length ? `<h2>Hidden from the queue</h2><div class="list">${Object.entries(S.excluded).map(([k, v]) => `<div class="li">${keyLink({ key: k })}<span class="t sub">${esc(v.title || "")}</span><button class="sm" data-act="include" data-k="${esc(k)}">Show again</button></div>`).join("")}</div>` : ""}`;
+}
+function ovControls(t){
+  if (!S.db || !S.canWrite || !t.actions.some(a => a.kind === "assign")) return "";
+  const ov = S.overrides[t.key] || {};
+  return `<label class="sub" for="cat-${esc(t.key)}">Category</label><select id="cat-${esc(t.key)}" data-act="ov-cat" data-k="${esc(t.key)}"><option value="">auto</option><option value="fitness" ${ov.category === "fitness" ? "selected" : ""}>fitness</option><option value="nutrition" ${ov.category === "nutrition" ? "selected" : ""}>nutrition</option></select>
+  <label class="sub" for="exp-${esc(t.key)}">Expert</label><select id="exp-${esc(t.key)}" data-act="ov-exp" data-k="${esc(t.key)}"><option value="">auto</option>${EXPERTS.map(e => `<option value="${e.id}" ${ov.expertId === e.id ? "selected" : ""}>${esc(e.name)}</option>`).join("")}</select>`;
+}
+
+/* ----- Load ----- */
+function renderLoad(){
+  const flags = t => [t.writingLate && "no doc after 5 bd", t.expertSilent && "expert quiet 7 d", t.status === "Text" && t.linkC && "drafted, not moved"].filter(Boolean);
+  const roles = [["Writers", t => t.writer, ["Text","Review","Proofreading"]], ["Experts", t => t.expert, ["Review"]], ["Proofreading", t => t.proof, ["Proofreading"]]];
+  return `<h1>Load</h1><p class="lede">Who has which tickets right now. People are listed alphabetically and never ranked; ages and flags are about tickets.</p>` + roles.map(([label, who, sts]) => {
+    const by = new Map();
+    S.tickets.filter(t => sts.includes(t.status) && who(t)).forEach(t => { const p = who(t); const k = p.id; if (!by.has(k)) by.set(k, { name: nameOf(p.id, p.name), ts: [] }); by.get(k).ts.push(t); });
+    const people = [...by.values()].sort((a, b) => a.name.localeCompare(b.name));
+    const rows = people.map(p => p.ts.map((t, i) => `<tr>${i === 0 ? `<td rowspan="${p.ts.length}"><strong>${esc(p.name)}</strong></td><td class="n" rowspan="${p.ts.length}">${p.ts.length}</td>` : ""}
+      <td>${keyLink(t)} <span class="sub">${esc(shortTitle(t.title))}</span></td><td>${stChip(t.status)}</td><td class="sub">${esc(t.stage)}</td><td class="sub">${ago(t.lastActivity)}</td><td>${flags(t).map(f => `<span class="tag warn">${f}</span>`).join("")}</td></tr>`).join("")).join("");
+    return `<h2>${label}</h2><div class="tw"><table><thead><tr><th>Person</th><th class="n">Open</th><th>Ticket</th><th>Status</th><th>Step</th><th>Last activity</th><th>Flags</th></tr></thead><tbody>${rows || `<tr><td colspan="7" class="empty">No open tickets.</td></tr>`}</tbody></table></div>`;
+  }).join("");
+}
+
+/* ----- Publish ----- */
+const openBatches = () => Object.entries(S.batches).filter(([, b]) => !b.archived).sort((a, b) => (b[1].n || 0) - (a[1].n || 0));
+const batchOf = key => { const e = openBatches().find(([, b]) => (b.keys || []).includes(key)); return e ? e[1] : null; };
+const batchText = keys => "Hi. Here are articles for publishing:\n" + keys.map(k => { const t = S.allTickets.find(x => x.key === k); return `• <${url(k)}|${k}${t ? " " + t.title : ""}>`; }).join("\n");
+function renderPublish(){
+  const ready = S.tickets.filter(t => t.status === "Ready").sort((a, b) => (b.images.length > 0) - (a.images.length > 0) || a.key.localeCompare(b.key));
+  const withImg = ready.filter(t => t.images.length);
+  const live = ready.filter(t => t.live);
+  const rows = ready.map(t => { const b = batchOf(t.key);
+    return `<tr><td>${b ? "" : `<input type="checkbox" data-act="sel" data-k="${esc(t.key)}" ${S.sel.has(t.key) ? "checked" : ""} aria-label="Select ${esc(t.key)}">`}</td><td>${keyLink(t)}</td><td>${esc(t.title)}</td>
+    <td>${t.images.length ? t.images.map((u, i) => `<a class="tag good" href="${esc(u)}" target="_blank" rel="noopener">image ${i + 1}</a>`).join("") : '<span class="tag bad">none</span>'}</td>
+    <td>${t.doc ? `<a href="${esc(t.doc)}" target="_blank" rel="noopener">doc ↗</a>` : ""}</td><td>${b ? "Batch " + b.n : ""}</td></tr>`; }).join("");
+  const batches = openBatches().map(([id, b]) => { const text = batchText(b.keys || []);
+    return `<div class="card"><div class="row"><strong>Batch ${b.n}</strong><span class="sub">created ${ago(b.createdAt)}</span>${b.sentAt ? `<span class="tag good">sent ${ago(b.sentAt)}</span>` : ""}</div>
+    <div class="list">${(b.keys || []).map(k => { const t = S.allTickets.find(x => x.key === k); return `<div class="li">${keyLink({ key: k })}${t ? stChip(t.status) + `<span class="t">${esc(t.title)}</span>` : '<span class="sub">left the open queue (published?)</span>'}</div>`; }).join("")}</div>
+    <pre class="msg">${esc(text)}</pre>
+    <div class="row"><button class="sm" data-act="copy" data-text="${esc(text)}">Copy message</button><a class="btn sm" href="${dmLink(YULIIA.slack)}" target="_blank" rel="noopener">Open DM with Yuliia ↗</a>
+    ${b.sentAt ? "" : `<button class="sm primary" data-act="batch-sent" data-id="${esc(id)}">I sent it</button>`}<button class="sm" data-act="batch-archive" data-id="${esc(id)}">Archive</button></div>
+    <p class="sub">In Jira, add Yuliia Koreniuk to Request participants on each ticket.</p></div>`; }).join("");
+  return `<h1>Publish</h1>
+  <div class="kpis"><div class="kpi hot"><div class="l">Ready</div><div class="v">${ready.length}</div></div><div class="kpi"><div class="l">With images</div><div class="v">${withImg.length}</div></div>
+    <div class="kpi ${ready.length - withImg.length ? "bad" : ""}"><div class="l">Ready without images</div><div class="v">${ready.length - withImg.length}</div></div><div class="kpi"><div class="l">Live link posted</div><div class="v">${live.length}</div></div></div>
+  <h2>Ready queue</h2>
+  <div class="tw"><table><thead><tr><th></th><th>Key</th><th>Title</th><th>Images</th><th>Doc</th><th>Batch</th></tr></thead><tbody>${rows || `<tr><td colspan="6" class="empty">Nothing in Ready.</td></tr>`}</tbody></table></div>
+  <div class="row" style="margin-top:10px"><button class="primary" data-act="batch-new" ${S.canWrite && S.db ? "" : "disabled"}>Create batch from selected (${S.sel.size})</button><button data-act="batch-suggest" ${S.canWrite && S.db ? "" : "disabled"}>Create batch of 4, oldest with images</button></div>
+  <h2>Batches</h2>${batches || `<p class="empty">No open batches.</p>`}
+  <h2>Live link posted, still Ready (${live.length})</h2>
+  <div class="list">${live.map(t => `<div class="li">${keyLink(t)}<span class="t">${esc(t.title)}</span><a href="${esc(t.live)}" target="_blank" rel="noopener">live page ↗</a><a class="btn sm" href="${esc(t.url)}" target="_blank" rel="noopener">Move to Published in Jira ↗</a></div>`).join("") || `<span class="empty">none</span>`}</div>`;
+}
+
+/* ----- Assign ----- */
+function renderAssign(){
+  const open = S.allTickets.filter(t => t.status === "Open").sort((a, b) => a.created - b.created);
+  const sel = open.find(t => t.key === S.assignKey) || null;
+  const load = {}; S.allTickets.forEach(t => { if (t.writer && t.status === "Text") load[t.writer.id] = (load[t.writer.id] || 0) + 1; });
+  const cat = sel ? (S.overrides[sel.key] || {}).category || categoryOf(sel.title) : null;
+  const ws = WRITERS.map(w => ({ w, fit: fits(w, cat), n: load[w.id] || 0 })).sort((a, b) => (b.fit - a.fit) || (a.n - b.n) || a.w.name.localeCompare(b.w.name));
+  const rateLabel = w => w.unit === "article" ? `$${w.rate}${w.rateMax ? "–" + w.rateMax : ""}/article` : `$${w.rate}/word`;
+  const rows = ws.map(({ w, fit, n }) => `<tr><td>${esc(w.name)}${fit ? "" : ' <span class="tag warn">outside niche</span>'}${w.noReview ? ' <span class="tag">no expert review</span>' : ""}</td><td>${esc(w.niche)}</td><td class="n">${n}</td>
+    ${S.owner ? `<td class="mono">${rateLabel(w)}</td><td class="n">${sel ? (priceFor(w, { wc: sel.wc, cat }) || "—") : ""}</td>` : ""}
+    <td>${sel ? `<button class="sm" data-act="assign-copy" data-w="${esc(w.id)}">Assign steps</button>` : ""}</td></tr>`).join("");
+  return `<h1>Assign</h1><p class="lede">Pick an Open ticket. Writers whose topic fits come first, then the ones with the fewest tickets in Text.${S.owner ? " Prices are word count × rate (or flat fee) plus the expert estimate: fitness +$50, nutrition +$20–50." : ""}</p>
+  <div class="grid2"><div><h2>Open queue (${open.length})</h2><div class="tw"><table><thead><tr><th>Key</th><th>Title</th><th>Topic</th><th class="n">Words</th><th>Age</th></tr></thead><tbody>
+  ${open.map(t => `<tr style="${sel && sel.key === t.key ? "background:var(--accent-soft)" : ""}"><td>${keyLink(t)}</td><td><a href="#" data-act="pick" data-k="${esc(t.key)}">${esc(t.title)}</a></td><td><span class="tag">${esc(categoryOf(t.title) || "unclear")}</span>${t.type === "update" ? '<span class="tag">update</span>' : ""}</td><td class="n">${t.wc ? t.wc.min + (t.wc.max !== t.wc.min ? "–" + t.wc.max : "") : '<span class="sub">unpriced</span>'}</td><td class="sub">${ago(t.created)}</td></tr>`).join("") || `<tr><td colspan="5" class="empty">The Open queue is empty.</td></tr>`}</tbody></table></div></div>
+  <div><h2>Writers${sel ? " for " + esc(sel.key) : ""}</h2><div class="tw"><table><thead><tr><th>Writer</th><th>Niche</th><th class="n">In Text</th>${S.owner ? "<th>Rate</th><th class=\"n\">Price</th>" : ""}<th></th></tr></thead><tbody>${rows}</tbody></table></div>
+  <div id="assignOut" style="margin-top:10px"></div></div></div>`;
+}
+
+/* ---------- events ---------- */
+document.addEventListener("click", async e => {
+  const tab = e.target.closest("nav.tabs button"); if (tab) { S.tab = tab.dataset.tab; lsSet("bpops.tab", S.tab); render(); window.scrollTo(0, 0); return; }
+  const el = e.target.closest("[data-act]"); if (!el || el.tagName === "SELECT" || el.type === "checkbox") return;
+  const act = el.dataset.act;
+  if (act === "pick") { e.preventDefault(); S.assignKey = el.dataset.k; render(); return; }
+  if (act === "copy") return copy(el.dataset.text, el);
+  if (act === "copy-flow") return copy(flowSummary(), el);
+  if (act === "allow") { S.err = null; return load(true); }
+  if (act === "assign-copy") {
+    const w = WRITER_BY[el.dataset.w], t = S.allTickets.find(x => x.key === S.assignKey); if (!w || !t) return;
+    const steps = [`Set Author = ${w.name}`, `Add ${w.name} to Request participants`, "Move to Text"];
+    $("assignOut").innerHTML = `<div class="todo"><strong>${esc(t.key)} → ${esc(w.name)}</strong><ol style="margin:0;padding-left:20px">${steps.map(s => `<li>${esc(s)}</li>`).join("")}</ol><div class="row"><a class="btn sm" href="${esc(t.url)}" target="_blank" rel="noopener">Do it in Jira ↗</a></div></div>`;
+    return;
+  }
+  if (act === "exclude") { await dbSet("exclusions/" + el.dataset.k, { title: el.dataset.title, at: Date.now() }); return; }
+  if (act === "include") { await dbDel("exclusions/" + el.dataset.k); return; }
+  if (act === "draft") {
+    const D = derive(); const wid = el.dataset.w; const ts = attentionFor(wid, D); if (!ts.length) return toast("Nothing to follow up for this writer");
+    const { again, text } = nudgeText(wid, ts); const keys = ts.map(t => t.key).sort(); const day = ymd(new Date());
+    const id = "n-" + day + "-" + fnv([wid, keys.join(","), day, again ? "repeat" : "first"].join("|"));
+    if (S.nudges[id]) return toast("This exact message was already drafted today");
+    const w = WRITER_BY[wid] || {}; if (await dbSet("nudges/" + id, { writerId: wid, writerName: w.name || nameOf(wid), keys, text, template: again ? "repeat" : "first", createdAt: Date.now() })) toast("Draft saved");
+    return;
+  }
+  if (act === "sent") { const n = S.nudges[el.dataset.id]; if (n && !n.sentAt) await dbSet("nudges/" + el.dataset.id, { ...n, sentAt: Date.now() }); return; }
+  if (act === "discard") { await dbDel("nudges/" + el.dataset.id); return; }
+  if (act === "batch-new" || act === "batch-suggest") {
+    let keys = [...S.sel];
+    if (act === "batch-suggest") keys = S.tickets.filter(t => t.status === "Ready" && t.images.length && !batchOf(t.key)).sort((a, b) => a.key.localeCompare(b.key)).slice(0, 4).map(t => t.key);
+    if (!keys.length) return toast(act === "batch-new" ? "Select at least one ticket" : "No Ready tickets with images outside a batch");
+    const n = Math.max(0, ...Object.values(S.batches).map(b => b.n || 0)) + 1;
+    if (await dbSet("batches/b" + Date.now(), { n, keys, createdAt: Date.now(), archived: false })) { S.sel.clear(); toast(`Batch ${n} created`); }
+    return;
+  }
+  if (act === "batch-sent") { const b = S.batches[el.dataset.id]; if (b && !b.sentAt) await dbSet("batches/" + el.dataset.id, { ...b, sentAt: Date.now() }); return; }
+  if (act === "batch-archive") { const b = S.batches[el.dataset.id]; if (b) await dbSet("batches/" + el.dataset.id, { ...b, archived: true }); return; }
+});
+document.addEventListener("change", async e => {
+  const el = e.target;
+  if (el.id === "scope") { S.scope = el.value; lsSet("bpops.scope", S.scope); reanalyze(); render(); return; }
+  if (el.dataset.act === "sel") { el.checked ? S.sel.add(el.dataset.k) : S.sel.delete(el.dataset.k); render(); return; }
+  if (el.dataset.act === "ov-cat" || el.dataset.act === "ov-exp") {
+    const k = el.dataset.k, cur = { ...(S.overrides[k] || {}) };
+    if (el.dataset.act === "ov-cat") cur.category = el.value || null; else cur.expertId = el.value || null;
+    if (!cur.category && !cur.expertId && cur.autoSlack == null) await dbDel("overrides/" + k); else await dbSet("overrides/" + k, cur);
+  }
+});
+document.addEventListener("input", e => { if (e.target.id === "wRate" || e.target.id === "wIn") updateWhatIf(); });
+$("refresh").addEventListener("click", () => { S.err = null; load(true); });
+
+/* ---------- boot ---------- */
+render();
+(async () => {
+  const [mcp, db, user] = await Promise.all([
+    window.claude ? window.claude.use("mcp").catch(() => null) : null,
+    window.claude ? window.claude.use("db").catch(() => null) : null,
+    window.claude ? window.claude.use("user").catch(() => null) : null
+  ]);
+  S.mcp = mcp; S.db = db; S.user = user; S.mcpChecked = true;
+  S.owner = user ? !!(await Promise.resolve(user.isOwner()).catch(() => false)) : false;
+  if (user && user.can) { const w = await Promise.resolve(user.can("data.write")).catch(() => null); if (w === false) S.canWrite = false; }
+  if (db) subscribeDb();
+  render();
+  if (mcp) load(false);
+})();
+setInterval(() => { if (!document.hidden && S.at) renderHealth(); }, 60000);
+</script>
