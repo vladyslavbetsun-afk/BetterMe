@@ -1,0 +1,569 @@
+<style>
+.bt { display: flex; flex-direction: column; gap: var(--cds-gap-xl); font-family: var(--font-anthropic-sans); max-width: 82rem; margin-inline: auto; }
+.bt-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--cds-gap-md); }
+.bt-head > div { min-width: 0; }
+.bt-title { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); margin: 0; text-wrap: balance; }
+.bt-take { color: var(--color-fg-muted); margin: var(--cds-gap-xs) 0 0; max-width: 72ch; }
+.bt-take b { color: var(--color-fg); }
+.bt-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cds-gap-sm); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+.bt-controls label { display: inline-flex; align-items: center; gap: var(--cds-gap-xs); }
+.bt-controls input, .bt-search { font: inherit; color: var(--color-fg); background: var(--color-bg); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-xs) var(--cds-pad-sm); }
+.bt-btn { font: inherit; font-size: var(--cds-font-size-caption); color: var(--color-fg); background: var(--color-bg); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-xs) var(--cds-pad-sm); cursor: pointer; }
+.bt-btn:hover { border-color: var(--color-fg-muted); }
+.bt-seg { display: inline-flex; border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); overflow: hidden; }
+.bt-seg button { font: inherit; font-size: var(--cds-font-size-caption); border: 0; background: var(--color-bg); color: var(--color-fg-muted); padding: var(--cds-pad-xs) var(--cds-pad-sm); cursor: pointer; }
+.bt-seg button[aria-pressed="true"] { background: var(--color-fg); color: var(--color-bg); }
+.bt-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: var(--cds-gap-md); }
+.bt-tile, .bt-card { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-lg); min-width: 0; }
+.bt-tile .l { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+.bt-tile .n { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); font-variant-numeric: tabular-nums; line-height: 1.2; margin-top: var(--cds-gap-xs); min-height: 1.2em; }
+.bt-tile .s { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); margin-top: var(--cds-gap-xs); font-variant-numeric: tabular-nums; min-height: 1.4em; }
+.bt-up { color: var(--color-ok); }
+.bt-down { color: var(--color-bad); }
+.bt-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr)); gap: var(--cds-gap-md); }
+.bt-card h2 { font-size: var(--cds-font-size-heading); font-weight: var(--cds-font-weight-medium); margin: 0; text-wrap: balance; }
+.bt-note { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); margin: var(--cds-gap-xs) 0 var(--cds-gap-md); }
+.bt-chart { position: relative; min-height: 15rem; }
+.bt-chart svg { display: block; overflow: visible; }
+.bt-chart text { fill: var(--color-fg-muted); font-size: var(--cds-font-size-caption); font-family: var(--font-anthropic-sans); }
+.bt-chart .lbl { fill: var(--color-fg); }
+.bt-legend { display: flex; gap: var(--cds-gap-md); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); margin-bottom: var(--cds-gap-sm); }
+.bt-legend i { display: inline-block; width: 0.625rem; height: 0.625rem; border-radius: 2px; margin-right: var(--cds-gap-xs); vertical-align: -1px; }
+.bt-tip { position: absolute; pointer-events: none; background: var(--cds-surface-popover); border: 1px solid var(--cds-border); border-radius: var(--cds-radius); box-shadow: var(--cds-shadow-popover); padding: var(--cds-pad-xs) var(--cds-pad-sm); font-size: var(--cds-font-size-caption); white-space: nowrap; z-index: 2; }
+.bt-tip .d { color: var(--cds-text-secondary); }
+.bt-tablebar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--cds-gap-sm); margin-bottom: var(--cds-gap-sm); }
+.bt-search { min-width: 0; width: min(100%, 18rem); }
+.bt-tablewrap { max-height: 40rem; overflow: auto; border-top: 1px solid var(--color-border-line); }
+.bt-table { width: 100%; border-collapse: collapse; font-size: var(--cds-font-size-caption); font-variant-numeric: tabular-nums; }
+.bt-table th { position: sticky; top: 0; background: var(--color-panel); text-align: left; font-weight: var(--cds-font-weight-medium); padding: 0; border-bottom: 1px solid var(--color-border-line); z-index: 1; }
+.bt-table th button { font: inherit; color: var(--color-fg-muted); background: none; border: 0; padding: var(--cds-pad-sm); cursor: pointer; text-align: inherit; width: 100%; white-space: nowrap; }
+.bt-table th[aria-sort] button { color: var(--color-fg); }
+.bt-table td { padding: var(--cds-pad-sm); border-bottom: 1px solid var(--color-border-line); vertical-align: top; }
+.bt-table .num { text-align: right; }
+.bt-table th.num button { text-align: right; }
+.bt-table td.t { min-width: 12rem; }
+.bt-table td.t a { color: var(--color-fg); text-decoration: none; }
+.bt-table td.t a:hover { text-decoration: underline; }
+.bt-table td a.k { color: var(--color-fg-muted); }
+.bt-pill { display: inline-block; padding: 0 var(--cds-pad-xs); border-radius: 999px; border: 1px solid var(--color-border-line); color: var(--color-fg-muted); white-space: nowrap; }
+.bt-pill.new { color: var(--color-ok); }
+.bt-muted { color: var(--color-fg-muted); }
+.bt-add ol { margin: 0; padding-left: 1.25rem; display: flex; flex-direction: column; gap: var(--cds-gap-sm); max-width: 72ch; }
+.bt-add code { font-size: 0.95em; background: var(--color-bg); border: 1px solid var(--color-border-line); border-radius: 4px; padding: 0 4px; }
+.bt-add a { color: inherit; }
+.bt-missing { margin-top: var(--cds-gap-md); font-size: var(--cds-font-size-caption); }
+.bt-missing ul { margin: var(--cds-gap-xs) 0 0; padding-left: 1.25rem; }
+.bt-fail { display: flex; align-items: center; justify-content: center; gap: var(--cds-gap-xs); color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); min-height: inherit; padding: var(--cds-pad-md); }
+.bt-fail::before { content: ""; width: 0.375rem; height: 0.375rem; border-radius: 50%; background: var(--color-bad); }
+[data-dash-source-state=empty] { color: transparent; }
+[data-dash-source-state=refreshing] { opacity: .5; transition: opacity var(--cds-dur-slow); }
+@media (max-width: 760px) { .bt-table .hide-n { display: none; } }
+</style>
+
+<div class="bt">
+  <header class="bt-head" id="top">
+    <div>
+      <h1 class="bt-title">Blog article tracker</h1>
+      <p class="bt-take" id="takeaway">
+        <b class="dash-skeleton" data-source="totals" data-field="ranking" data-row="0">—</b> of
+        <b class="dash-skeleton" data-source="totals" data-field="articles" data-row="0">—</b> articles published or updated since Aug 17, 2026 rank in Ahrefs, with an estimated
+        <b class="dash-skeleton" data-source="totals" data-field="traffic" data-row="0">—</b> organic visits a month
+        (<span class="dash-skeleton" data-source="totals" data-field="traffic_change" data-row="0">—</span> vs <span class="bt-cmp-label">the comparison date</span>).
+      </p>
+    </div>
+    <div class="bt-controls">
+      <label>Compare with <input class="bt-compare" type="date" min="2024-01-01" max="2099-12-31" aria-label="Comparison date"></label>
+      <button class="bt-btn bt-reset" type="button">Reset</button>
+    </div>
+  </header>
+
+  <section class="bt-tiles" id="summary" aria-label="Summary">
+    <div class="bt-tile">
+      <div class="l">Articles tracked</div>
+      <div class="n dash-skeleton" data-source="totals" data-field="articles" data-row="0">—</div>
+      <div class="s"><span class="dash-skeleton" data-source="totals" data-field="new_articles" data-row="0">—</span> new · <span class="dash-skeleton" data-source="totals" data-field="updates" data-row="0">—</span> updates</div>
+    </div>
+    <div class="bt-tile">
+      <div class="l">Ranking in Ahrefs</div>
+      <div class="n dash-skeleton" data-source="totals" data-field="ranking" data-row="0">—</div>
+      <div class="s"><span class="dash-skeleton" data-source="totals" data-field="not_ranking" data-row="0">—</span> not found yet</div>
+    </div>
+    <div class="bt-tile">
+      <div class="l">Est. organic visits / month</div>
+      <div class="n dash-skeleton" data-source="totals" data-field="traffic" data-row="0">—</div>
+      <div class="s"><span class="dash-skeleton" data-source="totals" data-field="traffic_change" data-row="0">—</span> vs <span class="bt-cmp-label">the comparison date</span></div>
+    </div>
+    <div class="bt-tile">
+      <div class="l">Top keyword in top 10</div>
+      <div class="n dash-skeleton" data-source="totals" data-field="top10" data-row="0">—</div>
+      <div class="s"><span class="dash-skeleton" data-source="totals" data-field="top3" data-row="0">—</span> in top 3</div>
+    </div>
+  </section>
+
+  <section class="bt-grid">
+    <div class="bt-card" id="cadence">
+      <h2>Articles going live each week</h2>
+      <p class="bt-note">Counted by the date the live link was posted in Jira. Weeks start on Monday.</p>
+      <div class="bt-legend"><span><i class="sw0"></i>New</span><span><i class="sw1"></i>Update</span></div>
+      <div class="bt-chart bt-weekly" data-source="weekly"></div>
+    </div>
+    <div class="bt-card" id="movers">
+      <h2>Biggest traffic changes</h2>
+      <p class="bt-note">Estimated monthly organic visits, change vs <span class="bt-cmp-label">the comparison date</span>. Top 10 by size of change.</p>
+      <div class="bt-chart bt-movers" data-source="perf"></div>
+    </div>
+  </section>
+
+  <section class="bt-card" id="articles">
+    <h2>Every tracked article</h2>
+    <p class="bt-note">Ahrefs estimates for the latest day with data, compared with <span class="bt-cmp-label">the comparison date</span>. "Before" is the top keyword's position on that date.</p>
+    <div class="bt-tablebar">
+      <div class="bt-seg" role="group" aria-label="Article type">
+        <button type="button" data-type="all">All</button>
+        <button type="button" data-type="New">New</button>
+        <button type="button" data-type="Update">Updates</button>
+      </div>
+      <input class="bt-search" id="bt-search" type="search" placeholder="Search title, keyword, ticket" aria-label="Search articles">
+    </div>
+    <div class="bt-tablewrap">
+      <table class="bt-table" data-source="perf" data-row-key="key">
+        <thead><tr>
+          <th data-field="title"><button type="button" data-sort="title">Article</button></th>
+          <th data-field="key" class="hide-n"><button type="button" data-sort="key">Ticket</button></th>
+          <th data-field="type"><button type="button" data-sort="type">Type</button></th>
+          <th data-field="link_posted" class="hide-n"><button type="button" data-sort="link_posted">Live since</button></th>
+          <th data-field="traffic" class="num"><button type="button" data-sort="traffic">Visits/mo</button></th>
+          <th data-field="traffic_change" class="num"><button type="button" data-sort="traffic_change">Change</button></th>
+          <th data-field="keywords" class="num hide-n"><button type="button" data-sort="keywords">Keywords</button></th>
+          <th data-field="top_keyword" class="hide-n"><button type="button" data-sort="top_keyword">Top keyword</button></th>
+          <th data-field="position" class="num"><button type="button" data-sort="position">Position</button></th>
+          <th data-field="position_prev" class="num hide-n"><button type="button" data-sort="position_prev">Before</button></th>
+        </tr></thead>
+        <tbody class="bt-tbody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="bt-card bt-add" id="add">
+    <h2>Adding an article to the tracker</h2>
+    <p class="bt-note">The list comes from Jira project BP, so there is nothing to edit here.</p>
+    <ol>
+      <li>New articles and updates join automatically when their BP ticket moves to <b>Published</b> and the publisher posts the live betterme.world/articles link as a comment.</li>
+      <li>To track any other article, add the label <code>perf-track</code> to its BP ticket. The ticket needs a comment that holds only the live link. It shows up the next time this page loads.</li>
+      <li>To stop tracking a labelled article, remove the label.</li>
+    </ol>
+    <div class="bt-missing" data-source="missing" hidden>
+      <b>Labelled but no live link found:</b>
+      <ul class="bt-missing-list"></ul>
+    </div>
+  </section>
+
+  <section class="bt-card" id="method">
+    <h2>Where these numbers come from</h2>
+    <p class="bt-note" style="margin-bottom:0">The article list is read live from Jira. Traffic, keywords and positions are Ahrefs Site Explorer estimates for the whole world, not Google Search Console clicks: the Search Console data connected to the Ahrefs Betterme project stops on Aug 3, 2026. Once Search Console syncs again, real clicks and impressions can be added here. Each page load uses roughly 26 Ahrefs API units per ranking article.</p>
+  </section>
+</div>
+
+<script>
+(() => {
+  const ART = 'https://betterme.world/articles/';
+  window.btNone = JSON.stringify({ field: 'url', is: ['eq', ART + '__none__/'] });
+  const iso = d3.utcFormat('%Y-%m-%d');
+  window.btDefaults = () => dash.setParams({ date: iso(d3.utcDay.offset(d3.utcDay.floor(new Date()), -1)) });
+  window.btDefaults();
+})();
+
+dash.loader('jira_articles', {
+  description: 'Reads every page of the Jira search and makes one row per ticket. The live URL and its date come from the latest comment that holds only a betterme.world/articles link.',
+  fn: async ({ answer, call, args }) => {
+    const parse = (a) => {
+      let p = a;
+      if (p && Array.isArray(p.content)) p = p.content.map((c) => c.text || '').join('');
+      if (typeof p === 'string') {
+        const s = p.indexOf('{');
+        let depth = 0, inStr = false, esc = false, end = -1;
+        for (let i = s; i >= 0 && i < p.length; i++) {
+          const ch = p[i];
+          if (inStr) { if (esc) esc = false; else if (ch === '\\') esc = true; else if (ch === '"') inStr = false; continue; }
+          if (ch === '"') inStr = true; else if (ch === '{') depth++; else if (ch === '}' && --depth === 0) { end = i; break; }
+        }
+        if (s < 0 || end < 0) throw new Error(String(p).slice(0, 300));
+        p = JSON.parse(p.slice(s, end + 1));
+      }
+      if (!p || !p.issues) throw new Error('Jira answered without issues. Keys: ' + Object.keys(p || {}).join(', '));
+      return p;
+    };
+    let page = parse(answer);
+    const nodes = [...(page.issues.nodes || [])];
+    for (let i = 0; i < 10 && page.issues.pageInfo && page.issues.pageInfo.hasNextPage; i++) {
+      page = parse(await call('searchJiraIssuesUsingJql', { ...args, nextPageToken: page.issues.pageInfo.endCursor }));
+      nodes.push(...(page.issues.nodes || []));
+    }
+    const cut = !!(page.issues.pageInfo && page.issues.pageInfo.hasNextPage);
+    const linkRe = /https?:\/\/(?:www\.)?betterme\.world\/articles\/[^\s)\]<>"'|*]+/g;
+    const rows = nodes.map((node) => {
+      const f = node.fields || {};
+      let url = null, posted = null;
+      for (const c of (f.comment && f.comment.comments) || []) {
+        const body = String(c.body || '');
+        const found = body.match(linkRe);
+        if (!found) continue;
+        const rest = body.replace(linkRe, '').replace(/<[^>]+>/g, '').replace(/[\s[\]()]/g, '');
+        if (rest.length > 4) continue;
+        let u = found[found.length - 1].split(/[?#]/)[0].replace(/[.,;]+$/, '').replace('://www.', '://');
+        if (!u.endsWith('/')) u += '/';
+        url = u;
+        posted = String(c.created || '').slice(0, 10);
+      }
+      const summary = String(f.summary || '');
+      return {
+        key: node.key,
+        summary,
+        title: summary.split(',')[0].trim(),
+        type: /\bupdate\b/i.test(summary) ? 'Update' : 'New',
+        url,
+        link_posted: posted,
+        labeled: (f.labels || []).includes('perf-track'),
+        author: (f.customfield_11710 && f.customfield_11710.displayName) || null,
+      };
+    });
+    return { rows, cut };
+  },
+});
+
+dash.loader('ahrefs_pages', {
+  description: "Ahrefs lists the matching pages under `pages`; each page becomes a row.",
+  fn: ({ answer }) => {
+    let p = answer;
+    if (p && Array.isArray(p.content)) p = p.content.map((c) => c.text || '').join('');
+    if (typeof p === 'string') {
+      const s = p.indexOf('{');
+      let depth = 0, inStr = false, esc = false, end = -1;
+      for (let i = s; i >= 0 && i < p.length; i++) {
+        const ch = p[i];
+        if (inStr) { if (esc) esc = false; else if (ch === '\\') esc = true; else if (ch === '"') inStr = false; continue; }
+        if (ch === '"') inStr = true; else if (ch === '{') depth++; else if (ch === '}' && --depth === 0) { end = i; break; }
+      }
+      if (s < 0 || end < 0) throw new Error(String(p).slice(0, 300));
+      p = JSON.parse(p.slice(s, end + 1));
+    }
+    if (p && p.error) throw new Error(String(p.error));
+    if (!p || !Array.isArray(p.pages)) throw new Error('Ahrefs answered without pages. Keys: ' + Object.keys(p || {}).join(', '));
+    const columns = ['url', 'sum_traffic', 'sum_traffic_prev', 'keywords', 'keywords_prev', 'top_keyword', 'top_keyword_best_position', 'top_keyword_best_position_prev'];
+    return { columns, rows: p.pages.map((r) => Object.fromEntries(columns.map((c) => [c, r[c] ?? null]))) };
+  },
+});
+
+dash.calc('tracked', {
+  title: 'Tracked articles',
+  description: 'Tickets whose live link was posted on or after Aug 17, 2026, plus labelled perf-track tickets that have a live link; one row per URL, keeping the latest link.',
+  inputs: ['jira_articles'],
+  fn: (jira_articles) => {
+    const byUrl = new Map();
+    for (const a of jira_articles) {
+      if (!a.url || !(a.labeled || (a.link_posted && a.link_posted >= '2026-08-17'))) continue;
+      const seen = byUrl.get(a.url);
+      if (!seen || a.link_posted > seen.link_posted) byUrl.set(a.url, a);
+    }
+    return [...byUrl.values()];
+  },
+});
+
+dash.calc('missing', {
+  title: 'Labelled without a live link',
+  description: 'Tickets labelled perf-track that have no comment holding only a live article link.',
+  inputs: ['jira_articles'],
+  fn: (jira_articles) => jira_articles.filter((a) => a.labeled && !a.url).map((a) => ({ key: a.key, summary: a.summary })),
+});
+
+dash.calc('perf', {
+  title: 'Performance by article',
+  description: 'Each tracked article joined to its Ahrefs row by URL. Change is visits now minus visits on the comparison date; an article Ahrefs has not found has no figures.',
+  inputs: ['tracked', 'ahrefs_pages'],
+  fn: (tracked, ahrefs_pages) => {
+    const byUrl = new Map(ahrefs_pages.map((p) => [p.url, p]));
+    return tracked.map((a) => {
+      const p = byUrl.get(a.url);
+      return {
+        key: a.key, title: a.title, type: a.type, url: a.url, link_posted: a.link_posted, author: a.author,
+        ranking: !!p,
+        traffic: p ? (p.sum_traffic ?? 0) : null,
+        traffic_prev: p ? p.sum_traffic_prev : null,
+        traffic_change: p ? (p.sum_traffic ?? 0) - (p.sum_traffic_prev ?? 0) : null,
+        keywords: p ? p.keywords : null,
+        keywords_prev: p ? p.keywords_prev : null,
+        top_keyword: p ? p.top_keyword : null,
+        position: p ? p.top_keyword_best_position : null,
+        position_prev: p ? p.top_keyword_best_position_prev : null,
+      };
+    });
+  },
+});
+
+dash.calc('totals', {
+  title: 'Totals',
+  description: 'Counts of tracked articles, and visits summed over the articles Ahrefs finds.',
+  inputs: ['perf'],
+  fn: (perf) => {
+    const r = perf.filter((p) => p.ranking);
+    const traffic = r.reduce((s, p) => s + (p.traffic || 0), 0);
+    const prev = r.reduce((s, p) => s + (p.traffic_prev || 0), 0);
+    return [{
+      articles: perf.length,
+      new_articles: perf.filter((p) => p.type === 'New').length,
+      updates: perf.filter((p) => p.type === 'Update').length,
+      ranking: r.length,
+      not_ranking: perf.length - r.length,
+      traffic,
+      traffic_prev: prev,
+      traffic_change: traffic - prev,
+      top10: r.filter((p) => p.position != null && p.position <= 10).length,
+      top3: r.filter((p) => p.position != null && p.position <= 3).length,
+    }];
+  },
+});
+
+dash.calc('weekly', {
+  title: 'Articles live per week',
+  description: 'Tracked articles counted by the Monday-starting week their live link was posted, split into new and updated.',
+  inputs: ['tracked'],
+  fn: (tracked) => {
+    const weeks = new Map();
+    for (const a of tracked) {
+      const d = new Date(a.link_posted + 'T00:00:00Z');
+      d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+      const week = d.toISOString().slice(0, 10);
+      const row = weeks.get(week) || { week, new_articles: 0, updates: 0 };
+      if (a.type === 'New') row.new_articles++; else row.updates++;
+      weeks.set(week, row);
+    }
+    return [...weeks.values()].sort((a, b) => (a.week < b.week ? -1 : 1));
+  },
+});
+
+(() => {
+  const root = document.querySelector('.bt');
+  const fmt = d3.format(',');
+  const signed = (v) => (v > 0 ? '+' : v < 0 ? '−' : '±') + fmt(Math.abs(v));
+  const day = d3.utcFormat('%b %-d');
+  const dayY = d3.utcFormat('%b %-d, %Y');
+  const parseDay = (s) => new Date(s + 'T00:00:00Z');
+  const compare = root.querySelector('.bt-compare');
+  const search = root.querySelector('#bt-search');
+  const tbody = root.querySelector('.bt-tbody');
+  let typeFilter = 'all';
+  let sortKey = 'traffic', sortDir = -1;
+  let entered = false;
+
+  root.querySelector('.sw0').style.background = dash.colors[0];
+  root.querySelector('.sw1').style.background = dash.colors[1];
+
+  // comparison date filter
+  const showCompare = () => { compare.value = dash.params().compare ?? ''; };
+  compare.addEventListener('change', () => {
+    if (compare.value && compare.validity.valid) dash.setParams({ compare: compare.value });
+  });
+  compare.addEventListener('blur', showCompare);
+  root.querySelector('.bt-reset').addEventListener('click', () => {
+    dash.resetParams(); window.btDefaults(); typeFilter = 'all'; search.value = ''; drawTable();
+  });
+
+  // type filter and search act on rows already loaded
+  root.querySelectorAll('.bt-seg button').forEach((b) => b.addEventListener('click', () => { typeFilter = b.dataset.type; drawTable(); }));
+  search.addEventListener('input', () => drawTable());
+  root.querySelectorAll('.bt-table th button').forEach((b) => b.addEventListener('click', () => {
+    const k = b.dataset.sort;
+    if (sortKey === k) sortDir = -sortDir; else { sortKey = k; sortDir = ['title', 'key', 'type', 'top_keyword', 'position', 'position_prev'].includes(k) ? 1 : -1; }
+    drawTable();
+  }));
+
+  const fail = (el) => { el.replaceChildren(); const d = document.createElement('div'); d.className = 'bt-fail'; d.textContent = 'Failed to load'; el.appendChild(d); };
+  const bad = (s) => s === 'error' || s === 'connect' || s === 'declined' || s === 'missing';
+  const ahrefsWaiting = () => (dash.params().where ?? window.btNone) === window.btNone;
+
+  function fillMarks() {
+    const t = dash.data('totals');
+    root.querySelectorAll('[data-source="totals"]').forEach((el) => {
+      if (t.status === 'ok' && !ahrefsWaiting()) {
+        const v = t.data[0][el.dataset.field];
+        el.classList.remove('dash-skeleton', 'bt-up', 'bt-down');
+        if (el.dataset.field === 'traffic_change') { el.textContent = signed(v); if (v) el.classList.add(v > 0 ? 'bt-up' : 'bt-down'); }
+        else el.textContent = fmt(v);
+      } else if (bad(t.status)) { el.classList.remove('dash-skeleton'); el.textContent = '—'; }
+      else el.classList.add('dash-skeleton');
+    });
+    const c = dash.params().compare;
+    root.querySelectorAll('.bt-cmp-label').forEach((el) => { el.textContent = c ? dayY(parseDay(c)) : 'the comparison date'; });
+  }
+
+  function drawTable() {
+    root.querySelectorAll('.bt-seg button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.type === typeFilter)));
+    root.querySelectorAll('.bt-table th').forEach((th) => {
+      const k = th.querySelector('button').dataset.sort;
+      if (k === sortKey) th.setAttribute('aria-sort', sortDir > 0 ? 'ascending' : 'descending'); else th.removeAttribute('aria-sort');
+    });
+    const d = dash.data('perf');
+    tbody.replaceChildren();
+    if (d.status !== 'ok') {
+      const tr = tbody.insertRow(); const td = tr.insertCell(); td.colSpan = 10;
+      if (bad(d.status)) fail(td); else { td.className = 'dash-skeleton'; td.textContent = '—'; }
+      return;
+    }
+    const q = search.value.trim().toLowerCase();
+    const rows = d.data
+      .filter((r) => typeFilter === 'all' || r.type === typeFilter)
+      .filter((r) => !q || [r.title, r.key, r.top_keyword, r.url].some((v) => v && String(v).toLowerCase().includes(q)))
+      .sort((a, b) => {
+        const x = a[sortKey], y = b[sortKey];
+        if (x == null && y == null) return 0;
+        if (x == null) return 1;
+        if (y == null) return -1;
+        return (typeof x === 'number' ? x - y : String(x).localeCompare(String(y))) * sortDir;
+      });
+    const waiting = ahrefsWaiting();
+    for (const r of rows) {
+      const tr = tbody.insertRow();
+      tr.dataset.key = r.key;
+      const cell = (cls) => { const td = tr.insertCell(); if (cls) td.className = cls; return td; };
+      const a = document.createElement('a'); a.href = r.url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = r.title.charAt(0).toUpperCase() + r.title.slice(1);
+      cell('t').appendChild(a);
+      const k = document.createElement('a'); k.className = 'k'; k.href = 'https://newsiteam.atlassian.net/browse/' + r.key; k.target = '_blank'; k.rel = 'noopener'; k.textContent = r.key;
+      cell('hide-n').appendChild(k);
+      const pill = document.createElement('span'); pill.className = 'bt-pill' + (r.type === 'New' ? ' new' : ''); pill.textContent = r.type;
+      cell().appendChild(pill);
+      cell('hide-n').textContent = r.link_posted ? dayY(parseDay(r.link_posted)) : '—';
+      if (waiting) {
+        for (const cls of ['num', 'num', 'num hide-n', 'hide-n', 'num', 'num hide-n']) { const td = cell(cls); td.textContent = '—'; td.classList.add('dash-skeleton'); }
+        continue;
+      }
+      if (!r.ranking) {
+        const td = cell('bt-muted'); td.colSpan = 6; td.textContent = 'Not found in Ahrefs yet';
+        continue;
+      }
+      cell('num').textContent = fmt(r.traffic);
+      const ch = cell('num'); ch.textContent = signed(r.traffic_change); if (r.traffic_change) ch.classList.add(r.traffic_change > 0 ? 'bt-up' : 'bt-down');
+      cell('num hide-n').textContent = r.keywords == null ? '—' : fmt(r.keywords);
+      cell('hide-n').textContent = r.top_keyword ?? '—';
+      const pos = cell('num'); pos.textContent = r.position ?? '—';
+      if (r.position != null && r.position_prev != null && r.position !== r.position_prev) pos.classList.add(r.position < r.position_prev ? 'bt-up' : 'bt-down');
+      cell('num hide-n').textContent = r.position_prev ?? '—';
+    }
+    if (!rows.length) { const tr = tbody.insertRow(); const td = tr.insertCell(); td.colSpan = 10; td.className = 'bt-muted'; td.textContent = 'No articles match.'; }
+  }
+
+  function tooltip(box) {
+    let tip = box.querySelector('.bt-tip');
+    if (!tip) { tip = document.createElement('div'); tip.className = 'bt-tip'; tip.hidden = true; box.appendChild(tip); }
+    return {
+      show(event, head, lines) {
+        tip.replaceChildren();
+        const h = document.createElement('div'); h.className = 'd'; h.textContent = head; tip.appendChild(h);
+        for (const l of lines) { const div = document.createElement('div'); div.textContent = l; tip.appendChild(div); }
+        tip.hidden = false;
+        const [x, y] = d3.pointer(event, box);
+        const w = tip.offsetWidth;
+        tip.style.left = Math.max(0, Math.min(box.clientWidth - w, x + 12)) + 'px';
+        tip.style.top = Math.max(0, y - tip.offsetHeight - 8) + 'px';
+      },
+      hide() { tip.hidden = true; },
+    };
+  }
+
+  function drawWeekly() {
+    const box = root.querySelector('.bt-weekly');
+    const d = dash.data('weekly');
+    box.querySelectorAll('svg, .bt-fail').forEach((n) => n.remove());
+    if (d.status !== 'ok') { if (bad(d.status)) { box.classList.remove('dash-skeleton'); fail(box); } else box.classList.add('dash-skeleton'); return; }
+    box.classList.remove('dash-skeleton');
+    const rows = d.data;
+    const W = Math.max(280, box.clientWidth), H = 240;
+    const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('role', 'img').attr('aria-label', 'Articles going live per week');
+    const maxY = d3.max(rows, (r) => r.new_articles + r.updates) || 1;
+    const y = d3.scaleLinear([0, maxY], [H - 24, 8]).nice();
+    const yt = y.ticks(Math.min(5, y.domain()[1]));
+    const probe = svg.append('text').text(fmt(y.domain()[1]));
+    const left = probe.node().getComputedTextLength() + 10; probe.remove();
+    const x = d3.scaleBand(rows.map((r) => r.week), [left, W - 4]).padding(0.25);
+    svg.append('g').selectAll('line').data(yt).join('line').attr('x1', left).attr('x2', W - 4).attr('y1', (v) => y(v)).attr('y2', (v) => y(v)).attr('stroke', 'var(--cds-chart-grid)');
+    svg.append('g').selectAll('text').data(yt).join('text').attr('x', left - 6).attr('y', (v) => y(v)).attr('dy', '0.32em').attr('text-anchor', 'end').text(fmt);
+    const every = Math.max(1, Math.ceil(rows.length / Math.floor((W - left) / 56)));
+    svg.append('g').selectAll('text').data(rows.filter((r, i) => i % every === 0)).join('text')
+      .attr('x', (r) => x(r.week) + x.bandwidth() / 2).attr('y', H - 6).attr('text-anchor', 'middle').text((r) => day(parseDay(r.week)));
+    const bw = Math.min(32, x.bandwidth()), off = (x.bandwidth() - bw) / 2;
+    const tip = tooltip(box);
+    const g = svg.append('g').selectAll('g').data(rows).join('g');
+    g.append('rect').attr('x', (r) => x(r.week) + off).attr('width', bw).attr('y', (r) => y(r.updates)).attr('height', (r) => y(0) - y(r.updates)).attr('fill', dash.colors[1]);
+    g.append('rect').attr('x', (r) => x(r.week) + off).attr('width', bw).attr('y', (r) => y(r.updates + r.new_articles)).attr('height', (r) => y(r.updates) - y(r.updates + r.new_articles)).attr('fill', dash.colors[0]);
+    g.append('rect').attr('x', (r) => x(r.week)).attr('width', x.bandwidth()).attr('y', 0).attr('height', H - 24).attr('fill', 'transparent')
+      .on('mousemove', (event, r) => tip.show(event, 'Week of ' + dayY(parseDay(r.week)), [`New: ${fmt(r.new_articles)}`, `Update: ${fmt(r.updates)}`]))
+      .on('mouseleave', () => tip.hide());
+  }
+
+  function drawMovers() {
+    const box = root.querySelector('.bt-movers');
+    const d = dash.data('perf');
+    box.querySelectorAll('svg, .bt-fail, .bt-empty').forEach((n) => n.remove());
+    if (d.status !== 'ok' || ahrefsWaiting()) { if (bad(d.status)) { box.classList.remove('dash-skeleton'); fail(box); } else box.classList.add('dash-skeleton'); return; }
+    box.classList.remove('dash-skeleton');
+    const rows = d.data.filter((r) => r.ranking && r.traffic_change).sort((a, b) => Math.abs(b.traffic_change) - Math.abs(a.traffic_change)).slice(0, 10);
+    if (!rows.length) { const p = document.createElement('p'); p.className = 'bt-note bt-empty'; p.textContent = 'No tracked article changed traffic since the comparison date.'; box.appendChild(p); return; }
+    const W = Math.max(280, box.clientWidth), rowH = 24, H = rows.length * rowH + 8;
+    const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('role', 'img').attr('aria-label', 'Biggest traffic changes');
+    const name = (r) => { const t = r.title.charAt(0).toUpperCase() + r.title.slice(1); return t.length > 34 ? t.slice(0, 33) + '…' : t; };
+    const labels = svg.append('g').selectAll('text').data(rows).join('text').attr('class', 'lbl').attr('x', 0).attr('y', (r, i) => i * rowH + rowH / 2).attr('dy', '0.32em').text(name);
+    let labelW = d3.max(labels.nodes(), (n) => n.getComputedTextLength()) + 12;
+    if (labelW > W * 0.48) { labelW = W * 0.48; }
+    const probe = svg.append('text').text(signed(-d3.max(rows, (r) => Math.abs(r.traffic_change))));
+    const valW = probe.node().getComputedTextLength() + 8; probe.remove();
+    const m = d3.max(rows, (r) => Math.abs(r.traffic_change));
+    const x = d3.scaleLinear([-m, m], [labelW + valW, W - valW]);
+    svg.append('line').attr('x1', x(0)).attr('x2', x(0)).attr('y1', 0).attr('y2', H - 8).attr('stroke', 'var(--cds-chart-axis)');
+    const tip = tooltip(box);
+    const g = svg.append('g').selectAll('g').data(rows).join('g');
+    g.append('rect').attr('x', (r) => Math.min(x(0), x(r.traffic_change))).attr('width', (r) => Math.max(1, Math.abs(x(r.traffic_change) - x(0))))
+      .attr('y', (r, i) => i * rowH + 4).attr('height', rowH - 8).attr('rx', 4)
+      .attr('fill', (r) => (r.traffic_change > 0 ? dash.colors[0] : 'var(--cds-chart-status-critical)'))
+      .on('mousemove', (event, r) => tip.show(event, r.title, [`Visits/mo now: ${fmt(r.traffic)}`, `Before: ${fmt(r.traffic_prev ?? 0)}`, `Change: ${signed(r.traffic_change)}`]))
+      .on('mouseleave', () => tip.hide());
+    g.append('text').attr('y', (r, i) => i * rowH + rowH / 2).attr('dy', '0.32em')
+      .attr('x', (r) => (r.traffic_change > 0 ? x(r.traffic_change) + 4 : x(r.traffic_change) - 4))
+      .attr('text-anchor', (r) => (r.traffic_change > 0 ? 'start' : 'end')).text((r) => signed(r.traffic_change));
+  }
+
+  function drawMissing() {
+    const box = root.querySelector('.bt-missing');
+    const d = dash.data('missing');
+    const list = box.querySelector('.bt-missing-list');
+    list.replaceChildren();
+    box.hidden = !(d.status === 'ok' && d.data.length);
+    if (box.hidden) return;
+    for (const r of d.data) {
+      const li = document.createElement('li');
+      const a = document.createElement('a'); a.href = 'https://newsiteam.atlassian.net/browse/' + r.key; a.target = '_blank'; a.rel = 'noopener'; a.textContent = r.key;
+      li.append(a, ' ' + r.summary);
+      list.appendChild(li);
+    }
+  }
+
+  dash.onData(() => {
+    // point the Ahrefs query at exactly the tracked URLs
+    const t = dash.data('tracked');
+    if (t.status === 'ok') {
+      const urls = [...new Set(t.data.map((a) => a.url))].sort();
+      const where = urls.length ? JSON.stringify({ or: urls.map((u) => ({ field: 'url', is: ['eq', u] })) }) : window.btNone;
+      if ((dash.params().where ?? window.btNone) !== where) dash.setParams({ where });
+    }
+    if (compare !== document.activeElement) showCompare();
+    fillMarks();
+    drawTable();
+    drawWeekly();
+    drawMovers();
+    drawMissing();
+    if (!entered && dash.data('perf').status === 'ok') {
+      entered = true;
+      const named = location.hash && document.getElementById(location.hash.slice(1));
+      if (named) named.scrollIntoView();
+    }
+  });
+})();
+</script>
