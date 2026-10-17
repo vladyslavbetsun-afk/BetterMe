@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Admin{% endblock %}
+{% block content %}
+<h1>Admin</h1>
+<div class="row"><a class="btn" href="/admin/roster">Roster &amp; rates</a><a class="btn" href="/admin/log">Action log</a><a class="btn" href="/admin/import-report">Import report</a><a class="btn" href="/selftest">Self-test</a></div>
+<div class="grid2" style="margin-top:14px">
+<div class="panel"><h3>Settings</h3>
+  <form method="post" action="/admin/settings">
+    {% for f in flag_names %}<div><label><input type="checkbox" name="{{ f }}" {{ 'checked' if settings.get(f) }}> {{ f }}</label></div>{% endfor %}
+    <p class="sub">All writes start off. Turn on <code>jira_writes_enabled</code> only after the platform admin approves a Jira write path. Disable the Cowork task "BP Review Flow automation" (trig_013mqoB1FWCjhUuqNra6VXuC) <strong>before</strong> enabling <code>review_automation_enabled</code> with the dry run off.</p>
+    <label>Holidays (one date per line)<br><textarea name="holidays" rows="4">{{ (settings.get('holidays') or [])|join('\n') }}</textarea></label>
+    <label>Publishing batch size <input type="number" name="batch_size" value="{{ settings.get('publish.batch_size', 4) }}" min="1" max="20" style="width:5em"></label>
+    <div><button class="primary">Save</button></div>
+  </form>
+  <details><summary class="sub">All settings</summary><pre class="msg">{{ settings|tojson(indent=1) }}</pre></details>
+</div>
+<div class="panel" id="jobs"><h3>Jobs</h3>
+  <table><tr><th>Job</th><th>Status</th><th>Last success</th><th></th></tr>
+  {% for j in jobs %}<tr><td>{{ j.label }}<div class="sub">{{ j.name }}</div></td>
+    <td><span class="chip {{ j.colour }}"><span class="dot"></span>{{ j.not_configured or j.last_status or 'never run' }}</span></td>
+    <td>{{ j.last_ok|when }}</td>
+    <td><form method="post" action="/admin/jobs/{{ j.name }}/run"><button class="sm">Run now</button></form></td></tr>{% endfor %}</table>
+</div>
+</div>
+<h2>Recent runs</h2>
+<div class="tablewrap"><table><tr><th>Job</th><th>Started</th><th>Finished</th><th>Status</th><th class="num">Rows</th><th>Error</th></tr>
+{% for r in runs %}<tr><td>{{ r.job }}</td><td>{{ r.started_at|when }}</td><td>{{ r.finished_at|when }}</td><td>{{ r.status }}</td><td class="num">{{ r.rows if r.rows is not none else '' }}</td><td class="sub"><details><summary>{{ (r.error or '')[:80] }}</summary><pre class="msg">{{ r.error or '' }}</pre></details></td></tr>{% endfor %}
+</table></div>
+{% endblock %}

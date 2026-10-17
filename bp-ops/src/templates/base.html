@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}BP Ops{% endblock %} · BP Ops</title>
+<link rel="stylesheet" href="/static/app.css">
+{% block head %}{% endblock %}
+</head>
+<body>
+<header class="top">
+  <div class="brand">BP Ops</div>
+  <nav class="main">
+    {% for label, href in nav %}<a href="{{ href }}" class="{{ 'on' if path.startswith(href) else '' }}">{{ label }}</a>{% endfor %}
+  </nav>
+  <div class="me">{{ user.name or user.email }} · {{ user.role }}</div>
+</header>
+{% if health %}
+<div class="strip" aria-label="Data health">
+  {% for j in health %}
+  <span class="chip {{ j.colour }}" title="{{ j.not_configured or (j.error or '')[:300] or ('last success ' ~ (j.last_ok|when)) }}"><span class="dot"></span>{{ j.label }}{% if j.not_configured %} · not configured{% elif j.last_ok %} · {{ j.last_ok|ago }}{% else %} · never{% endif %}</span>
+  {% endfor %}
+  {% for k, v in flags.items() %}{% if v %}<span class="chip flag-on">{{ k.replace('_', ' ') }}</span>{% endif %}{% endfor %}
+</div>
+{% endif %}
+<main>
+{% if flash %}<div class="flash" role="status">{{ flash }}</div>{% endif %}
+{% block content %}{% endblock %}
+</main>
+<script>
+// copy buttons: <button data-copy="#id">
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-copy]"); if (!b) return;
+  const el = document.querySelector(b.dataset.copy); if (!el) return;
+  navigator.clipboard.writeText(el.value !== undefined ? el.value : el.innerText).then(() => {
+    const t = b.textContent; b.textContent = "Copied"; setTimeout(() => b.textContent = t, 1500);
+  });
+});
+// confirm on forms with data-confirm
+document.addEventListener("submit", e => {
+  const f = e.target; if (f.dataset.confirm && !confirm(f.dataset.confirm)) e.preventDefault();
+});
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

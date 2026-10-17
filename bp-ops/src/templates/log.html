@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% from "_macros.html" import key %}
+{% block title %}Log{% endblock %}
+{% block content %}
+<h1>Action log</h1>
+<form class="row"><input name="q" value="{{ q }}" placeholder="Filter: ticket key, kind, text…"><button class="sm">Filter</button></form>
+<h2>Actions</h2>
+<div class="tablewrap"><table><tr><th>#</th><th>When</th><th>Kind</th><th>Ticket</th><th>What</th><th>State</th><th>By</th><th>Error</th></tr>
+{% for a in actions %}<tr><td>{{ a.id }}</td><td class="nowrap">{{ a.created_at|when }}</td><td>{{ a.kind }}</td><td>{{ key(a.jira_key) if a.jira_key }}</td><td>{{ a.payload.description or '' }}</td><td>{{ a.state }}</td><td class="sub">{{ a.proposed_by }}{% if a.confirmed_by %} → {{ a.confirmed_by }}{% endif %}</td><td class="sub">{{ (a.error or '')[:200] }}</td></tr>{% endfor %}
+</table></div>
+<h2>Messages</h2>
+<div class="tablewrap"><table><tr><th>#</th><th>Created</th><th>Template</th><th>To</th><th>Tickets</th><th>State</th><th>Body</th></tr>
+{% for m in msgs %}<tr><td>{{ m.id }}</td><td class="nowrap">{{ m.created_at|when }}</td><td>{{ m.template }}</td><td class="key">{{ m.recipient }}</td><td>{{ m.ticket_keys|join(', ') }}</td><td>{{ m.state }}{% if m.sent_at %}<div class="sub">{{ m.sent_at|when }}</div>{% endif %}</td><td><details><summary class="sub">{{ m.body[:60] }}</summary><pre class="msg">{{ m.body }}</pre></details></td></tr>{% endfor %}
+</table></div>
+<h2>Audit</h2>
+<div class="tablewrap"><table><tr><th>When</th><th>Who</th><th>Action</th><th>Target</th><th>Detail</th></tr>
+{% for l in audit %}<tr><td class="nowrap">{{ l.at|when }}</td><td>{{ l.actor }}</td><td>{{ l.action }}</td><td>{{ l.target or '' }}</td><td class="sub">{{ l.detail|tojson }}</td></tr>{% endfor %}
+</table></div>
+{% endblock %}

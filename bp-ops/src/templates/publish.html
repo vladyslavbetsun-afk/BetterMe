@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% from "_macros.html" import key, st, action_box, message_box %}
+{% block title %}Publish{% endblock %}
+{% block content %}
+<h1>Publish</h1>
+<div class="tabs"><a href="?scope=mine" class="{{ 'on' if scope == 'mine' }}">My tickets</a><a href="?scope=all" class="{{ 'on' if scope == 'all' }}">All BP</a></div>
+{% set with_img = q|selectattr('images')|list %}
+<div class="grid">
+  <div class="kpi hot"><div class="l">Ready</div><div class="v">{{ q|length }}</div></div>
+  <div class="kpi"><div class="l">With images</div><div class="v">{{ with_img|length }}</div></div>
+  <div class="kpi {{ 'bad' if q|length - with_img|length }}"><div class="l">Ready without images</div><div class="v">{{ q|length - with_img|length }}</div></div>
+</div>
+
+<h2>Ready queue</h2>
+<form method="post" action="/publish/batch">
+<div class="tablewrap"><table><tr><th></th><th>Key</th><th>Title</th><th>Images</th><th>Doc</th><th>Days in Ready</th><th>Batch</th></tr>
+{% for t in q %}<tr><td>{% if not t.batch %}<input type="checkbox" name="keys" value="{{ t.jira_key }}" aria-label="Select {{ t.jira_key }}">{% endif %}</td>
+  <td>{{ key(t.jira_key) }}</td><td>{{ t.summary }}</td>
+  <td>{% for i in t.images %}<a href="{{ i.url }}" target="_blank" rel="noopener" class="tag good">image {{ loop.index }}</a>{% else %}<span class="tag bad">none</span>{% endfor %}</td>
+  <td>{% if t.doc_url %}<a href="{{ t.doc_url }}" target="_blank" rel="noopener">doc ↗</a>{% endif %}</td>
+  <td>{{ t.age|bdays }}</td><td>{{ ('Batch ' ~ t.batch) if t.batch else '' }}</td></tr>
+{% else %}<tr><td colspan="7" class="sub">Nothing in Ready.</td></tr>{% endfor %}</table></div>
+{% if user.is_owner %}<div class="row"><button class="primary">Create batch from selected</button>
+  <button name="suggest" value="1">Create batch of {{ size }} (oldest with images)</button></div>{% endif %}
+</form>
+
+<h2 id="batches">Batches</h2>
+{% for b in batches %}<div class="panel">
+  <div class="row"><strong>Batch {{ b.n }}</strong><span class="sub">created {{ b.created_at|ago }}</span>
+    {% if b.sent_at %}<span class="tag good">sent {{ b.sent_at|ago }}</span>{% endif %}{% if b.post_at %}<span class="tag">send at {{ b.post_at|when }}</span>{% endif %}
+    {% if b.done %}<span class="tag good">all published</span>{% endif %}</div>
+  {% for i in b["items"] %}<div class="row">{{ key(i.jira_key) }} {{ st(i.status or '?') }} <span>{{ i.summary }}</span>{% if i.live_url %}<a href="{{ i.live_url }}" target="_blank" rel="noopener">live ↗</a>{% endif %}</div>{% endfor %}
+  {% if b.message %}{{ message_box(b.message, user, '/publish#batches', yuliia_dm if b.message.channel == 'slack_dm' else None, 'Message to Yuliia') }}{% endif %}
+  {% if user.is_owner %}<div class="row" style="margin-top:6px">
+    {% if not b.message or b.message.state != 'sent' %}<form class="row" method="post" action="/publish/batch/{{ b.id }}/prepare">
+      <label class="sub">Send at <input type="datetime-local" name="when" value="{{ default_when }}"></label>
+      <button class="sm">Draft message{{ ' (scheduled)' if bot }}</button>
+      <button class="sm" name="when" value="">Draft for now</button></form>{% endif %}
+    <form class="inline" method="post" action="/publish/batch/{{ b.id }}/archive"><button class="sm">Archive</button></form></div>{% endif %}
+</div>{% else %}<p class="sub">No open batches.</p>{% endfor %}
+<p class="sub">{% if bot %}Batches post to the internal channel through the bot, so the app can edit or delete them.{% else %}Delivery: copy the text, open the DM with Yuliia and send it yourself, then click "I sent it". Drafting adds "add Yuliia to Request participants" steps below.{% endif %}</p>
+
+<h2>Live link posted, not Published yet ({{ live|length }})</h2>
+{% for t in live %}<div class="row">{{ key(t.jira_key) }} <span>{{ t.summary }}</span><a href="{{ t.live_url }}" target="_blank" rel="noopener">live ↗</a>
+  {% if user.is_owner %}<form class="inline" method="post" action="/publish/published"><input type="hidden" name="key" value="{{ t.jira_key }}"><button class="sm">→ Published</button></form>{% endif %}</div>
+{% else %}<p class="sub">none</p>{% endfor %}
+
+{% if pending %}<h2 id="pending">To do / confirm ({{ pending|length }})</h2>{% for a in pending %}{{ action_box(a, flags, user, '/publish') }}{% endfor %}{% endif %}
+{% endblock %}

@@ -1,0 +1,7 @@
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.pyc
+.env
+# artifact-database exports: personal data (rates, amounts owed). Import them, never commit them.
+import/

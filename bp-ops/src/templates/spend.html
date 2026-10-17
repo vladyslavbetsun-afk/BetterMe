@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% from "_macros.html" import key %}
+{% block title %}Spend{% endblock %}
+{% block content %}
+<h1>Spend · {{ m.strftime('%B %Y') }} <span class="tag {{ 'good' if v.month.status == 'closed' }}">{{ v.month.status }}</span></h1>
+<form class="row" method="get"><select name="month" onchange="this.form.submit()">{% for mo in months %}<option value="{{ mo.strftime('%Y-%m') }}" {{ 'selected' if mo == m }}>{{ mo.strftime('%B %Y') }}</option>{% endfor %}</select></form>
+<p class="legal">Payment administration for owners and finance only (spec 05 §4). An article counts in the month it first left Text (writer), Review (expert) or Proofreading (proofreader). Fixed monthly items come from monthly rates.</p>
+<div class="grid">
+  {% for c in cats if v.totals.get(c) %}<div class="kpi"><div class="l">{{ labels[c] }}</div><div class="v">{{ v.totals[c][0]|usd(v.totals[c][1]) }}</div></div>{% endfor %}
+  <div class="kpi hot"><div class="l">Total</div><div class="v">{{ v.grand[0]|usd(v.grand[1]) }}</div></div>
+</div>
+{% set mstr = m.strftime('%Y-%m') %}
+{% for c in cats if v.cats.get(c) %}
+<h2>{{ labels[c] }}</h2>
+<div class="tablewrap"><table><tr><th>Name</th><th class="num">Amount</th><th>Source</th><th>Articles</th><th>Note</th><th></th></tr>
+{% for r in v.cats[c] %}<tr><td>{{ r.name }}</td><td class="num">{{ r.amount|usd(r.hi) }}</td><td>{{ src[r.source] }}</td>
+  <td>{% if r.jira_keys %}<details><summary>{{ r.jira_keys|length }}{% if r.unpriced %} ({{ r.unpriced }} unpriced){% endif %}</summary>{% for k in r.jira_keys %}{{ key(k) }} {% endfor %}</details>{% endif %}</td>
+  <td class="sub">{{ r.note or '' }}</td>
+  <td>{% if r.source == 'manual' and v.month.status == 'open' %}<form method="post" action="/spend/line/{{ r.id }}/delete"><input type="hidden" name="month" value="{{ mstr }}"><button class="sm danger">Delete</button></form>{% endif %}</td></tr>{% endfor %}
+<tr><th>Subtotal</th><th class="num">{{ v.totals[c][0]|usd(v.totals[c][1]) }}</th><th colspan="4"></th></tr>
+</table></div>
+{% endfor %}
+{% if v.missing %}<p class="sub">No data this month for: {{ v.missing|map(attribute='display_name')|join(', ') }}.</p>{% endif %}
+
+<div class="grid2">
+{% if v.month.status == 'open' %}<div class="panel"><h3>Add a manual line</h3>
+  <form method="post" action="/spend/line" class="row"><input type="hidden" name="month" value="{{ mstr }}">
+    <select name="person_id"><option value="">— no person (e.g. E-com) —</option>{% for p in roster.people if p.active %}<option value="{{ p.id }}">{{ p.display_name }}</option>{% endfor %}</select>
+    <select name="category">{% for c in cats %}<option value="{{ c }}">{{ labels[c] }}</option>{% endfor %}</select>
+    <input name="amount" placeholder="Amount (USD)" size="10"><input name="note" placeholder="Note (invoice #…)" size="20"><button class="sm">Add</button></form>
+  <div class="row" style="margin-top:10px">
+    {% if user.is_owner %}<form method="post" action="/spend/recompute"><input type="hidden" name="month" value="{{ mstr }}"><button class="sm">Recompute from Jira</button></form>{% endif %}
+    <form method="post" action="/spend/close" data-confirm="Close {{ m.strftime('%B') }}? Its numbers will be frozen."><input type="hidden" name="month" value="{{ mstr }}"><button class="sm">Close month</button></form></div></div>
+{% else %}<div class="panel"><p>Closed {{ v.month.closed_at|when }} by {{ v.month.closed_by }}. Numbers are frozen.</p>
+  {% if user.is_owner %}<form method="post" action="/spend/reopen"><input type="hidden" name="month" value="{{ mstr }}"><button class="sm">Reopen</button></form>{% endif %}</div>{% endif %}
+<div class="panel"><h3>Budget message for Yuliia Horetska</h3>
+  <textarea id="bud" rows="12" readonly>{{ message }}</textarea>
+  <div class="row"><button type="button" data-copy="#bud">Copy</button><a class="btn" href="{{ dm }}" target="_blank" rel="noopener">Open DM ↗</a>
+    <form class="inline" method="post" action="/spend/draft"><input type="hidden" name="month" value="{{ mstr }}"><button>Save as Slack draft</button></form>
+    <a class="btn" href="/spend/{{ mstr }}.xlsx">Download XLSX</a></div></div>
+</div>
+{% endblock %}

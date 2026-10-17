@@ -1,0 +1,1047 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Byline Board</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,500&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  /* ---------- tokens ---------- */
+  :root{
+    --ground:#EAF0EE;
+    --surface:#FFFFFF;
+    --surface-2:#F3F7F5;
+    --ink:#182620;
+    --ink-soft:#5C6E66;
+    --ink-faint:#8B9C94;
+    --line:#D6E0DB;
+    --line-soft:#E6EDE9;
+    --accent:#1F4E79;
+    --accent-strong:#163A5C;
+    --accent-soft:#E4EDF5;
+    --accent-soft-line:#C7D9E9;
+
+    --stage-open-bg:#E7E9EC;   --stage-open-fg:#4B5768;
+    --stage-text-bg:#FBF0D6;   --stage-text-fg:#8A5D0B;
+    --stage-review-bg:#EEE5F6; --stage-review-fg:#6E3FA3;
+    --stage-proof-bg:#DEF0F1;  --stage-proof-fg:#0E7C86;
+    --stage-ready-bg:#DCEFE1;  --stage-ready-fg:#1C7A4D;
+    --stage-other-bg:#ECE9E4; --stage-other-fg:#6B6459;
+    --stage-pub-bg:#DCEBD8;   --stage-pub-fg:#3C7A2E;
+
+    --warn-bg:#FBE4E1; --warn-fg:#AA3B26;
+    --shadow: 0 1px 2px rgba(24,38,32,.06), 0 6px 20px -10px rgba(24,38,32,.18);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ground:#101613;
+      --surface:#171F1B;
+      --surface-2:#1D2621;
+      --ink:#E7EEE9;
+      --ink-soft:#9BAEA4;
+      --ink-faint:#66766D;
+      --line:#2A3530;
+      --line-soft:#212B26;
+      --accent:#7BB0DE;
+      --accent-strong:#9EC7EA;
+      --accent-soft:#1C2E3D;
+      --accent-soft-line:#2B4C68;
+
+      --stage-open-bg:#262E33; --stage-open-fg:#AEBBC7;
+      --stage-text-bg:#3A2F14; --stage-text-fg:#E3B75B;
+      --stage-review-bg:#2E2440; --stage-review-fg:#C9A6EF;
+      --stage-proof-bg:#123336; --stage-proof-fg:#6FD3DB;
+      --stage-ready-bg:#153323; --stage-ready-fg:#7FD69B;
+      --stage-other-bg:#26241D; --stage-other-fg:#B7AE9E;
+      --stage-pub-bg:#17311A;  --stage-pub-fg:#84C979;
+
+      --warn-bg:#3A1E19; --warn-fg:#F2A28E;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px -12px rgba(0,0,0,.55);
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#101613;
+    --surface:#171F1B;
+    --surface-2:#1D2621;
+    --ink:#E7EEE9;
+    --ink-soft:#9BAEA4;
+    --ink-faint:#66766D;
+    --line:#2A3530;
+    --line-soft:#212B26;
+    --accent:#7BB0DE;
+    --accent-strong:#9EC7EA;
+    --accent-soft:#1C2E3D;
+    --accent-soft-line:#2B4C68;
+
+    --stage-open-bg:#262E33; --stage-open-fg:#AEBBC7;
+    --stage-text-bg:#3A2F14; --stage-text-fg:#E3B75B;
+    --stage-review-bg:#2E2440; --stage-review-fg:#C9A6EF;
+    --stage-proof-bg:#123336; --stage-proof-fg:#6FD3DB;
+    --stage-ready-bg:#153323; --stage-ready-fg:#7FD69B;
+    --stage-other-bg:#26241D; --stage-other-fg:#B7AE9E;
+    --stage-pub-bg:#17311A;  --stage-pub-fg:#84C979;
+
+    --warn-bg:#3A1E19; --warn-fg:#F2A28E;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px -12px rgba(0,0,0,.55);
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--ground);
+    color:var(--ink);
+    font-family:"IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing:antialiased;
+    font-size:14px;
+    line-height:1.5;
+  }
+  .mono{ font-family:"IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace; font-variant-numeric:tabular-nums; }
+  .serif{ font-family:"Newsreader", Georgia, "Iowan Old Style", serif; }
+
+  a{ color:var(--accent); text-decoration:none; }
+  a:hover{ text-decoration:underline; }
+  a:focus-visible, button:focus-visible, input:focus-visible{
+    outline:2px solid var(--accent); outline-offset:2px; border-radius:4px;
+  }
+  button{ font-family:inherit; cursor:pointer; }
+
+  .wrap{ max-width:1180px; margin:0 auto; padding:28px 24px 64px; }
+
+  /* ---------- masthead ---------- */
+  .masthead{
+    display:flex; align-items:flex-end; justify-content:space-between; gap:24px;
+    padding-bottom:18px; margin-bottom:22px; border-bottom:2px solid var(--ink);
+    flex-wrap:wrap;
+  }
+  .masthead h1{
+    margin:0 0 4px; font-family:"Newsreader", Georgia, serif; font-weight:600;
+    font-size:34px; letter-spacing:-0.01em; text-wrap:balance;
+  }
+  .masthead .kicker{
+    text-transform:uppercase; letter-spacing:.12em; font-size:11px; font-weight:600;
+    color:var(--accent); margin:0 0 6px;
+  }
+  .masthead .sub{ margin:0; color:var(--ink-soft); font-size:13.5px; max-width:52ch; }
+  .sync{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-end;
+  }
+  .sync-info{ text-align:right; font-size:12px; color:var(--ink-faint); }
+  .sync-info .dot{ display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:5px; position:relative; top:-1px; }
+  .dot.ok{ background:#3C9F5F; }
+  .dot.bad{ background:#C9503B; }
+  .dot.wait{ background:var(--ink-faint); animation:pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:.35;} }
+  .btn{
+    display:inline-flex; align-items:center; gap:6px;
+    background:var(--surface); color:var(--ink); border:1px solid var(--line);
+    padding:8px 14px; border-radius:7px; font-size:13px; font-weight:600;
+    box-shadow:var(--shadow);
+  }
+  .btn:hover{ border-color:var(--accent-soft-line); }
+  .btn.primary{ background:var(--accent); color:var(--surface); border-color:var(--accent); }
+  .btn.primary:hover{ background:var(--accent-strong); border-color:var(--accent-strong); }
+  .btn[disabled]{ opacity:.55; cursor:default; }
+  .btn svg{ width:14px; height:14px; }
+  .spin{ animation:spin 0.9s linear infinite; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+
+  /* ---------- stage strip ---------- */
+  .strip{
+    display:grid; grid-template-columns:repeat(6,1fr); gap:10px; margin-bottom:26px;
+  }
+  .stage-tile{
+    background:var(--surface); border:1px solid var(--line); border-radius:10px;
+    padding:12px 14px; box-shadow:var(--shadow); text-align:left; color:var(--ink);
+    display:flex; flex-direction:column; gap:6px;
+  }
+  .stage-tile .n{ font-family:"IBM Plex Mono",monospace; font-size:22px; font-weight:600; font-variant-numeric:tabular-nums; }
+  .stage-tile .lbl{ font-size:11.5px; color:var(--ink-soft); display:flex; align-items:center; gap:6px; }
+  .stage-tile .swatch{ width:9px; height:9px; border-radius:3px; flex:none; }
+  .stage-tile.active{ outline:2px solid var(--accent); outline-offset:-2px; }
+  .stage-tile:hover{ border-color:var(--accent-soft-line); }
+
+  .swatch.open{ background:var(--stage-open-fg); }
+  .swatch.text{ background:var(--stage-text-fg); }
+  .swatch.review{ background:var(--stage-review-fg); }
+  .swatch.proof{ background:var(--stage-proof-fg); }
+  .swatch.ready{ background:var(--stage-ready-fg); }
+  .swatch.pub{ background:var(--stage-pub-fg); }
+  .swatch.other{ background:var(--stage-other-fg); }
+
+  /* ---------- writer cards ---------- */
+  .section-head{
+    display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin:30px 0 12px;
+  }
+  .section-head h2{
+    font-family:"Newsreader",Georgia,serif; font-size:19px; font-weight:600; margin:0;
+  }
+  .section-head .count{ color:var(--ink-faint); font-size:12.5px; }
+
+  .cards{
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(232px,1fr)); gap:12px;
+  }
+  .card{
+    background:var(--surface); border:1px solid var(--line); border-radius:12px;
+    padding:14px 16px 16px; box-shadow:var(--shadow); cursor:pointer; text-align:left;
+    color:var(--ink); display:flex; flex-direction:column; gap:10px;
+  }
+  .card:hover{ border-color:var(--accent-soft-line); }
+  .card.selected{ outline:2px solid var(--accent); outline-offset:-2px; }
+  .card-top{ display:flex; align-items:flex-start; justify-content:space-between; gap:8px; }
+  .card-name{ font-family:"Newsreader",Georgia,serif; font-weight:600; font-size:16.5px; line-height:1.25; text-wrap:balance; }
+  .card-total{ font-family:"IBM Plex Mono",monospace; font-size:20px; font-weight:600; white-space:nowrap; }
+  .card-total small{ font-family:"IBM Plex Sans",sans-serif; font-weight:500; font-size:10.5px; color:var(--ink-faint); display:block; text-transform:uppercase; letter-spacing:.06em; }
+  .segbar{ display:flex; height:7px; border-radius:4px; overflow:hidden; background:var(--surface-2); }
+  .segbar span{ display:block; height:100%; }
+  .card-chips{ display:flex; flex-wrap:wrap; gap:5px; }
+  .stale-flag{ display:inline-flex; align-items:center; gap:4px; font-size:11px; color:var(--warn-fg); background:var(--warn-bg); padding:2px 7px; border-radius:99px; font-weight:600; }
+  .pending-flag{ display:inline-flex; align-items:center; gap:4px; font-size:11px; color:var(--stage-review-fg); background:var(--stage-review-bg); padding:2px 7px; border-radius:99px; font-weight:600; }
+
+  .card-meta{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:-2px; }
+  .card-rate{ font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--ink-faint); white-space:nowrap; }
+  .niche-pill{
+    display:inline-flex; align-items:center; font-size:10.5px; font-weight:600;
+    padding:2px 7px; border-radius:99px; white-space:nowrap;
+  }
+  .niche-pill.niche-exercise{ background:var(--stage-proof-bg); color:var(--stage-proof-fg); }
+  .niche-pill.niche-nutrition{ background:var(--stage-ready-bg); color:var(--stage-ready-fg); }
+  .niche-pill.niche-both{ background:var(--accent-soft); color:var(--accent-strong); }
+  .niche-pill.niche-any{ background:var(--surface-2); color:var(--ink-soft); }
+  .no-review-flag{ font-size:10.5px; font-weight:600; color:var(--stage-ready-fg); }
+
+  /* ---------- alert banner ---------- */
+  .alert-banner{
+    display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap;
+    background:var(--stage-review-bg); border:1px solid var(--accent-soft-line); border-radius:10px;
+    padding:12px 16px; margin-bottom:26px; box-shadow:var(--shadow);
+  }
+  .alert-banner p{ margin:0; font-size:13px; color:var(--stage-review-fg); max-width:62ch; }
+  .alert-banner strong{ font-family:"IBM Plex Mono",monospace; }
+  .alert-banner .btn{ background:var(--surface); color:var(--stage-review-fg); border-color:var(--accent-soft-line); flex:none; }
+
+  .pending-section{ margin-top:8px; }
+  .pending-section .table-shell{ border-color:var(--accent-soft-line); }
+  .draft-link{ font-size:12px; }
+
+  .pill{
+    display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:600;
+    padding:2.5px 8px; border-radius:99px; white-space:nowrap;
+  }
+  .pill.open{ background:var(--stage-open-bg); color:var(--stage-open-fg); }
+  .pill.text{ background:var(--stage-text-bg); color:var(--stage-text-fg); }
+  .pill.review{ background:var(--stage-review-bg); color:var(--stage-review-fg); }
+  .pill.proof{ background:var(--stage-proof-bg); color:var(--stage-proof-fg); }
+  .pill.ready{ background:var(--stage-ready-bg); color:var(--stage-ready-fg); }
+  .pill.pub{ background:var(--stage-pub-bg); color:var(--stage-pub-fg); }
+  .pill.other{ background:var(--stage-other-bg); color:var(--stage-other-fg); }
+
+  /* ---------- controls ---------- */
+  .controls{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px;
+  }
+  .search{
+    flex:1 1 220px; display:flex; align-items:center; gap:8px;
+    background:var(--surface); border:1px solid var(--line); border-radius:8px;
+    padding:8px 12px; box-shadow:var(--shadow);
+  }
+  .search svg{ width:14px; height:14px; color:var(--ink-faint); flex:none; }
+  .search input{
+    border:0; outline:0; background:transparent; color:var(--ink); font-size:13.5px; width:100%;
+    font-family:inherit;
+  }
+  .search input::placeholder{ color:var(--ink-faint); }
+  .chip-toggle{
+    display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:600;
+    padding:6px 11px; border-radius:99px; border:1px solid var(--line); background:var(--surface);
+    color:var(--ink-soft);
+  }
+  .chip-toggle.active{ border-color:transparent; }
+  .clear-filters{ font-size:12px; color:var(--accent); font-weight:600; background:none; border:0; padding:4px 2px; }
+
+  /* ---------- table ---------- */
+  .table-shell{
+    background:var(--surface); border:1px solid var(--line); border-radius:12px;
+    box-shadow:var(--shadow); overflow:hidden;
+  }
+  .table-scroll{ overflow-x:auto; }
+  table{ width:100%; border-collapse:collapse; min-width:760px; }
+  thead th{
+    text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:.08em;
+    color:var(--ink-faint); font-weight:600; padding:10px 14px; background:var(--surface-2);
+    border-bottom:1px solid var(--line); position:sticky; top:0;
+  }
+  tbody td{ padding:10px 14px; border-bottom:1px solid var(--line-soft); vertical-align:top; font-size:13px; }
+  tbody tr:last-child td{ border-bottom:0; }
+  tbody tr:hover{ background:var(--surface-2); }
+  .key-link{ font-family:"IBM Plex Mono",monospace; font-size:12px; font-weight:600; }
+  .t-title{ color:var(--ink); max-width:34ch; }
+  .t-writer{ color:var(--ink-soft); white-space:nowrap; }
+  .no-review-dot{ margin-left:5px; color:var(--stage-ready-fg); font-weight:700; font-size:11px; }
+  .t-updated{ font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--ink-soft); white-space:nowrap; }
+  .writing-time{ white-space:nowrap; }
+  .writing-time .days{ font-family:"IBM Plex Mono",monospace; font-size:13px; font-weight:600; font-variant-numeric:tabular-nums; }
+  .writing-time .since{ display:block; font-size:10.5px; color:var(--ink-faint); margin-top:1px; }
+  .writing-time.warn .days{ color:var(--warn-fg); }
+  .price{ font-size:12.5px; font-weight:600; color:var(--ink); font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .price-fallback{ font-size:11px; color:var(--ink-faint); white-space:nowrap; }
+  .t-participants{ display:flex; flex-wrap:wrap; gap:4px; max-width:22ch; }
+  .init-chip{
+    font-size:10.5px; font-weight:700; width:20px; height:20px; border-radius:50%;
+    background:var(--surface-2); border:1px solid var(--line); color:var(--ink-soft);
+    display:inline-flex; align-items:center; justify-content:center; flex:none;
+  }
+
+  .empty, .state-msg{
+    padding:48px 20px; text-align:center; color:var(--ink-soft);
+  }
+  .state-msg h3{ font-family:"Newsreader",Georgia,serif; font-size:19px; margin:0 0 8px; color:var(--ink); }
+  .state-msg p{ margin:0 auto; max-width:44ch; font-size:13.5px; }
+  .state-msg .btn{ margin-top:16px; }
+
+  .skel{ background:linear-gradient(90deg,var(--surface-2) 25%,var(--line-soft) 37%,var(--surface-2) 63%); background-size:400% 100%; animation:shine 1.4s ease infinite; border-radius:8px; }
+  @keyframes shine{ 0%{background-position:100% 0;} 100%{background-position:0 0;} }
+  .skel-card{ height:118px; border-radius:12px; }
+
+  footer{
+    margin-top:36px; padding-top:16px; border-top:1px solid var(--line);
+    color:var(--ink-faint); font-size:11.5px; display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap;
+  }
+
+  @media (max-width:760px){
+    .strip{ grid-template-columns:repeat(3,1fr); }
+    .masthead{ align-items:flex-start; }
+    .sync{ justify-content:flex-start; width:100%; }
+  }
+</style>
+
+<div class="wrap">
+  <div class="masthead">
+    <div>
+      <p class="kicker">Blog Project · BP</p>
+      <h1>Byline Board</h1>
+      <p class="sub">Writers who haven't engaged yet — no comment, no draft link, still sitting in Text. Scoped to 13 writers.</p>
+    </div>
+    <div class="sync">
+      <div class="sync-info" id="syncInfo">
+        <span class="dot wait" id="syncDot"></span><span id="syncText">Connecting to Jira…</span>
+      </div>
+      <button class="btn primary" id="refreshBtn" disabled>
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 8a6.5 6.5 0 1 0-1.2 6.7M16.5 3.5V8h-4.5"/></svg>
+        <span id="refreshLabel">Refresh</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="strip" id="strip"></div>
+
+  <div class="alert-banner" id="alertBanner" hidden>
+    <p><strong id="pendingCount">0</strong> ticket(s) already have a draft link in the writer's comments but are still marked Text — these need <em>your</em> status update, not a nudge to the writer.</p>
+    <button class="btn" id="pendingToggle">Show them</button>
+  </div>
+
+  <div class="section-head">
+    <h2>Writers</h2>
+    <span class="count" id="writerCount"></span>
+  </div>
+  <div class="cards" id="cards">
+    <div class="skel skel-card"></div><div class="skel skel-card"></div><div class="skel skel-card"></div>
+    <div class="skel skel-card"></div><div class="skel skel-card"></div><div class="skel skel-card"></div>
+  </div>
+
+  <div class="section-head">
+    <h2>Needs a nudge</h2>
+    <span class="count" id="ticketCount"></span>
+  </div>
+  <div class="controls">
+    <label class="search">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="9" r="6.2"/><path d="m17 17-3.6-3.6" stroke-linecap="round"/></svg>
+      <input id="searchInput" type="text" placeholder="Filter by ticket, title, or writer…" autocomplete="off">
+    </label>
+    <button class="clear-filters" id="clearFilters" hidden>Clear filters</button>
+  </div>
+  <div class="table-shell">
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:88px">Ticket</th>
+            <th>Title</th>
+            <th style="width:150px">Writer</th>
+            <th style="width:108px">Stage</th>
+            <th style="width:110px">Writing time</th>
+            <th style="width:90px">Price</th>
+            <th style="width:150px">Reviewers</th>
+          </tr>
+        </thead>
+        <tbody id="tbody">
+          <tr><td colspan="7" class="empty">Loading tickets…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="pending-section" id="pendingSection" hidden>
+    <div class="section-head">
+      <h2>Drafted, not moved</h2>
+      <span class="count" id="pendingTableCount"></span>
+    </div>
+    <div class="table-shell">
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:88px">Ticket</th>
+              <th>Title</th>
+              <th style="width:150px">Writer</th>
+              <th style="width:96px">Stage</th>
+              <th style="width:220px">Draft link</th>
+              <th style="width:96px">Commented</th>
+            </tr>
+          </thead>
+          <tbody id="pendingTbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <span id="footerNote">Fetching from Jira project BP.</span>
+    <span>Author &amp; Request participants read directly from the ticket — no separate sync step. <span class="no-review-dot" style="margin-left:0">✓</span> next to a writer means their drafts skip expert review.</span>
+  </footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var CLOUD_ID = "657e24cd-f643-4482-aba5-7e848607df28";
+  var SITE = "https://newsiteam.atlassian.net";
+  // Scoped to the Text (drafting) stage only — this board exists to catch
+  // tickets nobody has touched yet, not to track the whole pipeline.
+  var JQL = 'project = BP AND issuetype = Article AND status = "Text" AND cf[11710] is not EMPTY ORDER BY updated DESC';
+  var FIELDS = ["summary","status","customfield_11710","customfield_11208","updated","created","comment"];
+  var PAGE_SIZE = 100;
+  var MAX_PAGES = 4; // safety cap: 400 tickets
+  var AUTO_REFRESH_MS = 5 * 60 * 1000;
+
+  var STAGES = [
+    { key:"Text", label:"Drafting", cls:"text" }
+  ];
+  var STAGE_BY_KEY = {};
+  STAGES.forEach(function(s){ STAGE_BY_KEY[s.key] = s; });
+
+  // Jira display name (as it appears on the ticket) -> the name used on the
+  // writer roster. Jira accounts are inconsistent (real names, handles,
+  // maiden/married names) so this reconciles the two. Only names listed
+  // here are in scope for this board.
+  var WRITER_ALIASES = {
+    "ZINDZY GRACIA": "Zindzy Gracia",
+    "Evelyn Chalicha": "Eve Chalicha",
+    "Jeremy Mukhwana": "Jeremy Mukhwana",
+    "Nderitu Munuhe": "Nderitu Munuhe",
+    "Carla Eva De Angelis": "Eva De Angelis",
+    "Carla Eva De Angelis Viard": "Eva De Angelis",
+    "lic.rubiolo.nutri": "Maria Lourdes Rubiolo",
+    "Anoshia Riaz": "Anoshia Riaz",
+    "srijoni.guptaroy": "Sri R (Gupta)",
+    "bluegrassnursewright": "Stephanie Wright",
+    "Giulia Ralph": "Giulia Ralph",
+    "Brenda Peralta": "Brenda Peralta",
+    "Наталі Луців": "Natalia Lutsiv",
+    "Clare Kamau": "Clare Kamau"
+  };
+  function friendlyName(raw){
+    return WRITER_ALIASES[raw] || raw;
+  }
+  function inScope(raw){
+    return Object.prototype.hasOwnProperty.call(WRITER_ALIASES, raw || "");
+  }
+  // The fixed roster shown on the board, in the order the request listed
+  // them — de-duplicated by friendly name (two raw Jira names can map to
+  // one person, e.g. Eva De Angelis).
+  var ROSTER = (function(){
+    var seen = {}; var out = [];
+    Object.keys(WRITER_ALIASES).forEach(function(raw){
+      var name = WRITER_ALIASES[raw];
+      if(!seen[name]){ seen[name] = true; out.push(name); }
+    });
+    return out;
+  })();
+
+  // Rate + niche, from the Writers & Experts tracking sheet (Writers tab).
+  // rateType "word" prices per word (needs a word count parsed from the
+  // ticket title); "article" is a flat per-article fee. niche is kept as
+  // the sheet's own wording so it stays traceable back to the source.
+  // noReview: true marks writers whose drafts skip expert review.
+  var WRITER_INFO = {
+    "Zindzy Gracia":         { niche:"exercise",            rateType:"word",    rate:0.03  },
+    "Eve Chalicha":          { niche:"exercise",            rateType:"word",    rate:0.035 },
+    "Jeremy Mukhwana":       { niche:"exercise",             rateType:"word",   rate:0.03  },
+    "Nderitu Munuhe":        { niche:"any topic",           rateType:"word",    rate:0.04  },
+    "Maria Lourdes Rubiolo": { niche:"nutrition",           rateType:"word",    rate:0.10,  noReview:true },
+    "Eva De Angelis":        { niche:"nutrition",           rateType:"word",    rate:0.11,  noReview:true },
+    "Anoshia Riaz":          { niche:"any topic",           rateType:"word",    rate:0.04  },
+    "Sri R (Gupta)":         { niche:"any topic",           rateType:"word",    rate:0.08  },
+    "Stephanie Wright":      { niche:"any topic",           rateType:"article", rate:200,   noReview:true },
+    "Giulia Ralph":          { niche:"fitness + nutrition", rateType:"word",    rate:0.12,  noReview:true },
+    "Brenda Peralta":        { niche:"fitness + nutrition", rateType:"article", rateMin:100, rateMax:120, noReview:true },
+    "Natalia Lutsiv":        { niche:"any topic",           rateType:"word",    rate:0.06  },
+    "Clare Kamau":           { niche:"any topic",           rateType:"article", rate:32.5  }
+  };
+
+  function noReviewNeeded(name){
+    return !!(WRITER_INFO[name] && WRITER_INFO[name].noReview);
+  }
+
+  function nicheTag(name){
+    var niche = (WRITER_INFO[name] || {}).niche;
+    if(!niche) return { label:"—", cls:"any" };
+    if(niche === "fitness + nutrition") return { label:"Exercise + Nutrition", cls:"both" };
+    if(niche === "nutrition") return { label:"Nutrition", cls:"nutrition" };
+    if(niche === "exercise") return { label:"Exercise", cls:"exercise" };
+    return { label:"Any topic", cls:"any" };
+  }
+
+  function rateLabel(name){
+    var info = WRITER_INFO[name];
+    if(!info) return "—";
+    if(info.rateType === "article"){
+      return info.rateMin ? ("$" + info.rateMin + "–" + info.rateMax + "/article") : ("$" + info.rate + "/article");
+    }
+    return "$" + info.rate + "/word";
+  }
+
+  // Ticket titles carry the word count as a convention ("...,  1900 words",
+  // "550-840 words", "12k") — parse it so per-word rates can be turned into
+  // an actual ticket price.
+  function parseWordCount(title){
+    if(!title) return null;
+    var m = title.match(/(\d[\d,]*)\s*[-–]\s*(\d[\d,]*)\s*words?/i);
+    if(m) return { min: parseInt(m[1].replace(/,/g,""),10), max: parseInt(m[2].replace(/,/g,""),10) };
+    m = title.match(/\b(\d+(?:\.\d+)?)\s*k\b/i);
+    if(m){ var n = Math.round(parseFloat(m[1]) * 1000); return { min:n, max:n }; }
+    m = title.match(/(\d[\d,]*)\s*words?\b/i);
+    if(m){ var n2 = parseInt(m[1].replace(/,/g,""),10); return { min:n2, max:n2 }; }
+    return null;
+  }
+
+  function priceHtml(issue, name){
+    var info = WRITER_INFO[name];
+    if(!info) return '<span style="color:var(--ink-faint)">—</span>';
+    if(info.rateType === "article"){
+      var label = info.rateMin ? ("$" + info.rateMin + "–" + info.rateMax) : ("$" + info.rate);
+      return '<span class="price mono">' + label + '</span>';
+    }
+    var wc = parseWordCount(issue.fields.summary);
+    if(!wc){
+      return '<span class="price-fallback">' + esc(rateLabel(name)) + '</span>';
+    }
+    var lo = Math.round(wc.min * info.rate);
+    var hi = Math.round(wc.max * info.rate);
+    var label2 = lo === hi ? ("$" + lo) : ("$" + lo + "–" + hi);
+    return '<span class="price mono">' + label2 + '</span>';
+  }
+
+  var els = {
+    syncDot: document.getElementById("syncDot"),
+    syncText: document.getElementById("syncText"),
+    refreshBtn: document.getElementById("refreshBtn"),
+    refreshLabel: document.getElementById("refreshLabel"),
+    strip: document.getElementById("strip"),
+    cards: document.getElementById("cards"),
+    writerCount: document.getElementById("writerCount"),
+    ticketCount: document.getElementById("ticketCount"),
+    tbody: document.getElementById("tbody"),
+    searchInput: document.getElementById("searchInput"),
+    clearFilters: document.getElementById("clearFilters"),
+    footerNote: document.getElementById("footerNote"),
+    alertBanner: document.getElementById("alertBanner"),
+    pendingCount: document.getElementById("pendingCount"),
+    pendingToggle: document.getElementById("pendingToggle"),
+    pendingSection: document.getElementById("pendingSection"),
+    pendingTbody: document.getElementById("pendingTbody"),
+    pendingTableCount: document.getElementById("pendingTableCount")
+  };
+
+  var state = {
+    needsNudge: [],   // Text-stage, in-scope writer, no comment from the writer yet
+    pending: [],      // Text-stage, in-scope writer, writer already commented (likely a draft link)
+    loading: true,
+    error: null,
+    lastSynced: null,
+    stageFilter: null,
+    writerFilter: null,
+    search: "",
+    capped: false,
+    pendingOpen: false
+  };
+
+  function esc(s){
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){
+      return { "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c];
+    });
+  }
+
+  function initials(name){
+    if(!name) return "?";
+    var parts = name.trim().split(/\s+/);
+    var a = parts[0] ? parts[0][0] : "";
+    var b = parts.length > 1 ? parts[parts.length-1][0] : "";
+    return (a+b).toUpperCase();
+  }
+
+  function relTime(iso){
+    if(!iso) return "—";
+    var d = new Date(iso);
+    var diff = Date.now() - d.getTime();
+    var min = Math.round(diff/60000);
+    if(min < 1) return "just now";
+    if(min < 60) return min + "m ago";
+    var hr = Math.round(min/60);
+    if(hr < 24) return hr + "h ago";
+    var day = Math.round(hr/24);
+    if(day < 30) return day + "d ago";
+    var mo = Math.round(day/30);
+    return mo + "mo ago";
+  }
+
+  function daysSince(iso){
+    if(!iso) return 0;
+    return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+  }
+
+  // issue._assignedAt is filled in after load by fetchAssignedDates(); until
+  // then (or if the lookup failed) fall back to when the ticket was created.
+  function assignedAt(issue){
+    return issue._assignedAt || issue.fields.created || null;
+  }
+
+  function writingTimeHtml(issue){
+    var iso = assignedAt(issue);
+    if(!iso) return '<span style="color:var(--ink-faint)">—</span>';
+    var d = daysSince(iso);
+    var label = d <= 0 ? "<1d" : d + "d";
+    var warn = d >= 5 ? " warn" : "";
+    return '<div class="writing-time' + warn + '"><span class="days mono">' + label + '</span>' +
+      '<span class="since">since ' + esc(shortDate(iso)) + '</span></div>';
+  }
+
+  function stageOf(issue){
+    var name = issue.fields.status && issue.fields.status.name;
+    return STAGE_BY_KEY[name] || { key:name || "Other", label:name || "Other", cls:"other" };
+  }
+
+  // A comment left by the ticket's own Author usually means they dropped a
+  // draft-doc link — the operational signal for "text uploaded" before the
+  // ticket has been moved off Text.
+  function writersComment(issue){
+    var author = issue.fields.customfield_11710;
+    var comments = (issue.fields.comment && issue.fields.comment.comments) || [];
+    if(!author) return null;
+    for(var i = 0; i < comments.length; i++){
+      var c = comments[i];
+      if(c.author && c.author.accountId === author.accountId) return c;
+    }
+    return null;
+  }
+
+  function extractLink(comment){
+    if(!comment) return null;
+    var body = typeof comment.body === "string" ? comment.body : JSON.stringify(comment.body || "");
+    var m = body.match(/https?:\/\/[^\s"'<>\)\]]+/);
+    return m ? m[0].replace(/[.,]+$/, "") : null;
+  }
+
+  var MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  function shortDate(iso){
+    if(!iso) return "—";
+    var d = new Date(iso);
+    return MONTHS[d.getMonth()] + " " + d.getDate();
+  }
+
+  // The Author field can be reassigned long after a ticket is created — the
+  // changelog entry for "Author" is the real assignment date; ticket
+  // `created` is only a fallback for tickets whose Author has never changed.
+  function assignedDateFromChangelog(node){
+    var histories = (node && node.changelog && node.changelog.histories) || [];
+    for(var i = 0; i < histories.length; i++){
+      var items = histories[i].items || [];
+      for(var j = 0; j < items.length; j++){
+        if(items[j].fieldId === "customfield_11710") return histories[i].created;
+      }
+    }
+    return null;
+  }
+
+  function setSync(kind, text){
+    els.syncDot.className = "dot " + kind;
+    els.syncText.textContent = text;
+  }
+
+  // ---------- rendering ----------
+
+  function renderStrip(){
+    var counts = {}; STAGES.forEach(function(s){ counts[s.key] = 0; });
+    state.needsNudge.forEach(function(i){
+      var st = stageOf(i);
+      if(STAGE_BY_KEY[st.key]) counts[st.key]++;
+    });
+    els.strip.innerHTML = STAGES.map(function(s){
+      var active = state.stageFilter === s.key;
+      return '<button class="stage-tile' + (active ? " active" : "") + '" data-stage="' + s.key + '">' +
+        '<span class="n mono">' + counts[s.key] + '</span>' +
+        '<span class="lbl"><span class="swatch ' + s.cls + '"></span>Drafting, quiet</span>' +
+      '</button>';
+    }).join("");
+    els.strip.style.gridTemplateColumns = "repeat(" + STAGES.length + ",1fr)";
+    Array.prototype.forEach.call(els.strip.querySelectorAll(".stage-tile"), function(btn){
+      btn.addEventListener("click", function(){
+        var key = btn.getAttribute("data-stage");
+        state.stageFilter = state.stageFilter === key ? null : key;
+        renderAll();
+      });
+    });
+
+    var pendingN = state.pending.length;
+    els.alertBanner.hidden = pendingN === 0;
+    els.pendingCount.textContent = pendingN;
+    els.pendingTableCount.textContent = pendingN + (pendingN === 1 ? " ticket" : " tickets");
+  }
+
+  // Group by friendly name (not accountId) so the two Jira accounts that
+  // both resolve to "Eva De Angelis" land in one card.
+  function groupByWriter(issues){
+    var groups = {};
+    issues.forEach(function(issue){
+      var author = issue.fields.customfield_11710;
+      var raw = author ? author.displayName : null;
+      var name = raw ? friendlyName(raw) : "Unassigned";
+      if(!groups[name]) groups[name] = { name:name, issues:[] };
+      groups[name].issues.push(issue);
+    });
+    return groups;
+  }
+
+  function renderCards(){
+    var nudgeGroups = groupByWriter(state.needsNudge);
+    var pendingGroups = groupByWriter(state.pending);
+    els.writerCount.textContent = ROSTER.length + " writers tracked";
+
+    els.cards.innerHTML = ROSTER.map(function(name){
+      var g = nudgeGroups[name] || { name:name, issues:[] };
+      var pendingIssues = (pendingGroups[name] || { issues:[] }).issues;
+      var counts = {}; STAGES.forEach(function(s){ counts[s.key]=0; });
+      g.issues.forEach(function(i){ var st=stageOf(i); if(STAGE_BY_KEY[st.key]) counts[st.key]++; });
+      var total = g.issues.length;
+      var seg = STAGES.map(function(s){
+        var pct = total ? (counts[s.key]/total*100) : 0;
+        if(pct === 0) return "";
+        return '<span style="width:' + pct + '%;background:var(--stage-' + s.cls + '-fg)"></span>';
+      }).join("");
+      var chips = STAGES.filter(function(s){ return counts[s.key] > 0; }).map(function(s){
+        return '<span class="pill ' + s.cls + '">' + counts[s.key] + ' ' + s.label + '</span>';
+      }).join("");
+      var oldest = g.issues.reduce(function(max,i){ var d=daysSince(assignedAt(i)); return d>max?d:max; }, 0);
+      var staleFlag = total > 0 && oldest >= 5 ? '<span class="stale-flag">● ' + oldest + 'd writing</span>' : "";
+      var pendingFlag = pendingIssues.length ? '<span class="pending-flag">✓ ' + pendingIssues.length + ' drafted</span>' : "";
+      var selected = state.writerFilter === name;
+      var clear = total === 0 && pendingIssues.length === 0;
+      var niche = nicheTag(name);
+      return '<button class="card' + (selected ? " selected" : "") + '" data-writer="' + esc(name) + '">' +
+        '<div class="card-top">' +
+          '<div class="card-name serif">' + esc(name) + '</div>' +
+          '<div class="card-total">' + total + '<small>needs nudge</small></div>' +
+        '</div>' +
+        '<div class="card-meta">' +
+          '<span class="niche-pill niche-' + niche.cls + '">' + esc(niche.label) + '</span>' +
+          '<span class="card-rate mono">' + esc(rateLabel(name)) + '</span>' +
+        '</div>' +
+        (noReviewNeeded(name) ? '<div class="no-review-flag">✓ no expert review needed</div>' : "") +
+        '<div class="segbar">' + (total ? seg : '<span style="width:100%;background:var(--line-soft)"></span>') + '</div>' +
+        '<div class="card-chips">' + (clear ? '<span class="pill" style="background:var(--stage-ready-bg);color:var(--stage-ready-fg)">all clear</span>' : (chips + staleFlag + pendingFlag)) + '</div>' +
+      '</button>';
+    }).join("");
+
+    Array.prototype.forEach.call(els.cards.querySelectorAll(".card"), function(btn){
+      btn.addEventListener("click", function(){
+        var name = btn.getAttribute("data-writer");
+        state.writerFilter = state.writerFilter === name ? null : name;
+        renderAll();
+      });
+    });
+  }
+
+  function renderTable(){
+    var rows = state.needsNudge.filter(function(issue){
+      var author = issue.fields.customfield_11710;
+      var name = author ? friendlyName(author.displayName) : "Unassigned";
+      if(state.writerFilter && name !== state.writerFilter) return false;
+      if(state.stageFilter){
+        var st = stageOf(issue);
+        if(st.key !== state.stageFilter) return false;
+      }
+      if(state.search){
+        var hay = (issue.key + " " + issue.fields.summary + " " + name).toLowerCase();
+        if(hay.indexOf(state.search.toLowerCase()) === -1) return false;
+      }
+      return true;
+    });
+
+    els.ticketCount.textContent = rows.length + " of " + state.needsNudge.length;
+    els.clearFilters.hidden = !(state.writerFilter || state.stageFilter || state.search);
+
+    if(rows.length === 0){
+      els.tbody.innerHTML = '<tr><td colspan="7" class="empty">' +
+        (state.needsNudge.length === 0 ? "Nobody on the list has an untouched ticket right now." : "No tickets match the current filters.") +
+      '</td></tr>';
+      return;
+    }
+
+    els.tbody.innerHTML = rows.map(function(issue){
+      var author = issue.fields.customfield_11710;
+      var authorId = author ? author.accountId : null;
+      var writerName = author ? friendlyName(author.displayName) : null;
+      var participants = (issue.fields.customfield_11208 || []).filter(function(p){ return p.accountId !== authorId; });
+      var st = stageOf(issue);
+      var partHtml = participants.length
+        ? participants.map(function(p){ var n = friendlyName(p.displayName); return '<span class="init-chip" title="' + esc(n) + '">' + esc(initials(n)) + '</span>'; }).join("")
+        : '<span style="color:var(--ink-faint)">—</span>';
+      var writerHtml = esc(writerName || "Unassigned") +
+        (writerName && noReviewNeeded(writerName) ? '<span class="no-review-dot" title="No expert review needed">✓</span>' : "");
+      return '<tr>' +
+        '<td><a class="key-link" href="' + esc(issue.webUrl || (SITE + "/browse/" + issue.key)) + '" target="_blank" rel="noopener">' + esc(issue.key) + '</a></td>' +
+        '<td class="t-title">' + esc(issue.fields.summary) + '</td>' +
+        '<td class="t-writer">' + writerHtml + '</td>' +
+        '<td><span class="pill ' + st.cls + '">' + esc(st.label) + '</span></td>' +
+        '<td>' + writingTimeHtml(issue) + '</td>' +
+        '<td>' + priceHtml(issue, writerName) + '</td>' +
+        '<td><div class="t-participants">' + partHtml + '</div></td>' +
+      '</tr>';
+    }).join("");
+  }
+
+  function renderPendingTable(){
+    els.pendingSection.hidden = !state.pendingOpen || state.pending.length === 0;
+    els.pendingToggle.textContent = state.pendingOpen ? "Hide" : "Show them";
+    if(!state.pendingOpen) return;
+
+    els.pendingTbody.innerHTML = state.pending.map(function(issue){
+      var author = issue.fields.customfield_11710;
+      var writerName = author ? friendlyName(author.displayName) : null;
+      var st = stageOf(issue);
+      var comment = writersComment(issue);
+      var link = extractLink(comment);
+      var linkHtml = link
+        ? '<a class="draft-link" href="' + esc(link) + '" target="_blank" rel="noopener">' + esc(link.replace(/^https?:\/\//,"").slice(0,34)) + (link.length > 34 ? "…" : "") + '</a>'
+        : '<span style="color:var(--ink-faint)">comment, no link found</span>';
+      var writerHtml = esc(writerName || "Unassigned") +
+        (writerName && noReviewNeeded(writerName) ? '<span class="no-review-dot" title="No expert review needed">✓</span>' : "");
+      return '<tr>' +
+        '<td><a class="key-link" href="' + esc(issue.webUrl || (SITE + "/browse/" + issue.key)) + '" target="_blank" rel="noopener">' + esc(issue.key) + '</a></td>' +
+        '<td class="t-title">' + esc(issue.fields.summary) + '</td>' +
+        '<td class="t-writer">' + writerHtml + '</td>' +
+        '<td><span class="pill ' + st.cls + '">' + esc(st.label) + '</span></td>' +
+        '<td>' + linkHtml + '</td>' +
+        '<td class="t-updated">' + relTime(comment && comment.created) + '</td>' +
+      '</tr>';
+    }).join("");
+  }
+
+  function renderAll(){
+    renderStrip();
+    renderCards();
+    renderTable();
+    renderPendingTable();
+  }
+
+  function renderError(msg, opts){
+    opts = opts || {};
+    els.cards.innerHTML = '<div class="state-msg" style="grid-column:1/-1">' +
+      '<h3>' + esc(opts.title || "Couldn't load Jira data") + '</h3>' +
+      '<p>' + esc(msg) + '</p>' +
+      (opts.showRetry ? '<button class="btn primary" id="retryBtn">Try again</button>' : '') +
+    '</div>';
+    els.tbody.innerHTML = '<tr><td colspan="7" class="empty">' + esc(msg) + '</td></tr>';
+    els.strip.innerHTML = "";
+    els.alertBanner.hidden = true;
+    els.pendingSection.hidden = true;
+    if(opts.showRetry){
+      var rb = document.getElementById("retryBtn");
+      if(rb) rb.addEventListener("click", function(){ load(true); });
+    }
+  }
+
+  function friendlyError(err){
+    var code = err && err.code;
+    switch(code){
+      case "needs_reauth":
+        return { title:"Jira connection expired", msg:"Reconnect Atlassian in claude.ai Settings → Connectors, then refresh.", retry:false };
+      case "server_not_connected":
+        return { title:"Jira isn't connected", msg:"Add the Atlassian connector in claude.ai Settings → Connectors, then refresh.", retry:false };
+      case "selection_required":
+        return { title:"Choose a Jira account", msg:"You have more than one Atlassian connection — pick one when prompted, then refresh.", retry:false };
+      case "blocked_by_policy":
+        return { title:"Blocked by workspace policy", msg:"Your organization's policy is blocking this Jira call.", retry:false };
+      case "approval_required":
+        return { title:"Approval needed", msg:"This call needs a one-time approval before it can run.", retry:false };
+      case "not_granted":
+      case "capability_disabled":
+      case "capability_removed":
+        return { title:"Live data unavailable here", msg:"This view can't reach Jira. Open the published page in claude.ai to see live data.", retry:false };
+      case "server_unavailable":
+        return { title:"Jira is temporarily unreachable", msg:"The connector timed out — retrying shortly.", retry:true };
+      case "tool_error":
+        return { title:"Jira rejected the query", msg:(err && err.message) || "The search request failed.", retry:true };
+      default:
+        return { title:"Something went wrong", msg:(err && err.message) || "Unexpected error talking to Jira.", retry:true };
+    }
+  }
+
+  // ---------- data loading ----------
+
+  var mcp = null;
+  var loadToken = 0;
+
+  async function fetchAllIssues(jql, fields){
+    var all = [];
+    var nextPageToken = undefined;
+    var pages = 0;
+    var cappedNow = false;
+    do {
+      var input = { cloudId: CLOUD_ID, jql: jql, fields: fields, maxResults: PAGE_SIZE };
+      if(nextPageToken) input.nextPageToken = nextPageToken;
+      var result = await mcp.callTool("Atlassian", "searchJiraIssuesUsingJql", input, { cache: { refresh: true } });
+      var payload = result.payload;
+      var nodes = (payload && payload.issues && payload.issues.nodes) || [];
+      all = all.concat(nodes);
+      var pageInfo = payload && payload.issues && payload.issues.pageInfo;
+      nextPageToken = pageInfo && pageInfo.hasNextPage ? pageInfo.endCursor : null;
+      pages++;
+      if(pages >= MAX_PAGES && nextPageToken){ cappedNow = true; nextPageToken = null; }
+    } while(nextPageToken);
+    return { issues: all, capped: cappedNow };
+  }
+
+  var CHANGELOG_FETCH_CAP = 80;
+
+  // Fills issue._assignedAt from each ticket's changelog (when the Author
+  // field was last set) so "days writing" reflects the current assignment,
+  // not the ticket's original creation date. Best-effort per ticket — a
+  // failed lookup just falls back to `created` via assignedAt().
+  async function fetchAssignedDates(issues){
+    var subset = issues.slice(0, CHANGELOG_FETCH_CAP);
+    await Promise.all(subset.map(async function(issue){
+      try{
+        var result = await mcp.callTool("Atlassian", "getJiraIssue", {
+          cloudId: CLOUD_ID,
+          issueIdOrKey: issue.key,
+          fields: ["customfield_11710"],
+          expand: "changelog"
+        });
+        var node = result.payload && result.payload.issues && result.payload.issues.nodes && result.payload.issues.nodes[0];
+        issue._assignedAt = (node && assignedDateFromChangelog(node)) || issue.fields.created || null;
+      } catch(e){
+        issue._assignedAt = issue.fields.created || null;
+      }
+    }));
+  }
+
+  async function load(isRetry){
+    var myToken = ++loadToken;
+    state.loading = true;
+    state.error = null;
+    setSync("wait", isRetry ? "Retrying…" : "Syncing with Jira…");
+    els.refreshBtn.setAttribute("disabled", "disabled");
+    els.refreshLabel.textContent = "Syncing…";
+    var iconEl = els.refreshBtn.querySelector("svg");
+    if(iconEl) iconEl.classList.add("spin");
+
+    try{
+      if(!mcp){
+        mcp = await window.claude.use("mcp");
+      }
+      if(!mcp){
+        if(myToken !== loadToken) return;
+        setSync("bad", "Live data unavailable");
+        renderError("This page needs to run inside claude.ai with the Atlassian connector available.", { title:"Live data unavailable here" });
+        return;
+      }
+
+      var res = await fetchAllIssues(JQL, FIELDS);
+      if(myToken !== loadToken) return;
+
+      var inScopeIssues = res.issues.filter(function(issue){
+        var author = issue.fields.customfield_11710;
+        return author && inScope(author.displayName);
+      });
+      state.needsNudge = inScopeIssues.filter(function(issue){ return !writersComment(issue); });
+      state.pending = inScopeIssues.filter(function(issue){ return !!writersComment(issue); });
+      state.capped = res.capped;
+      state.lastSynced = new Date();
+      state.loading = false;
+
+      // Render immediately with what we have, then fill in "writing time"
+      // once the per-ticket changelog lookups resolve — those calls are
+      // slower and shouldn't hold up the first paint.
+      renderAll();
+      setSync("wait", "Checking assignment dates…");
+
+      await fetchAssignedDates(inScopeIssues);
+      if(myToken !== loadToken) return;
+
+      renderAll();
+      setSync("ok", "Synced " + relTime(state.lastSynced.toISOString()));
+      els.footerNote.textContent = state.capped
+        ? "Showing the most recently updated Text-stage tickets (list is capped for performance)."
+        : ("Text-stage tickets for the " + ROSTER.length + " tracked writers, project BP · " + res.issues.length + " total fetched, " + inScopeIssues.length + " in scope. “Writing time” counts from the last Author change on the ticket.");
+
+    } catch(err){
+      if(myToken !== loadToken) return;
+      var f = friendlyError(err);
+      setSync("bad", f.title);
+      renderError(f.msg, { title:f.title, showRetry:f.retry });
+
+      if(f.retry && err && err.retryable){
+        var delay = (err.retryAfterMs || 4000) + Math.random()*1500;
+        setTimeout(function(){ if(myToken === loadToken) load(true); }, delay);
+      }
+    } finally{
+      if(myToken === loadToken){
+        els.refreshBtn.removeAttribute("disabled");
+        els.refreshLabel.textContent = "Refresh";
+        if(iconEl) iconEl.classList.remove("spin");
+      }
+    }
+  }
+
+  // ---------- wiring ----------
+
+  els.refreshBtn.addEventListener("click", function(){ load(); });
+  els.searchInput.addEventListener("input", function(e){
+    state.search = e.target.value;
+    renderTable();
+  });
+  els.clearFilters.addEventListener("click", function(){
+    state.writerFilter = null;
+    state.stageFilter = null;
+    state.search = "";
+    els.searchInput.value = "";
+    renderAll();
+  });
+  els.pendingToggle.addEventListener("click", function(){
+    state.pendingOpen = !state.pendingOpen;
+    renderPendingTable();
+  });
+
+  document.addEventListener("visibilitychange", function(){
+    if(document.visibilityState === "visible" && state.lastSynced){
+      var idleFor = Date.now() - state.lastSynced.getTime();
+      if(idleFor > AUTO_REFRESH_MS) load();
+    }
+  });
+
+  setInterval(function(){
+    if(document.visibilityState === "visible") load();
+  }, AUTO_REFRESH_MS);
+
+  load();
+})();
+</script>
+
+</body></html>

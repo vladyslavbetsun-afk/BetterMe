@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% from "_macros.html" import key, st, action_box %}
+{% block title %}Assign{% endblock %}
+{% block content %}
+<h1>Assign</h1>
+<div class="grid2">
+<div>
+  <h2>Open queue ({{ v.open|length }})</h2>
+  <div class="tablewrap"><table><tr><th>Key</th><th>Title</th><th>Topic</th><th class="num">Words</th><th>Age</th></tr>
+  {% for t in v.open %}<tr style="{{ 'background:var(--soft)' if v.selected and v.selected.jira_key == t.jira_key }}">
+    <td>{{ key(t.jira_key) }}</td><td><a href="?key={{ t.jira_key }}">{{ t.summary }}</a></td>
+    <td><span class="tag">{{ t.category_detected or 'other' }}</span>{% if t.type == 'update' %}<span class="tag">update</span>{% endif %}</td>
+    <td class="num">{% if t.words %}{{ t.words[0] }}{% if t.words[1] != t.words[0] %}–{{ t.words[1] }}{% endif %}{% else %}<span class="sub">unpriced</span>{% endif %}</td>
+    <td class="nowrap">{{ t.created_at|ago }}</td></tr>
+  {% else %}<tr><td colspan="5" class="sub">The Open queue is empty.</td></tr>{% endfor %}</table></div>
+</div>
+<div>
+  <h2>Writers{% if v.selected %} for {{ v.selected.jira_key }}{% endif %}</h2>
+  {% if not v.selected %}<div class="note">Pick an Open ticket. Writers whose topic fits come first, then the ones with the fewest tickets in Text.</div>{% endif %}
+  <div class="tablewrap"><table><tr><th>Writer</th><th>Niche</th><th class="num">In Text</th>
+    {% if user.sees_money %}<th>Rate</th><th class="num">Price</th><th class="num">{{ v.month.strftime('%B') }} so far</th>{% endif %}<th></th></tr>
+  {% for w in v.writers %}<tr>
+    <td>{{ w.p.display_name }}{% if not w.fit %} <span class="tag warn">outside niche</span>{% endif %}{% if w.p.skip_expert_review %} <span class="tag">no expert review</span>{% endif %}</td>
+    <td>{{ w.p.niche or 'any' }}</td><td class="num">{{ w.in_text }}</td>
+    {% if user.sees_money %}<td class="nowrap">{% if w.rate %}${{ w.rate.amount|num(3) if w.rate.unit == 'word' else w.rate.amount|num(2) }}{% if w.rate.amount_max %}–{{ w.rate.amount_max|num(0) }}{% endif %}/{{ w.rate.unit }}{% else %}—{% endif %}</td>
+    <td class="num">{{ w.price.lo|usd(w.price.hi) if w.price else '—' }}{% if w.price and not w.p.skip_expert_review %}<div class="sub">incl. expert</div>{% endif %}</td>
+    <td class="num">{% if w.mtd %}{{ w.mtd.amount|usd(w.mtd.amount_max) }}<div class="sub">{{ w.mtd.jira_keys|length }} handed in{% if w.mtd.unpriced %}, {{ w.mtd.unpriced }} unpriced{% endif %}</div>{% else %}—{% endif %}</td>{% endif %}
+    <td>{% if v.selected and user.is_owner %}<form method="post" action="/assign" data-confirm="Assign {{ v.selected.jira_key }} to {{ w.p.display_name }}?"><input type="hidden" name="key" value="{{ v.selected.jira_key }}"><input type="hidden" name="writer" value="{{ w.p.id }}"><button class="sm primary">Assign</button></form>{% endif %}</td></tr>
+  {% endfor %}</table></div>
+  {% if user.sees_money %}<p class="sub">Price = word count × rate (or flat fee) plus the expert review estimate (fitness +$50; nutrition +$20–50). Month-to-date uses the same calculation as Spend: articles that left Text this month.</p>{% endif %}
+</div>
+</div>
+{% if pending %}<h2 id="pending">To do / confirm</h2>{% for a in pending %}{{ action_box(a, flags, user, '/assign') }}{% endfor %}{% endif %}
+{% endblock %}

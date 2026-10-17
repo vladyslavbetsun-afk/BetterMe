@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Roster{% endblock %}
+{% block content %}
+<h1>Roster &amp; rates</h1>
+<p class="sub">The one roster every module reads. People are matched by Jira accountId. A new rate with a future "effective from" date doesn't change past months.</p>
+<div class="tablewrap"><table>
+<tr><th>Person</th><th>Role</th><th>Niche</th><th>Jira accountId</th><th>Slack</th><th>App access</th><th>Rates</th></tr>
+{% for p in roster.people %}<tr style="{{ 'opacity:.55' if not p.active }}">
+  <td><strong>{{ p.display_name }}</strong> <span class="sub">{{ p.id }}</span>{% if p.skip_expert_review %}<br><span class="tag">no expert review</span>{% endif %}{% if p.notes %}<br><span class="sub">{{ p.notes }}</span>{% endif %}</td>
+  <td>{{ p.role }}</td><td>{{ p.niche or '' }}</td><td class="key">{{ p.jira_account_id or '—' }}</td><td class="key">{{ p.slack_id or '' }}</td>
+  <td>{{ p.app_role or '' }}{% if p.email %}<div class="sub">{{ p.email }}</div>{% endif %}</td>
+  <td>{% for r in p.rates %}<div class="nowrap {{ 'sub' if r.effective_to }}">{{ r.kind }}: ${{ r.amount|num(3) }}{% if r.amount_max %}–{{ r.amount_max|num(0) }}{% endif %}/{{ r.unit }} · {{ r.billing or '' }} · from {{ r.effective_from }}{% if r.effective_to %} to {{ r.effective_to }}{% endif %}</div>{% endfor %}</td></tr>
+{% endfor %}</table></div>
+<div class="grid2">
+<div class="panel"><h3>Add or edit a person</h3>
+  <form method="post" action="/admin/person">
+    <div class="row"><input name="id" placeholder="id (slug)" required size="12"><input name="display_name" placeholder="Display name" required></div>
+    <div class="row"><input name="jira_account_id" placeholder="Jira accountId" size="40"><input name="slack_id" placeholder="Slack ID" size="12"></div>
+    <div class="row"><input name="email" placeholder="BetterMe email (for app access)" size="30">
+      <select name="app_role"><option value="">no app access</option><option>owner</option><option>viewer</option><option>finance</option><option>designer</option></select></div>
+    <div class="row"><select name="role">{% for r in ['writer','expert','proofreader','publisher','designer','manager','researcher','stakeholder','finance'] %}<option>{{ r }}</option>{% endfor %}</select>
+      <select name="niche"><option value="">niche: —</option>{% for n in ['exercise','nutrition','both','any','fitness'] %}<option>{{ n }}</option>{% endfor %}</select>
+      <label><input type="checkbox" name="skip_expert_review"> no expert review</label><label><input type="checkbox" name="active" checked> active</label></div>
+    <input name="notes" placeholder="Notes" size="50"><div><button class="primary sm">Save person</button></div>
+    <p class="sub">Saving an existing id overwrites all its fields.</p>
+  </form></div>
+<div class="panel"><h3>Add a rate</h3>
+  <form method="post" action="/admin/rate">
+    <div class="row"><select name="person_id">{% for p in roster.people %}<option value="{{ p.id }}">{{ p.display_name }}</option>{% endfor %}</select>
+      <select name="kind"><option>base</option><option>review_fee</option></select></div>
+    <div class="row"><input name="amount" placeholder="amount" size="8" required><input name="amount_max" placeholder="max (range)" size="8">
+      <select name="unit"><option>word</option><option>article</option><option>hour</option><option>month</option></select>
+      <select name="billing"><option value="">billing</option><option>upwork</option><option>invoice</option><option>retainer</option><option>internal</option></select></div>
+    <div class="row"><label>Effective from <input type="date" name="effective_from" value="{{ today }}" required></label><input name="note" placeholder="note"></div>
+    <button class="primary sm">Add rate</button></form>
+  <h3>Aliases (free-text parsing only)</h3>
+  <form method="post" action="/admin/alias" class="row"><input name="alias" placeholder="alias" required><select name="person_id">{% for p in roster.people %}<option value="{{ p.id }}">{{ p.display_name }}</option>{% endfor %}</select><button class="sm">Add</button></form>
+  <p class="sub">{% for a in aliases %}{{ a.alias }} → {{ a.person_id }}{{ ', ' if not loop.last }}{% endfor %}</p></div>
+</div>
+{% endblock %}

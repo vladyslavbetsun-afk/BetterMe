@@ -1,0 +1,52 @@
+{% macro key(k) -%}<a class="key" href="{{ ticket_url(k) }}" target="_blank" rel="noopener">{{ k }}</a>{%- endmacro %}
+
+{% macro st(s) -%}<span class="st st-{{ s }}">{{ s }}</span>{%- endmacro %}
+
+{# A proposed Jira/Notion action. When the system's write flag is off it becomes instructions + copyable text. #}
+{% macro action_box(a, flags, user, next) -%}
+<div class="action" id="action-{{ a.id }}">
+  <div class="row">
+    {% if a.jira_key %}{{ key(a.jira_key) }}{% endif %}
+    <strong>{{ a.payload.description or a.kind }}</strong>
+    <span class="tag {{ 'bad' if a.state == 'failed' else '' }}">{{ a.state }}</span>
+    <span class="sub">proposed {{ a.created_at|ago }} by {{ a.proposed_by }}</span>
+  </div>
+  {% if a.error %}<div class="sub" style="color:var(--bad)">{{ a.error[:400] }}</div>{% endif %}
+  {% set system = a.kind.split('.')[0] %}
+  {% set enabled = flags.jira_writes_enabled if system == 'jira' else flags.notion_writes_enabled %}
+  {% for op in a.payload.get('ops', []) if op.op == 'comment' %}
+    <pre id="c-{{ a.id }}-{{ loop.index }}">{% for p in op.adf.content %}{% for n in p.content %}{{ n.attrs.text if n.type == 'mention' else n.text }}{% endfor %}{% endfor %}</pre>
+    <button class="sm" type="button" data-copy="#c-{{ a.id }}-{{ loop.index }}">Copy comment</button>
+  {% endfor %}
+  {% if user.is_owner %}
+  <div class="row" style="margin-top:6px">
+    {% if enabled %}
+      <form class="inline" method="post" action="/actions/{{ a.id }}/execute"><input type="hidden" name="next" value="{{ next }}"><button class="primary sm">Confirm and do it</button></form>
+    {% else %}
+      <span class="sub">{{ system|capitalize }} writes are off: do it {% if a.jira_key and system == 'jira' %}<a href="{{ ticket_url(a.jira_key) }}" target="_blank" rel="noopener">in Jira ↗</a>{% else %}by hand{% endif %}, then dismiss.</span>
+    {% endif %}
+    <form class="inline" method="post" action="/actions/{{ a.id }}/cancel"><input type="hidden" name="next" value="{{ next }}"><button class="sm">{{ 'Done by hand / dismiss' if not enabled else 'Dismiss' }}</button></form>
+  </div>
+  {% endif %}
+</div>
+{%- endmacro %}
+
+{# A drafted Slack message: copy + open DM + mark sent. #}
+{% macro message_box(m, user, next, dm=None, title=None) -%}
+<div class="action" id="msg-{{ m.id }}">
+  <div class="row"><strong>{{ title or m.template.replace('_', ' ') }}</strong><span class="tag">{{ m.state }}</span>
+    <span class="sub">drafted {{ m.created_at|ago }}{% if m.sent_at %} · sent {{ m.sent_at|ago }}{% endif %}</span></div>
+  <pre class="msg" id="m-{{ m.id }}">{{ m.body }}</pre>
+  <div class="row">
+    <button class="sm" type="button" data-copy="#m-{{ m.id }}">Copy</button>
+    {% if dm %}<a class="btn sm" href="{{ dm }}" target="_blank" rel="noopener">Open DM ↗</a>{% endif %}
+    {% if user.is_owner and m.state == 'draft' %}
+      {% if m.channel == 'slack_channel' %}
+      <form class="inline" method="post" action="/messages/{{ m.id }}/post"><input type="hidden" name="next" value="{{ next }}"><button class="primary sm">Post to channel</button></form>
+      {% endif %}
+      <form class="inline" method="post" action="/messages/{{ m.id }}/sent"><input type="hidden" name="next" value="{{ next }}"><button class="sm">I sent it</button></form>
+      <form class="inline" method="post" action="/messages/{{ m.id }}/cancel"><input type="hidden" name="next" value="{{ next }}"><button class="sm">Discard</button></form>
+    {% endif %}
+  </div>
+</div>
+{%- endmacro %}

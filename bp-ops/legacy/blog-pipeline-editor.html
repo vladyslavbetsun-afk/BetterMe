@@ -1,0 +1,272 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Blog Pipeline Editor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: header + status strip, then one editable ledger table that is the whole job of the page */
+:root{
+  --bg:#f6f7f5; --panel:#ffffff; --fg:#1d2420; --muted:#5f6b64; --line:#dde2de;
+  --accent:#1f6f54; --accent-soft:#e3f0ea; --warn:#a15c07; --warn-soft:#fbf0de; --bad:#b3261e; --bad-soft:#fbe7e5;
+  --display:"Fraunces",Georgia,serif; --body:"IBM Plex Sans",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#141917; --panel:#1b211e; --fg:#e7ece9; --muted:#9aa8a0; --line:#2c3531;
+  --accent:#6fcf9f; --accent-soft:#1d3a2e; --warn:#f0b35a; --warn-soft:#3a2c17; --bad:#ff8a80; --bad-soft:#3d1f1d; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#141917; --panel:#1b211e; --fg:#e7ece9; --muted:#9aa8a0; --line:#2c3531;
+  --accent:#6fcf9f; --accent-soft:#1d3a2e; --warn:#f0b35a; --warn-soft:#3a2c17; --bad:#ff8a80; --bad-soft:#3d1f1d; color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:14px}
+.wrap{max-width:1400px;margin-inline:auto;padding-inline:20px;padding-block:24px 48px;display:flex;flex-direction:column;gap:18px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+h1{font-family:var(--display);font-weight:600;font-size:28px;margin:0;text-wrap:balance}
+.sub{color:var(--muted);margin:4px 0 0;max-width:70ch}
+.btn{font:inherit;font-weight:500;border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:8px;padding:7px 12px;cursor:pointer}
+.btn:hover{border-color:var(--accent)}
+.btn:focus-visible,input:focus-visible,select:focus-visible,.cell:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:10px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.stat .k{font-size:12px;color:var(--muted);letter-spacing:.02em}
+.stat .v{font-family:var(--display);font-size:30px;font-variant-numeric:tabular-nums;line-height:1.2}
+.stat.alert .v{color:var(--bad)}
+.banner{border-radius:10px;padding:10px 14px;font-size:13px;border:1px solid var(--line);background:var(--panel)}
+.banner.bad{border-color:var(--bad);background:var(--bad-soft)}
+.banner.info{border-color:var(--accent);background:var(--accent-soft)}
+.tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.tools input[type=search]{flex:1 1 240px;min-width:0;font:inherit;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--fg)}
+.chip{font:inherit;font-size:12px;padding:5px 11px;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--fg);cursor:pointer}
+.chip[aria-pressed=true]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.meta{font-size:12px;color:var(--muted);margin-left:auto;font-family:var(--mono)}
+.tablebox{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:70vh}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th{position:sticky;top:0;z-index:1;background:var(--panel);text-align:left;font-size:12px;font-weight:600;color:var(--muted);border-bottom:1px solid var(--line);padding:8px 10px;white-space:nowrap}
+th button{all:unset;cursor:pointer}
+td{border-bottom:1px solid var(--line);padding:6px 10px;vertical-align:top}
+tr.sync td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
+td.num{font-family:var(--mono);color:var(--muted)}
+.cell{display:block;min-height:1.4em;border-radius:6px;padding:2px 4px;margin:-2px -4px;cursor:text}
+.cell:hover{background:var(--accent-soft)}
+.cell.empty{color:var(--muted);font-style:italic}
+td input,td select{font:inherit;width:100%;min-width:8rem;padding:3px 6px;border:1px solid var(--accent);border-radius:6px;background:var(--bg);color:var(--fg)}
+td.saving{opacity:.55}
+td.err{background:var(--bad-soft)}
+.pill{display:inline-block;font-size:12px;padding:1px 8px;border-radius:999px;border:1px solid currentColor;white-space:nowrap}
+.pill.ip{color:var(--warn)} .pill.ns{color:var(--muted)} .pill.dn{color:var(--accent)}
+.pill.pub{color:var(--bad)} .pill.js{color:var(--fg);border-color:var(--line)}
+.prio-hot{font-weight:600}
+a{color:var(--accent)}
+.empty-row td{color:var(--muted);text-align:center;padding:28px}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:8px 14px;border-radius:8px;font-size:13px}
+@media (max-width:720px){.opt{display:none}}
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Blog Pipeline Editor</h1>
+      <p class="sub">Numbered tickets from the Notion Articles database, with live Jira status. Live articles are cards marked Done or already Published in Jira. Click any cell to edit it; changes save straight to Notion.</p>
+    </div>
+    <button class="btn" id="refresh">Refresh from Notion and Jira</button>
+  </header>
+
+  <div id="banner" hidden></div>
+
+  <section class="strip" aria-label="Summary">
+    <div class="stat"><div class="k">Open tickets</div><div class="v" id="s-open">—</div></div>
+    <div class="stat"><div class="k">In progress</div><div class="v" id="s-ip">—</div></div>
+    <div class="stat"><div class="k">Not started</div><div class="v" id="s-ns">—</div></div>
+    <div class="stat"><div class="k">Week / October priorities</div><div class="v" id="s-pr">—</div></div>
+    <div class="stat"><div class="k">Live articles</div><div class="v" id="s-live">—</div></div>
+    <div class="stat alert"><div class="k">Published in Jira, open in Notion</div><div class="v" id="s-sync">—</div></div>
+  </section>
+
+  <div class="tools">
+    <input type="search" id="q" placeholder="Search article, ticket, category" aria-label="Search tickets">
+    <button class="chip" data-f="all" aria-pressed="true">All open</button>
+    <button class="chip" data-f="In progress" aria-pressed="false">In progress</button>
+    <button class="chip" data-f="Not started" aria-pressed="false">Not started</button>
+    <button class="chip" data-f="priority" aria-pressed="false">Priorities</button>
+    <button class="chip" data-f="sync" aria-pressed="false">Out of sync with Jira</button>
+    <button class="chip" data-f="live" aria-pressed="false">Live articles</button>
+    <span class="meta" id="fresh"></span>
+  </div>
+
+  <div class="tablebox">
+    <table>
+      <thead><tr>
+        <th><button data-k="num">#</button></th>
+        <th><button data-k="name">Article</button></th>
+        <th><button data-k="status">Notion status</button></th>
+        <th><button data-k="priority">Choose Primary</button></th>
+        <th class="opt"><button data-k="category">Blog category</button></th>
+        <th class="opt"><button data-k="type">New/Upd</button></th>
+        <th><button data-k="ticket">Jira</button></th>
+        <th><button data-k="jira_status">Jira status</button></th>
+        <th class="opt"><button data-k="url1">URL 1</button></th>
+      </tr></thead>
+      <tbody id="body"><tr class="empty-row"><td colspan="9">Loading tickets from Notion…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const DS = 'collection://1e997cc2-2a80-8086-a8ea-000bcc1073a4';
+const SQL = 'SELECT "Number" AS num, "Name" AS name, "Status" AS status, "Choose Primary" AS priority, "Blog Category" AS category, "New/Upd" AS type, "URL 1" AS url1, "JIRA" AS jira, "url" AS notion FROM "' + DS + '" WHERE "Number" IS NOT NULL AND "Status" IN (\'In progress\', \'Not started\', \'Done\') ORDER BY "Number"';
+const NQ = {data: {data_source_urls: [DS], query: SQL}};
+const JQ = {cloudId: '657e24cd-f643-4482-aba5-7e848607df28', jql: 'project = BP AND (status != Published OR updated >= -30d) ORDER BY key DESC', fields: ['status', 'updated'], maxResults: 100};
+const STATUSES = ['Not started', 'In progress', 'Done'];
+const FIELDS = {name: 'Name', status: 'Status', priority: 'Choose Primary', category: 'Blog Category', type: 'New/Upd', url1: 'URL 1'};
+
+let mcp = null, rows = [], jira = new Map(), st = {q: '', f: 'all', sort: 'num', dir: 1}, editing = false, pendingRows = null;
+const $ = (id) => document.getElementById(id);
+const isLive = (r) => r.status === 'Done' || jira.get(r.ticket) === 'Published';
+const open = (r) => r.status !== 'Done';
+const isPrio = (p) => /\((Week|October)\)\s*$/.test(p || '');
+const ticketOf = (u) => { const m = /BP-\d+/.exec(u || ''); return m ? m[0] : ''; };
+const pageId = (u) => (/([0-9a-f]{32})/.exec(u || '') || [])[1];
+
+function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toast.h); toast.h = setTimeout(() => t.hidden = true, 2600); }
+function banner(kind, msg) { const b = $('banner'); if (!msg) { b.hidden = true; return; } b.className = 'banner ' + kind; b.textContent = msg; b.hidden = false; }
+function errText(e, server) {
+  const c = e && e.code;
+  if (c === 'needs_reauth') return `Reconnect ${server} in claude.ai Settings → Connectors, then press Refresh.`;
+  if (c === 'server_not_connected' || c === 'selection_required') return `Add the ${server} connector in claude.ai Settings → Connectors to see this data.`;
+  if (c === 'not_in_manifest' || c === 'consent_required') return `${server} isn't allowed for this page. Allow it from the page's Permissions menu.`;
+  if (c === 'blocked_by_policy') return `Your organization blocks this ${server} action.`;
+  if (c === 'tool_error') return `${server} refused the request: ${e.message}`;
+  return `${server} didn't answer (${c || 'error'}). Press Refresh to try again.`;
+}
+
+function render() {
+  if (editing) return;
+  const q = st.q.toLowerCase();
+  let list = rows.filter(r => {
+    const js = jira.get(r.ticket);
+    const live = r.status === 'Done' || js === 'Published';
+    if (st.f === 'live') { if (!live) return false; }
+    else if (r.status === 'Done') return false;
+    if (st.f === 'priority' && !isPrio(r.priority)) return false;
+    if (st.f === 'sync' && js !== 'Published') return false;
+    if (STATUSES.includes(st.f) && r.status !== st.f) return false;
+    return !q || [r.name, r.ticket, r.priority, r.category].some(v => String(v || '').toLowerCase().includes(q));
+  });
+  const val = (r, k) => k === 'jira_status' ? (jira.get(r.ticket) || '') : r[k];
+  list.sort((a, b) => { const x = val(a, st.sort), y = val(b, st.sort); return (typeof x === 'number' && typeof y === 'number' ? x - y : String(x ?? '').localeCompare(String(y ?? ''))) * st.dir; });
+  const body = $('body'); body.textContent = '';
+  if (!list.length) { const tr = body.insertRow(); tr.className = 'empty-row'; const td = tr.insertCell(); td.colSpan = 9; td.textContent = rows.length ? 'No tickets match.' : 'No numbered tickets.'; }
+  for (const r of list) {
+    const tr = body.insertRow(); const js = jira.get(r.ticket);
+    if (js === 'Published') tr.className = 'sync';
+    const n = tr.insertCell(); n.className = 'num'; n.textContent = r.num;
+    editable(tr.insertCell(), r, 'name');
+    editable(tr.insertCell(), r, 'status');
+    editable(tr.insertCell(), r, 'priority');
+    editable(Object.assign(tr.insertCell(), {className: 'opt'}), r, 'category');
+    editable(Object.assign(tr.insertCell(), {className: 'opt'}), r, 'type');
+    const j = tr.insertCell();
+    if (r.jira) { const a = document.createElement('a'); a.href = r.jira; a.target = '_blank'; a.rel = 'noopener'; a.textContent = r.ticket || 'Jira'; j.appendChild(a); }
+    const jc = tr.insertCell();
+    if (r.ticket) { const p = document.createElement('span'); const s = js || (jira.size ? 'Not in recent Jira' : '…'); p.className = 'pill ' + (s === 'Published' ? 'pub' : js ? 'js' : 'ns'); p.textContent = s; jc.appendChild(p); }
+    editable(Object.assign(tr.insertCell(), {className: 'opt'}), r, 'url1');
+  }
+  const op = rows.filter(open);
+  $('s-open').textContent = op.length;
+  $('s-live').textContent = rows.filter(isLive).length;
+  $('s-ip').textContent = op.filter(r => r.status === 'In progress').length;
+  $('s-ns').textContent = op.filter(r => r.status === 'Not started').length;
+  $('s-pr').textContent = op.filter(r => isPrio(r.priority)).length;
+  $('s-sync').textContent = jira.size ? op.filter(r => jira.get(r.ticket) === 'Published').length : '—';
+  document.querySelectorAll('th button').forEach(b => b.parentElement.setAttribute('aria-sort', b.dataset.k === st.sort ? (st.dir > 0 ? 'ascending' : 'descending') : 'none'));
+}
+
+function editable(td, r, key) {
+  const show = () => {
+    td.textContent = '';
+    const span = document.createElement('span'); span.className = 'cell'; span.tabIndex = 0;
+    const v = r[key];
+    if (key === 'status') { const p = document.createElement('span'); p.className = 'pill ' + (v === 'In progress' ? 'ip' : v === 'Done' ? 'dn' : 'ns'); p.textContent = v; span.appendChild(p); }
+    else if (key === 'name' && r.notion) { span.textContent = v || '(untitled)'; const a = document.createElement('a'); a.href = r.notion; a.target = '_blank'; a.rel = 'noopener'; a.textContent = ' ↗'; a.title = 'Open in Notion'; a.addEventListener('click', e => e.stopPropagation()); span.appendChild(a); }
+    else if (key === 'url1' && v) { const a = document.createElement('a'); a.href = v; a.target = '_blank'; a.rel = 'noopener'; a.textContent = v.replace(/^https?:\/\/(www\.)?betterme\.world/, ''); a.addEventListener('click', e => e.stopPropagation()); span.appendChild(a); }
+    else { span.textContent = v || 'empty'; if (!v) span.classList.add('empty'); if (key === 'priority' && isPrio(v)) span.classList.add('prio-hot'); }
+    span.addEventListener('click', open); span.addEventListener('keydown', e => { if (e.key === 'Enter') open(); });
+    td.appendChild(span);
+  };
+  const open = () => {
+    if (editing) return; editing = true; td.textContent = '';
+    let inp;
+    if (key === 'status') { inp = document.createElement('select'); STATUSES.forEach(s => inp.add(new Option(s, s, false, s === r[key]))); }
+    else { inp = document.createElement('input'); inp.value = r[key] || ''; if (key === 'url1') inp.type = 'url'; }
+    inp.id = 'edit-' + key + '-' + r.num; inp.setAttribute('aria-label', FIELDS[key]);
+    td.appendChild(inp); inp.focus();
+    let done = false;
+    const finish = async (save) => {
+      if (done) return; done = true;
+      const nv = inp.value.trim();
+      if (!save || nv === (r[key] || '')) { editing = false; show(); flushPending(); return; }
+      td.classList.add('saving'); td.classList.remove('err'); show();
+      try {
+        await mcp.callTool('Notion', 'notion-update-page', {page_id: pageId(r.notion), command: 'update_properties', properties: {[FIELDS[key]]: nv === '' && key === 'url1' ? null : nv}});
+        r[key] = nv; toast(`Saved ${FIELDS[key]} for #${r.num} to Notion`);
+        mcp.invalidate('Notion', 'notion-query-data-sources').catch(() => {});
+      } catch (e) { td.classList.add('err'); banner('bad', `Couldn't save #${r.num} ${FIELDS[key]}. ` + errText(e, 'Notion')); }
+      td.classList.remove('saving'); editing = false; show(); flushPending();
+      if (key === 'status') render();
+    };
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') finish(true); if (e.key === 'Escape') finish(false); });
+    inp.addEventListener('blur', () => finish(true));
+    if (key === 'status') inp.addEventListener('change', () => inp.blur());
+  };
+  show();
+}
+
+function flushPending() { if (pendingRows && !editing) { rows = pendingRows; pendingRows = null; render(); } }
+
+function onNotion(ev) {
+  if (ev.type === 'error') {
+    const c = ev.error.code;
+    if (['needs_reauth', 'server_not_connected', 'blocked_by_policy', 'not_in_manifest', 'consent_required', 'selection_required'].includes(c)) { rows = []; render(); }
+    banner('bad', errText(ev.error, 'Notion')); return;
+  }
+  const p = ev.result.payload || {};
+  const next = (p.results || []).map(r => ({...r, ticket: ticketOf(r.jira)}));
+  const at = ev.result.cache ? ev.result.cache.storedAt : Date.now();
+  $('fresh').textContent = 'Notion as of ' + new Date(at).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+  if ($('banner').classList.contains('bad') && $('banner').textContent.startsWith('Notion')) banner();
+  if (editing) pendingRows = next; else { rows = next; render(); }
+}
+
+async function loadJira(fresh) {
+  const map = new Map(); let args = JQ, pages = 0;
+  try {
+    while (pages < 4) {
+      const res = await mcp.callTool('Atlassian', 'searchJiraIssuesUsingJql', args, {cache: {staleTime: fresh ? 0 : 120000, refresh: !!fresh}});
+      const p = typeof res.payload === 'string' ? JSON.parse(res.payload) : res.payload;
+      for (const n of (p.issues && p.issues.nodes) || []) map.set(n.key, n.fields && n.fields.status ? n.fields.status.name : '');
+      pages++;
+      const pi = p.issues && p.issues.pageInfo;
+      if (!pi || !pi.hasNextPage) break;
+      args = {...JQ, nextPageToken: pi.endCursor};
+    }
+    jira = map; render();
+  } catch (e) { banner('bad', 'Jira status unavailable. ' + errText(e, 'Atlassian')); }
+}
+
+(async () => {
+  mcp = await claude.use('mcp');
+  if (!mcp) { $('body').innerHTML = ''; const tr = $('body').insertRow(); tr.className = 'empty-row'; const td = tr.insertCell(); td.colSpan = 9; td.textContent = 'Open this page in Claude to load your Notion tickets.'; return; }
+  mcp.watchTool('Notion', 'notion-query-data-sources', NQ, onNotion, {refetchInterval: 60000, cache: {staleTime: 30000}});
+  loadJira(false);
+})();
+
+$('refresh').addEventListener('click', async () => {
+  if (!mcp) return;
+  banner(); toast('Refreshing…');
+  mcp.invalidate('Notion', 'notion-query-data-sources').catch(() => {});
+  loadJira(true);
+});
+$('q').addEventListener('input', e => { st.q = e.target.value; render(); });
+document.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => { st.f = c.dataset.f; document.querySelectorAll('.chip').forEach(x => x.setAttribute('aria-pressed', String(x === c))); render(); }));
+document.querySelectorAll('th button').forEach(b => b.addEventListener('click', () => { const k = b.dataset.k; if (st.sort === k) st.dir = -st.dir; else { st.sort = k; st.dir = 1; } render(); }));
+</script>
+
+</body></html>

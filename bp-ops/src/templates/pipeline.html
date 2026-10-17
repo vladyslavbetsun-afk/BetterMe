@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% from "_macros.html" import key, st, action_box %}
+{% block title %}Pipeline{% endblock %}
+{% block content %}
+<h1>Pipeline <span class="sub">Notion Articles ↔ Jira</span></h1>
+{% if not notion_ok %}<div class="note">Notion isn't configured yet (secret NOTION_TOKEN, egress api.notion.com: spec 05 §3, Phase 4). The Jira side below already works.</div>
+{% else %}<p class="sub">Notion mirror refreshed {{ synced|ago }}. {% if user.is_owner %}<form class="inline" method="post" action="/pipeline/sync"><button class="sm">Refresh now</button></form>{% endif %}</p>{% endif %}
+<div class="tabs">{% for k, l in [("open","Open"),("mismatch","Mismatches (" ~ n_mismatch ~ ")"),("priority","Priority"),("all","All")] %}<a href="?f={{ k }}" class="{{ 'on' if f == k }}">{{ l }}</a>{% endfor %}</div>
+<div class="tablewrap"><table>
+<tr><th class="num">#</th><th>Name</th><th>Status</th><th>Jira</th><th>Priority</th><th>Category</th><th>New/Upd</th><th>URL 1</th></tr>
+{% for c in cards %}<tr>
+  <td class="num">{% if c.notion_url %}<a href="{{ c.notion_url }}" target="_blank" rel="noopener">{{ c.number }}</a>{% else %}{{ c.number }}{% endif %}</td>
+  {% for prop, field in [("Name","name")] %}<td>{% if user.is_owner %}<form method="post" action="/pipeline/edit" class="row"><input type="hidden" name="page_id" value="{{ c.page_id }}"><input type="hidden" name="prop" value="Name"><input name="value" value="{{ c.name or '' }}" size="40"><button class="sm">Save</button></form>{% else %}{{ c.name }}{% endif %}</td>{% endfor %}
+  <td>{% if user.is_owner %}<form method="post" action="/pipeline/edit" class="row"><input type="hidden" name="page_id" value="{{ c.page_id }}"><input type="hidden" name="prop" value="Status"><select name="value" onchange="this.form.submit()">{% for s in ['Not started','In progress','Done'] %}<option {{ 'selected' if c.status == s }}>{{ s }}</option>{% endfor %}</select></form>{% else %}{{ c.status }}{% endif %}
+    {% if c.mismatch %}<span class="tag bad">Jira says {{ c.expected }}</span>{% endif %}</td>
+  <td>{% if c.jira_key %}{{ key(c.jira_key) }} {{ st(c.jira_status) if c.jira_status }}{% endif %}</td>
+  <td>{{ c.priority or '' }}{% if c.is_priority %} <span class="tag good">priority</span>{% endif %}</td>
+  <td>{{ c.category or '' }}</td><td>{{ c.new_upd or '' }}</td>
+  <td>{% if c.url1 %}<a href="{{ c.url1 }}" target="_blank" rel="noopener">{{ c.url1[:40] }}</a>{% endif %}</td></tr>
+{% else %}<tr><td colspan="8" class="sub">No Notion cards {{ 'yet' if not notion_ok else 'match' }}.</td></tr>{% endfor %}
+</table></div>
+
+{% if pending %}<h2>Proposed Notion changes ({{ pending|length }})</h2>{% for a in pending %}{{ action_box(a, flags, user, '/pipeline') }}{% endfor %}{% endif %}
+
+<h2 id="missing">Jira tickets with no Notion card ({{ missing|length }})</h2>
+<div class="tablewrap"><table><tr><th>Key</th><th>Summary</th><th>Status</th><th></th></tr>
+{% for t in missing %}<tr><td>{{ key(t.jira_key) }}</td><td>{{ t.summary }}</td><td>{{ st(t.status) }}</td>
+  <td>{% if user.is_owner and notion_ok %}<form method="post" action="/pipeline/create"><input type="hidden" name="key" value="{{ t.jira_key }}"><button class="sm">Create card</button></form>{% endif %}</td></tr>
+{% else %}<tr><td colspan="4" class="sub">none</td></tr>{% endfor %}</table></div>
+{% endblock %}

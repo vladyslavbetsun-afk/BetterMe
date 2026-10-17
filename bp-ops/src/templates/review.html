@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% from "_macros.html" import key, st, action_box, message_box %}
+{% block title %}Review{% endblock %}
+{% macro tline(t) -%}
+<div class="row">{{ key(t.key) }} {{ st(t.status) }} <span>{{ t.title }}</span>
+  {% if t.writer %}<span class="sub">writer {{ t.writer.display_name }}</span>{% endif %}
+  {% if t.category %}<span class="tag">{{ t.category }}{% if t.cat_auto %} (auto){% endif %}</span>{% endif %}
+</div>
+{%- endmacro %}
+{% block content %}
+<h1>Review flow</h1>
+<div class="tabs"><a href="?scope=mine" class="{{ 'on' if scope == 'mine' }}">My tickets</a><a href="?scope=all" class="{{ 'on' if scope == 'all' }}">All BP</a></div>
+{% if not flags.jira_writes_enabled %}<div class="note">Jira writes are off, so each step shows exactly what to do in Jira plus the comment to copy. Nothing is changed in Jira from here until the platform admin approves a write path (docs/decisions.md D-02).</div>{% endif %}
+
+<div class="grid">
+  {% for k, label, hot in [("move","Your move",1),("text","Writing (Text)",0),("expert","With expert",0),("fixing","Writer fixing",0),("proof","With proofreader",0),("no_reply","1st note unanswered",0),("flagged","Follow-up due",0),("silent","Expert quiet",0),("late","No doc after 5 bd",0)] %}
+  <div class="kpi {{ 'hot' if hot }}"><div class="l">{{ label }}</div><div class="v">{{ D.counts[k] }}</div></div>
+  {% endfor %}
+</div>
+
+<h2 id="move">Your move ({{ D.move|length }})</h2>
+{% for t in D.move %}
+<div class="panel">
+  {{ tline(t) }}
+  <div class="sub">{{ t.stage }}{% if t.trigger %} · trigger: {{ t.trigger.name }} {{ t.trigger.at|ago }}{% endif %}
+    {% if t.auto %} · <span class="tag good">automation-eligible</span>{% elif t.auto_why %} · manual: {{ t.auto_why }}{% endif %}</div>
+  {% for w in t.warnings %}<span class="tag warn">{{ w }}</span>{% endfor %}
+  {% if t.trigger %}<details><summary class="sub">Trigger comment</summary><pre class="msg">{{ t.trigger.text[:1500] }}</pre></details>{% endif %}
+  {% if user.is_owner %}
+  <div class="row" style="margin-top:6px">
+    {% for a in t.actions %}
+    <form class="inline" method="post" action="/review/act" data-confirm="{{ t.key }}: {{ a.label }}?">
+      <input type="hidden" name="key" value="{{ t.key }}"><input type="hidden" name="kinds" value="{{ a.kind }}">
+      <button class="{{ 'primary' if loop.first }} sm" {{ 'disabled' if a.disabled }}>{{ a.label }}</button></form>
+    {% endfor %}
+    {% if t.actions|length > 1 and not t.actions|selectattr('disabled')|list %}
+    <form class="inline" method="post" action="/review/act" data-confirm="{{ t.key }}: run all steps?">
+      <input type="hidden" name="key" value="{{ t.key }}"><input type="hidden" name="kinds" value="{{ t.actions|map(attribute='kind')|join(',') }}">
+      <button class="sm">All steps</button></form>{% endif %}
+    {% if t.can_ready %}<form class="inline" method="post" action="/review/act" data-confirm="Send {{ t.key }} straight to Ready ({{ t.status }} → … → Ready)?">
+      <input type="hidden" name="key" value="{{ t.key }}"><input type="hidden" name="kinds" value="straightToReady"><button class="sm">Straight to Ready</button></form>{% endif %}
+    <form class="inline" method="post" action="/review/exclude"><input type="hidden" name="key" value="{{ t.key }}"><input type="hidden" name="title" value="{{ t.title }}"><button class="sm">Exclude</button></form>
+    <details style="display:inline-block"><summary class="sub">Override</summary>
+      <form method="post" action="/review/override" class="row">
+        <input type="hidden" name="key" value="{{ t.key }}">
+        <select name="category"><option value="">category: auto</option><option value="fitness" {{ 'selected' if ctx.overrides.get(t.key, {}).get('category') == 'fitness' }}>fitness</option><option value="nutrition" {{ 'selected' if ctx.overrides.get(t.key, {}).get('category') == 'nutrition' }}>nutrition</option></select>
+        <select name="expert_id"><option value="">expert: auto</option>{% for e in experts %}<option value="{{ e.jira_account_id }}" {{ 'selected' if ctx.overrides.get(t.key, {}).get('expert_id') == e.jira_account_id }}>{{ e.display_name }} ({{ e.niche }})</option>{% endfor %}</select>
+        <button class="sm">Save</button></form></details>
+  </div>
+  {% endif %}
+</div>
+{% else %}<p class="sub">Nothing needs a step right now.</p>{% endfor %}
+
+{% if pending %}<h2 id="pending">Steps to do / confirm ({{ pending|length }})</h2>
+{% for a in pending %}{{ action_box(a, flags, user, '/review') }}{% endfor %}{% endif %}
+
+<h2 id="followups">Follow-ups</h2>
+<div class="grid2">
+  <div class="panel"><h3>1st note unanswered for 3+ business days ({{ D.no_reply|length }})</h3>
+    {% for t in D.no_reply %}{{ tline(t) }}<div class="sub">your note {{ t.my_last.at|ago }} · {{ t.bd_since_last|bdays }} · to {{ ctx.roster.name(t.target_id, 'someone') }}</div>
+    {% if user.is_owner and t.target_id %}<form class="inline" method="post" action="/review/chase"><input type="hidden" name="key" value="{{ t.key }}"><input type="hidden" name="target" value="{{ t.target_id }}"><input type="hidden" name="expert" value="{{ '1' if t.target_is_expert else '' }}"><button class="sm">Chase in Jira</button></form>{% endif %}
+    {% else %}<span class="sub">none</span>{% endfor %}</div>
+  <div class="panel"><h3>Follow-up due (2nd+ note, 3 business days) ({{ D.flagged|length }})</h3>
+    {% for a in D.flagged %}{{ tline(a.t) }}<div class="sub">note #{{ a.t.msg_no }} {{ a.t.my_last.at|ago }}{% if a.returned %} · Slacked {{ a.sent_at|ago }}, still nothing{% endif %}</div>
+    {% else %}<span class="sub">none</span>{% endfor %}
+    <h3>Counting down ({{ D.follow|length }})</h3>
+    {% for a in D.follow %}<div class="row">{{ key(a.t.key) }}<span class="sub">note #{{ a.t.msg_no }} · {{ a.bd|bdays }}{% if a.paused %} · paused after Slack {{ a.sent_at|ago }}{% endif %}</span></div>
+    {% else %}<span class="sub">none</span>{% endfor %}</div>
+</div>
+
+<h2 id="drafts">Slack nudges to writers</h2>
+<p class="sub">Writers get DMs from Vladyslav, not a bot (spec 05 §3, decision a): the app drafts each message once per writer, ticket set and day; you send it from Slack and click "I sent it". A second draft of the same message the same day is impossible (unique idempotency key).</p>
+{% if user.is_owner %}<div class="row">{% for wid, w in writers.items() %}
+  <form class="inline" method="post" action="/review/draft"><input type="hidden" name="writer_id" value="{{ wid }}"><button class="sm">Draft for {{ w.display_name if w else wid }}</button></form>
+{% else %}<span class="sub">No writer needs a nudge.</span>{% endfor %}</div>{% endif %}
+{% for m in drafts %}{{ message_box(m, user, '/review#drafts', m.dm, 'To ' ~ m.who) }}{% endfor %}
+
+<div class="grid2">
+  <div class="panel"><h3>Expert quiet 7+ days ({{ D.expert_silent|length }})</h3>
+    {% for t in D.expert_silent %}{{ tline(t) }}<div class="sub">with {{ t.waiting_on }} since {{ t.since|ago }}</div>
+    {% if user.is_owner and t.expert_id %}<form class="inline" method="post" action="/review/chase"><input type="hidden" name="key" value="{{ t.key }}"><input type="hidden" name="target" value="{{ t.expert_id }}"><input type="hidden" name="expert" value="1"><button class="sm">Ask expert in Jira</button></form>{% endif %}
+    {% else %}<span class="sub">none</span>{% endfor %}</div>
+  <div class="panel"><h3>No document 5+ business days after assignment ({{ D.writing_late|length }})</h3>
+    {% for t in D.writing_late %}{{ tline(t) }}<div class="sub">assigned {{ t.assigned_at|ago }}</div>
+    {% if user.is_owner and t.writer_id %}<form class="inline" method="post" action="/review/status-draft"><input type="hidden" name="writer_id" value="{{ t.writer_id }}"><input type="hidden" name="keys" value="{{ t.key }}"><button class="sm">Draft status DM</button></form>
+    <form class="inline" method="post" action="/review/chase"><input type="hidden" name="key" value="{{ t.key }}"><input type="hidden" name="target" value="{{ t.writer_id }}"><button class="sm">Ask in Jira</button></form>{% endif %}
+    {% else %}<span class="sub">none</span>{% endfor %}</div>
+</div>
+
+<h2>Waiting ({{ D.wait|length }})</h2>
+<div class="tablewrap"><table><tr><th>Key</th><th>Title</th><th>Stage</th><th>Waiting on</th><th>Since</th></tr>
+{% for t in D.wait %}<tr><td>{{ key(t.key) }}</td><td>{{ t.title }}</td><td>{{ t.stage }}</td><td>{{ t.waiting_on or '' }}</td><td>{{ t.since|ago }}</td></tr>{% endfor %}
+</table></div>
+
+<div class="grid2">
+  <div class="panel"><h3>Settings</h3>
+    <form method="post" action="/review/settings" class="row">
+      <label>Automation window (days) <input type="number" step="0.5" name="window_days" value="{{ window }}" style="width:5em"></label>
+      <label>Notes <select name="note_mode"><option value="internal" {{ 'selected' if note_mode != 'standard' }}>internal</option><option value="standard" {{ 'selected' if note_mode == 'standard' }}>standard</option></select></label>
+      {% if user.is_owner %}<button class="sm">Save</button>{% endif %}</form>
+    <p class="sub">Server-side automation: {{ 'on' if flags.review_automation_enabled else 'off' }} (Admin → Settings). It also needs Jira writes, and runs as a dry run until switched off there.</p></div>
+  <div class="panel"><h3>Excluded ({{ excluded|length }})</h3>
+    {% for e in excluded %}<div class="row">{{ key(e.jira_key) }} <span class="sub">{{ e.title }}</span>
+      {% if user.is_owner %}<form class="inline" method="post" action="/review/include"><input type="hidden" name="key" value="{{ e.jira_key }}"><button class="sm">Include</button></form>{% endif %}</div>
+    {% else %}<span class="sub">none</span>{% endfor %}</div>
+</div>
+
+<h2>Log</h2>
+<div class="tablewrap"><table><tr><th>When</th><th>Who</th><th>What</th><th>Target</th><th>Detail</th></tr>
+{% for l in log %}<tr><td class="nowrap">{{ l.at|when }}</td><td>{{ l.actor }}</td><td>{{ l.action }}</td><td>{{ l.target or '' }}</td><td class="sub">{{ l.detail|tojson }}</td></tr>{% endfor %}
+</table></div>
+{% endblock %}

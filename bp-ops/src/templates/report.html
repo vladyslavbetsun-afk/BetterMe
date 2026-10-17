@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% from "_macros.html" import key, message_box %}
+{% block title %}Daily report{% endblock %}
+{% block content %}
+<h1>Daily report · {{ day.strftime('%a %d %b %Y') }}</h1>
+<form class="row" method="get"><input type="date" name="day" value="{{ day.isoformat() }}"><button class="sm">Show</button></form>
+<div class="grid2" style="margin-top:12px">
+  <div class="panel"><h3>Today's facts</h3>
+    <div>Published (new): {% for k in f.published_new %}{{ key(k) }} {% else %}<span class="sub">none</span>{% endfor %}</div>
+    <div>Published (updates): {% for k in f.published_upd %}{{ key(k) }} {% else %}<span class="sub">none</span>{% endfor %}</div>
+    <div>→ Text: {{ f.to_text|length }} · → Review: {{ f.to_review|length }} · → Proofreading: {{ f.to_proof|length }} · → Ready: {{ f.to_ready|length }}</div>
+    <div>Proofreader added: {{ f.tim_added }} · Image links posted: {{ f.images }} · Batches sent: {{ f.batches|join(', ') or 'none' }}</div>
+    <div>Blockers: {{ f.ready_no_images }} Ready without images · {{ f.qa }} QA mismatches{% if f.failed %} · failed jobs: {{ f.failed|join(', ') }}{% endif %}</div>
+    <h3>Your lines</h3>
+    {% for l in lines %}<div class="row">• {{ l.text }}{% if user.is_owner %}<form class="inline" method="post" action="/report/line/{{ l.id }}/delete"><input type="hidden" name="day" value="{{ day }}"><button class="sm">×</button></form>{% endif %}</div>{% endfor %}
+    {% if user.is_owner %}<form class="row" method="post" action="/report/line"><input type="hidden" name="day" value="{{ day }}"><input name="text" placeholder="e.g. 15 Pinterest pins scheduled" size="40"><button class="sm">Add</button></form>{% endif %}
+  </div>
+  <div class="panel"><h3>Message</h3>
+    <textarea id="rep" rows="9" readonly>{{ text }}</textarea>
+    <div class="row"><button type="button" data-copy="#rep">Copy</button><a class="btn" href="{{ dm }}" target="_blank" rel="noopener">Open DM with Volodymyr ↗</a>
+      {% if user.is_owner %}<form class="inline" method="post" action="/report/build"><input type="hidden" name="day" value="{{ day }}"><button>Save as draft</button></form>{% endif %}</div>
+    {% if msg %}{{ message_box(msg, user, '/report?day=' ~ day, dm, 'Saved draft') }}{% endif %}
+    <p class="sub">The 17:00 job saves this draft automatically on weekdays.</p>
+  </div>
+</div>
+{% endblock %}

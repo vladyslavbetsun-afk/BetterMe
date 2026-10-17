@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% from "_macros.html" import key, st %}
+{% block title %}Flow{% endblock %}
+{% block content %}
+<h1>Publishing capacity &amp; flow</h1>
+<p class="legal">Tickets and stages only: no metric here is about a named person (spec 05 §4).</p>
+
+<div class="grid">
+  <div class="kpi hot"><div class="l">Ready backlog</div><div class="v">{{ s.ready|length }}</div>
+    <div class="sub">{{ s.ready_with_images }} with images · {{ s.ready|length - s.ready_with_images }} without</div></div>
+  <div class="kpi"><div class="l">Publishing throughput (10-day median)</div><div class="v">{{ s.rate|num }}/day</div>
+    <canvas id="spark" height="30"></canvas></div>
+  <div class="kpi"><div class="l">Clearance date at this rate</div>
+    <div class="v">{{ s.clearance.date or "—" }}</div><div class="sub">{{ s.clearance.business_days|num }} business days</div></div>
+  <div class="kpi"><div class="l">Net flow this week</div><div class="v">{{ "%+d"|format(s.net_week) }}</div>
+    <div class="sub">{{ s.inflow_week }} into Ready · {{ s.outflow_week }} published (+ means the backlog grew)</div></div>
+  <div class="kpi {{ 'bad' if s.qa }}"><div class="l">QA mismatches</div><div class="v">{{ s.qa|length }}</div>
+    <div class="sub">Published in Jira, page unchanged</div></div>
+</div>
+
+<h2>Work in progress by stage</h2>
+<div class="row">{% for stage, n in s.wip.items() %}<span class="chip">{{ st(stage) }} {{ n }}</span>{% endfor %}</div>
+
+<div class="grid2" style="margin-top:14px">
+  <div class="panel"><h3>Cumulative flow, last 60 days</h3><canvas id="cfd" height="220"></canvas></div>
+  <div class="panel"><h3>Into Ready vs published, last 30 business days</h3><canvas id="io" height="220"></canvas></div>
+  <div class="panel"><h3>Stage lead time, last 90 days (business days)</h3><canvas id="lead" height="200"></canvas>
+    {% if s.longest_stage %}<p class="sub">Longest wait: <strong>{{ s.longest_stage }}</strong></p>{% endif %}</div>
+  <div class="panel"><h3>Ready age (business days)</h3><canvas id="hist" height="200"></canvas>
+    <p class="sub">p50 {{ s.ready_age.p50|num }} · p90 {{ s.ready_age.p90|num }} · max {{ s.ready_age.max|num }}</p></div>
+</div>
+
+<div class="panel" id="whatif">
+  <h3>What if</h3>
+  <div class="grid">
+    <label>Publishing per day: <strong id="rateV"></strong><br><input type="range" id="rate" min="1" max="15" step="1"></label>
+    <label>Extra inflow per day: <strong id="inV"></strong><br><input type="range" id="inflow" min="0" max="10" step="1" value="0"></label>
+    <label>Batch size: <strong id="bsV"></strong><br><input type="range" id="bs" min="1" max="10" step="1" value="{{ s.batch_size }}"></label>
+  </div>
+  <div class="grid" style="margin-top:10px">
+    <div class="kpi"><div class="l">Clears on</div><div class="v" id="wClear">—</div></div>
+    <div class="kpi"><div class="l">Backlog in 2 weeks</div><div class="v" id="w2">—</div></div>
+    <div class="kpi"><div class="l">Backlog in 4 weeks</div><div class="v" id="w4">—</div></div>
+    <div class="kpi"><div class="l">Oldest Ready waits</div><div class="v" id="wOld">—</div><div class="sub">more business days</div></div>
+  </div>
+  <p id="sentence" class="note"></p>
+</div>
+
+<div class="grid2">
+  <div class="panel"><h3>End-to-end lead time, last 90 days</h3>
+    <table><tr><th></th><th class="num">Open → Published</th><th class="num">Text → Published</th></tr>
+    {% for typ, v in s.e2e.items() %}<tr><td>{{ typ }}</td>
+      <td class="num">{{ v.open_to_pub.median|num }} / {{ v.open_to_pub.p90|num }} <span class="sub">n={{ v.open_to_pub.n }}</span></td>
+      <td class="num">{{ v.text_to_pub.median|num }} / {{ v.text_to_pub.p90|num }} <span class="sub">n={{ v.text_to_pub.n }}</span></td></tr>{% endfor %}
+    </table><p class="sub">median / p90, business days</p></div>
+  <div class="panel"><h3>Rework rate, last 90 days</h3>
+    <div class="kpi"><div class="v">{{ ((s.rework.rate or 0) * 100)|round|int }}%</div>
+    <div class="sub">{{ s.rework.bounced }} of {{ s.rework.total }} tickets that entered Review went back (Review → Text or Proofreading → Review)</div></div></div>
+</div>
+
+<h2>Ready queue</h2>
+<div class="tablewrap"><table>
+  <tr><th>Key</th><th>Title</th><th>Type</th><th class="num">Days in Ready</th><th>Images</th><th class="num">Words</th><th>Batch</th></tr>
+  {% for r in s.ready %}<tr><td>{{ key(r.jira_key) }}</td><td>{{ r.summary }}</td><td>{{ r.type }}</td><td class="num">{{ r.age|num }}</td>
+    <td>{% if r.images == 'complete' %}<span class="tag good">✓</span>{% else %}<span class="tag bad">✗</span>{% endif %}</td>
+    <td class="num">{{ r.word_min or '—' }}</td><td>{{ r.batch or '' }}</td></tr>
+  {% else %}<tr><td colspan="7" class="sub">Nothing in Ready.</td></tr>{% endfor %}
+</table></div>
+
+<h2 id="qa">QA mismatches</h2>
+<div class="tablewrap"><table>
+  <tr><th>Key</th><th>Title</th><th>Jira published</th><th>Live "Updated on"</th><th>Live H1</th><th></th></tr>
+  {% for q in s.qa %}<tr><td>{{ key(q.jira_key) }}</td><td>{{ q.summary }}</td><td>{{ q.entered_published_at|when("%d %b %Y") }}</td>
+    <td>{{ q.live_updated_on or '—' }}{% if q.http_status and q.http_status != 200 %} <span class="tag bad">HTTP {{ q.http_status }}</span>{% endif %}</td>
+    <td>{{ q.live_h1 or '—' }}{% if q.live_url %} <a href="{{ q.live_url }}" target="_blank" rel="noopener">↗</a>{% endif %}</td>
+    <td>{% if user.is_owner %}<form method="post" action="/flow/qa/recheck"><input type="hidden" name="key" value="{{ q.jira_key }}"><button class="sm">Recheck</button></form>{% endif %}</td></tr>
+  {% else %}<tr><td colspan="6" class="sub">No mismatches found by the last check.</td></tr>{% endfor %}
+</table></div>
+
+<h2>Oldest work per stage</h2>
+<div class="grid2">{% for stage, rows in s.oldest.items() %}<div class="panel"><h3>{{ st(stage) }}</h3>
+  {% for r in rows %}<div class="row">{{ key(r.jira_key) }} <span>{{ r.summary[:60] }}</span><span class="sub">{{ r.age|bdays }}</span></div>
+  {% else %}<span class="sub">none</span>{% endfor %}</div>{% endfor %}</div>
+
+<div class="panel">
+  <h3>Copy summary for Slack</h3>
+  <textarea id="slack" rows="6" readonly>{{ slack }}</textarea>
+  <div class="row"><button type="button" data-copy="#slack">Copy</button>
+    <button type="button" onclick="window.print()">One-pager (print / save as PDF)</button></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+const S = {{ {"cfd": s.cfd, "io": s.io, "lead": s.lead, "hist": s.hist, "t10": s.throughput10,
+              "backlog": s.ready|length, "rate": s.rate, "oldest": s.ready_age.max or 0, "holidays": s.holidays}|tojson }};
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const STAGES = ["Open","Text","Review","Proofreading","Ready","Published"];
+const COLORS = {Open:"--s-open",Text:"--s-text",Review:"--s-review",Proofreading:"--s-proof",Ready:"--s-ready",Published:"--s-pub"};
+Chart.defaults.color = css("--muted"); Chart.defaults.borderColor = css("--line");
+const dates = [...new Set(S.cfd.map(r => r.date))];
+new Chart(document.getElementById("cfd"), { type:"line", data:{ labels:dates,
+  datasets: STAGES.filter(s => s !== "Published").map(s => ({ label:s, fill:true, pointRadius:0, borderWidth:1,
+    borderColor:css(COLORS[s]), backgroundColor:css(COLORS[s]) + "99",
+    data: dates.map(d => (S.cfd.find(r => r.date === d && r.stage === s) || {wip:0}).wip) })) },
+  options:{ scales:{ y:{ stacked:true } }, interaction:{ mode:"index", intersect:false } } });
+const ma = xs => xs.map((_, i) => { const w = xs.slice(Math.max(0, i - 4), i + 1); return w.reduce((a, b) => a + b, 0) / w.length; });
+new Chart(document.getElementById("io"), { data:{ labels:S.io.days, datasets:[
+  { type:"bar", label:"Into Ready", data:S.io.inflow, backgroundColor:css("--s-ready") + "aa" },
+  { type:"bar", label:"Published", data:S.io.outflow, backgroundColor:css("--s-pub") + "aa" },
+  { type:"line", label:"Into Ready (5-day avg)", data:ma(S.io.inflow), borderColor:css("--s-ready"), pointRadius:0 },
+  { type:"line", label:"Published (5-day avg)", data:ma(S.io.outflow), borderColor:css("--s-pub"), pointRadius:0 } ] } });
+const ls = Object.keys(S.lead);
+new Chart(document.getElementById("lead"), { type:"bar", data:{ labels:ls, datasets:[
+  { label:"median", data:ls.map(s => S.lead[s].median), backgroundColor:css("--accent") },
+  { label:"p90", data:ls.map(s => S.lead[s].p90), backgroundColor:css("--accent") + "55" } ] }, options:{ indexAxis:"y" } });
+new Chart(document.getElementById("hist"), { type:"bar", data:{ labels:Object.keys(S.hist),
+  datasets:[{ label:"tickets", data:Object.values(S.hist), backgroundColor:css("--s-ready") }] }, options:{ plugins:{ legend:{ display:false } } } });
+new Chart(document.getElementById("spark"), { type:"line", data:{ labels:S.t10.days, datasets:[{ data:S.t10.per_day,
+  borderColor:css("--accent"), pointRadius:0, borderWidth:2 }] }, options:{ plugins:{ legend:{ display:false }, tooltip:{ enabled:false } },
+  scales:{ x:{ display:false }, y:{ display:false } } } });
+
+// what-if: all client-side
+const hol = new Set(S.holidays);
+const isBiz = d => d.getDay() > 0 && d.getDay() < 6 && !hol.has(d.toISOString().slice(0, 10));
+function addBiz(n){ const d = new Date(); let left = Math.ceil(n); while (left > 0) { d.setDate(d.getDate() + 1); if (isBiz(d)) left--; } return d; }
+const fmt = d => d.toLocaleDateString("en-US", { month:"short", day:"numeric" });
+const $ = id => document.getElementById(id);
+const rateEl = $("rate"); rateEl.value = Math.max(1, Math.round(S.rate || 1));
+function update(){
+  const r = +rateEl.value, inf = +$("inflow").value, net = r - inf;
+  $("rateV").textContent = r; $("inV").textContent = inf; $("bsV").textContent = $("bs").value;
+  const after = n => Math.max(0, Math.round(S.backlog - net * n));
+  $("w2").textContent = after(10); $("w4").textContent = after(20);
+  if (net <= 0) { $("wClear").textContent = "never"; $("wOld").textContent = "∞"; }
+  else { $("wClear").textContent = fmt(addBiz(S.backlog / net)); $("wOld").textContent = Math.ceil(S.backlog / r); }
+  const cur = +(S.rate || 0).toFixed(1);
+  const at = x => x - inf > 0 ? "clears on " + fmt(addBiz(S.backlog / (x - inf))) : "never clears";
+  $("sentence").textContent = `At the current ${cur}/day the backlog of ${S.backlog} ${at(cur)}. At ${r}/day it ${at(r)}.`;
+}
+["rate","inflow","bs"].forEach(id => $(id).addEventListener("input", update)); update();
+</script>
+{% endblock %}

@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% from "_macros.html" import key %}
+{% block title %}Images{% endblock %}
+{% block content %}
+<h1>Images</h1>
+<div class="note">The Image Queue (requests, designer view, pin batches) is Phase 4: docs/specs/03-image-queue.md. Until then this page and <code>/api/images/status</code> use the legacy rule: a ticket has images when Oksana or Karina posted a non-live, non-Doc link on it.</div>
+<div class="kpi {{ 'bad' if missing }}" style="max-width:260px"><div class="l">Ready without images</div><div class="v">{{ missing|length }}</div><div class="sub">of {{ n_ready }} in Ready</div></div>
+<div class="tablewrap" style="margin-top:12px"><table><tr><th>Key</th><th>Title</th><th>In Ready since</th></tr>
+{% for r in missing %}<tr><td>{{ key(r.jira_key) }}</td><td>{{ r.summary }}</td><td>{{ r.entered_ready_at|ago }}</td></tr>{% else %}<tr><td colspan="3" class="sub">Every Ready ticket has images.</td></tr>{% endfor %}</table></div>
+{% endblock %}

@@ -1,0 +1,310 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Slipped Pages Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700&family=Source+Sans+3:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one working column — summary strip, filter bar, then a dense list of article rows that expand in place. */
+:root{
+  --bg:#f5f6f8; --surface:#ffffff; --sunk:#eceef2; --line:#d9dde4; --fg:#1b2230; --muted:#5d6676;
+  --accent:#2d4f86; --accent-soft:#e3eaf6;
+  --good:#1f7a4d; --good-soft:#dcf1e5; --bad:#b4372b; --bad-soft:#f8e1de; --warn:#9a6b00; --warn-soft:#f6ecd1;
+  --l0:#7b8494; --l1:#2d6fb5; --l2:#b07d06; --l3:#c2493a; --l4:#8b8f98;
+  --display:"Schibsted Grotesk","Helvetica Neue",Arial,sans-serif;
+  --body:"Source Sans 3","Segoe UI",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#12161d; --surface:#1a2029; --sunk:#222935; --line:#2f3846; --fg:#e4e8ef; --muted:#9aa4b4;
+  --accent:#8fb0e6; --accent-soft:#24324a;
+  --good:#5cc28f; --good-soft:#1c3328; --bad:#ef8a7d; --bad-soft:#3a2321; --warn:#e2b44a; --warn-soft:#3a3020;
+  --l0:#8d96a6; --l1:#6aa6e6; --l2:#e0ad3a; --l3:#ec7e6f; --l4:#7b808a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12161d; --surface:#1a2029; --sunk:#222935; --line:#2f3846; --fg:#e4e8ef; --muted:#9aa4b4;
+  --accent:#8fb0e6; --accent-soft:#24324a;
+  --good:#5cc28f; --good-soft:#1c3328; --bad:#ef8a7d; --bad-soft:#3a2321; --warn:#e2b44a; --warn-soft:#3a3020;
+  --l0:#8d96a6; --l1:#6aa6e6; --l2:#e0ad3a; --l3:#ec7e6f; --l4:#7b808a; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.45}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:20px;padding-block:28px 64px;display:grid;gap:22px}
+h1{font-family:var(--display);font-weight:700;font-size:1.75rem;margin:0;letter-spacing:-.01em;text-wrap:balance}
+.sub{color:var(--muted);margin:4px 0 0;font-size:.95rem}
+.sub b{color:var(--fg);font-weight:600}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.levels{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.lvl{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;text-align:left;cursor:pointer;font:inherit;color:inherit;display:grid;gap:6px;min-width:0}
+.lvl:hover{border-color:var(--muted)}
+.lvl[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.lvl:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.lvl .tag{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);display:flex;align-items:center;gap:6px}
+.dot{width:8px;height:8px;border-radius:50%;flex:none}
+.lvl .name{font-family:var(--display);font-weight:500;font-size:.98rem}
+.lvl .count{font-size:.85rem;color:var(--muted)}
+.bar{height:5px;border-radius:3px;background:var(--sunk);overflow:hidden;display:flex}
+.bar span{display:block;height:100%}
+.filters{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.seg{display:flex;flex-wrap:wrap;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:3px;gap:2px}
+.seg button{border:0;background:transparent;font:inherit;font-size:.88rem;color:var(--muted);padding:5px 10px;border-radius:6px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--fg);font-weight:600}
+.search{flex:1 1 220px;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font:inherit;color:var(--fg)}
+.scope{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:8px;padding:10px 14px;font-size:.92rem;color:var(--muted)}
+.scope b{color:var(--fg)}
+.list{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.head,.row{display:grid;grid-template-columns:minmax(0,2.6fr) 92px minmax(0,1.6fr) 110px 120px 150px 132px;gap:12px;align-items:center;padding:10px 16px}
+.head{font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);background:var(--sunk);border-bottom:1px solid var(--line)}
+.item{border-bottom:1px solid var(--line)}
+.item:last-child{border-bottom:0}
+.row{cursor:pointer}
+.row:hover{background:var(--sunk)}
+.slug{font-weight:600;overflow-wrap:anywhere;display:flex;gap:8px;align-items:baseline}
+.chev{color:var(--muted);font-size:.8rem;transition:transform .15s;flex:none}
+.item.open .chev{transform:rotate(90deg)}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:.78rem;font-weight:600;padding:2px 8px;border-radius:999px;border:1px solid var(--line);white-space:nowrap}
+.kw{font-size:.9rem;min-width:0}
+.kw small{color:var(--muted)}
+.pos{font-size:.88rem}
+.delta-up{color:var(--good)} .delta-down{color:var(--bad)} .muted{color:var(--muted)}
+.aio{font-size:.68rem;font-weight:600;padding:1px 5px;border-radius:4px;background:var(--good-soft);color:var(--good);margin-left:4px}
+select,input[type=date],textarea{font:inherit;font-size:.88rem;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:5px 7px;width:100%}
+select.st-todo{border-color:var(--line)}
+select.st-progress{background:var(--warn-soft);border-color:var(--warn)}
+select.st-done{background:var(--good-soft);border-color:var(--good)}
+select.st-skipped{background:var(--sunk);color:var(--muted)}
+.detail{padding:4px 16px 18px 40px;display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:20px}
+.detail h3{font-family:var(--display);font-size:.78rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 6px;font-weight:500}
+.detail p{margin:0}
+.block{display:grid;gap:14px;min-width:0}
+.facts{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:.88rem}
+.facts dt{color:var(--muted)} .facts dd{margin:0;overflow-wrap:anywhere}
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.85rem}
+th,td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{color:var(--muted);font-weight:600;font-size:.75rem}
+td.k{white-space:normal}
+a{color:var(--accent)}
+.saving{font-size:.75rem;color:var(--muted);min-height:1em}
+.empty{padding:28px 16px;text-align:center;color:var(--muted)}
+.note{font-size:.85rem;color:var(--muted)}
+.banner{background:var(--warn-soft);border:1px solid var(--warn);border-radius:8px;padding:10px 14px;font-size:.9rem}
+.cell-label{display:none}
+.top{display:flex;flex-wrap:wrap;gap:16px 28px;align-items:flex-start;justify-content:space-between}
+.intro{flex:1 1 520px;min-width:0}
+.refresh{flex:0 1 260px;min-width:0;display:grid;gap:6px}
+.btn{font:inherit;font-weight:600;background:var(--accent);color:var(--surface);border:0;border-radius:8px;padding:9px 16px;cursor:pointer;justify-self:start}
+.btn:hover{filter:brightness(1.08)}
+.btn[disabled]{opacity:.6;cursor:default}
+.small{font-size:.82rem;margin:0}
+.auto{font-size:.68rem;font-weight:600;padding:1px 5px;border-radius:4px;background:var(--accent-soft);color:var(--accent);margin-left:6px;white-space:nowrap}
+@media (max-width:900px){
+  .levels{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .head{display:none}
+  .row{grid-template-columns:1fr 1fr;gap:8px 12px}
+  .row .slugcell{grid-column:1/-1}
+  .cell-label{display:block;font-size:.7rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+  .detail{grid-template-columns:1fr;padding-left:16px}
+}
+@media (prefers-reduced-motion:reduce){.chev{transition:none}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="intro">
+      <h1>Slipped Pages Tracker</h1>
+      <p class="sub">Articles that held a top-3 keyword on <b>Aug 12, 2026</b> and sat at positions 4–10 on <b>Oct 8, 2026</b> (Ahrefs, US, /articles/). A page counts as updated when its "Updated on" date on the site changes. Position checks run 2 and 4 weeks after that date.</p>
+      <p class="sub" id="lastrun">Automatic checks: none yet.</p>
+    </div>
+    <div class="refresh">
+      <button id="refreshBtn" class="btn" type="button">Refresh now</button>
+      <p class="sub small" id="refreshMsg">Checks every page's "Updated on" date and records positions for pages that are due. Runs automatically every weekday morning.</p>
+    </div>
+  </header>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <section class="levels" id="levels" aria-label="Refresh levels"></section>
+
+  <div class="filters">
+    <div class="seg" id="statusSeg" role="group" aria-label="Filter by status"></div>
+    <input id="q" class="search" type="search" placeholder="Search page or keyword" aria-label="Search page or keyword">
+  </div>
+
+  <div class="scope" id="scope"></div>
+
+  <section class="list" aria-label="Pages">
+    <div class="head"><div>Page</div><div>Level</div><div>Main keyword</div><div>Aug 12 → Oct 8</div><div>Latest check</div><div>Status</div><div>Updated on</div></div>
+    <div id="rows"><div class="empty">Loading pages…</div></div>
+  </section>
+  <p class="note">Positions are Ahrefs US best positions for the page's main slipped keyword. "AIO" means the page is cited in the Google AI Overview for that keyword at the latest check.</p>
+</div>
+
+<script>
+const LEVELS=[
+ {k:'L0',name:'Hold',color:'--l0',scope:'<b>Hold.</b> No edits now. Recently updated or traffic is holding. Re-check in 4 weeks.'},
+ {k:'L1',name:'Targeted fix',color:'--l1',scope:'<b>Targeted fix, 30–60 min, no rewrite.</b> Add Key Takeaways after the intro; a 40–60 word direct answer under each question H2; FAQ (4–6) from live People Also Ask; alt text; one internal link to and from the cluster. Change the "Updated on" date only if answer content changed.'},
+ {k:'L2',name:'Standard refresh',color:'--l2',scope:'<b>Standard refresh, about half a day, same URL.</b> Everything in a targeted fix, plus: keyword in title, H1 and first sentence; update facts and sources; add a table where numbers exist; trim filler; length near the median of the top 5 competitors. New "Updated on" date.'},
+ {k:'L3',name:'Full rewrite',color:'--l3',scope:'<b>Full rewrite, same URL, writer + expert + Legal.</b> Rebuild to the model article shape; remove outcome, timeline and spot-reduction claims; Key Takeaways, PAA headings, 5 FAQs, tables, current sources. New "Updated on" date. Never publish as a new slug.'},
+ {k:'NOSEO',name:'No SEO investment',color:'--l4',scope:'<b>No SEO investment.</b> These pages hit the Rejection Patterns. Touch only if Legal asks for a compliance fix.'}
+];
+const STATUS=[{k:'todo',label:'To do'},{k:'progress',label:'In progress'},{k:'done',label:'Updated'},{k:'skipped',label:'Skipped'}];
+const state={pages:new Map(),progress:new Map(),checks:new Map(),meta:null,level:'L2',status:'all',q:'',open:new Set(),ready:false,readOnly:false};
+let db=null;
+
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const lv=k=>LEVELS.find(l=>l.k===k)||LEVELS[0];
+const statusOf=slug=>(state.progress.get(slug)?.status)||'todo';
+const fmtDate=s=>{if(!s)return '';const d=new Date(s+'T00:00:00');return isNaN(d)?s:d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})};
+function latestCheck(slug){const h=state.checks.get(slug)?.history;return Array.isArray(h)&&h.length?h[h.length-1]:null}
+
+function renderLevels(){
+  const el=document.getElementById('levels');
+  el.innerHTML=LEVELS.map(l=>{
+    const pages=[...state.pages.values()].filter(p=>p.level===l.k);
+    const n=pages.length, done=pages.filter(p=>statusOf(p.slug)==='done').length, prog=pages.filter(p=>statusOf(p.slug)==='progress').length;
+    const pd=n?done/n*100:0, pp=n?prog/n*100:0;
+    return `<button class="lvl" data-level="${l.k}" aria-pressed="${state.level===l.k}">
+      <span class="tag"><span class="dot" style="background:var(${l.color})"></span>${l.k==='NOSEO'?'Excluded':l.k}</span>
+      <span class="name">${l.name}</span>
+      <span class="count"><span class="num">${done}</span> of <span class="num">${n}</span> updated${prog?` · <span class="num">${prog}</span> in progress`:''}</span>
+      <span class="bar" aria-hidden="true"><span style="width:${pd}%;background:var(--good)"></span><span style="width:${pp}%;background:var(--warn)"></span></span>
+    </button>`}).join('');
+  el.querySelectorAll('.lvl').forEach(b=>b.onclick=()=>{state.level=b.dataset.level;render()});
+}
+function renderStatusSeg(){
+  const el=document.getElementById('statusSeg');
+  const opts=[{k:'all',label:'All'},...STATUS];
+  el.innerHTML=opts.map(o=>`<button data-s="${o.k}" aria-pressed="${state.status===o.k}">${o.label}</button>`).join('');
+  el.querySelectorAll('button').forEach(b=>b.onclick=()=>{state.status=b.dataset.s;render()});
+}
+function posCell(p){
+  return `<span class="num">${esc(p.posAug12)}</span> <span class="muted">→</span> <span class="num delta-down">${esc(p.posOct8)}</span>`;
+}
+function checkCell(p){
+  const c=latestCheck(p.slug);
+  if(!c) return `<span class="muted">${statusOf(p.slug)==='done'?'Scheduled':'—'}</span>`;
+  const pos=c.position==null?'not ranking':c.position;
+  const cls=c.position!=null&&c.position<p.posOct8?'delta-up':(c.position!=null&&c.position>p.posOct8?'delta-down':'');
+  return `<span class="num ${cls}">${esc(pos)}</span>${c.aio?'<span class="aio">AIO</span>':''}<br><small class="muted">${esc(c.label||'')} ${esc(fmtDate(c.date))}</small>`;
+}
+function rowHTML(p){
+  const l=lv(p.level), pr=state.progress.get(p.slug)||{}, st=pr.status||'todo', open=state.open.has(p.slug);
+  const dis=state.readOnly?'disabled':'';
+  return `<div class="item ${open?'open':''}" data-slug="${esc(p.slug)}">
+   <div class="row" data-toggle>
+    <div class="slugcell slug"><span class="chev" aria-hidden="true">▶</span><span>${esc(p.slug)}</span></div>
+    <div><span class="cell-label">Level</span><span class="pill"><span class="dot" style="background:var(${l.color})"></span>${l.k==='NOSEO'?'No SEO':l.k}</span></div>
+    <div class="kw"><span class="cell-label">Main keyword</span>${esc(p.mainKw)} <small class="num">${Number(p.volume).toLocaleString()} vol</small></div>
+    <div class="pos"><span class="cell-label">Aug 12 → Oct 8</span>${posCell(p)}</div>
+    <div class="pos"><span class="cell-label">Latest check</span>${checkCell(p)}</div>
+    <div data-stop><span class="cell-label">Status</span><select class="st-${st}" data-field="status" aria-label="Status for ${esc(p.slug)}" ${dis}>${STATUS.map(s=>`<option value="${s.k}" ${s.k===st?'selected':''}>${s.label}</option>`).join('')}</select></div>
+    <div data-stop><span class="cell-label">Updated on</span><input type="date" data-field="updatedOn" value="${esc(pr.updatedOn||'')}" aria-label="Updated on for ${esc(p.slug)}" ${dis}>${pr.autoDetected?'<span class="auto" title="Detected from the live Updated on date">Detected on site</span>':''}</div>
+   </div>
+   ${open?detailHTML(p,pr):''}
+  </div>`;
+}
+function detailHTML(p,pr){
+  const kws=(p.keywords||[]).map(k=>`<tr><td class="k">${esc(k.kw)}</td><td class="num">${esc(k.vol)}</td><td class="num">${esc(k.was)} → ${esc(k.now)}</td><td>${esc(k.kind)}</td></tr>`).join('');
+  const hist=(state.checks.get(p.slug)?.history)||[];
+  const histRows=hist.map(c=>`<tr><td>${esc(c.label||'')}</td><td class="num">${esc(fmtDate(c.date))}</td><td class="num">${esc(c.position??'—')}</td><td>${c.aio?'Yes':'No'}</td><td class="num">${esc(c.traffic??'—')}</td></tr>`).join('');
+  return `<div class="detail">
+   <div class="block">
+    <div><h3>What to do</h3><p>${esc(p.why)}</p></div>
+    <div><h3>Scope for this level</h3><p class="note">${lv(p.level).scope}</p></div>
+    <div><h3>Slipped keywords</h3><div class="tbl"><table><thead><tr><th>Keyword</th><th>Vol</th><th>Aug 12 → Oct 8</th><th>Type</th></tr></thead><tbody>${kws}</tbody></table></div></div>
+    <div><h3>Check history</h3>${hist.length?`<div class="tbl"><table><thead><tr><th>Check</th><th>Date</th><th>Position</th><th>AIO cited</th><th>Est. traffic</th></tr></thead><tbody>${histRows}</tbody></table></div>`:`<p class="note">${statusOf(p.slug)==='done'?(pr.updatedOn?'First check runs 2 weeks after '+esc(fmtDate(pr.updatedOn))+'.':'Add the date you updated the page so checks can be scheduled.'):'Checks start once you mark this page Updated.'}</p>`}</div>
+   </div>
+   <div class="block">
+    <div><h3>Page</h3><p><a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.url.replace('https://',''))}</a></p></div>
+    <dl class="facts">
+      <dt>Byline on Oct 9</dt><dd>${esc(p.lastUpdated)}</dd>
+      <dt>Byline now</dt><dd>${pr.detectedByline?esc(pr.detectedByline):'<span class="muted">unchanged at last check</span>'}</dd>
+      <dt>Words</dt><dd class="num">${esc(p.words)}</dd>
+      <dt>FAQ</dt><dd class="num">${esc(p.faq)}</dd>
+      <dt>H1</dt><dd>${esc(p.h1)}</dd>
+      <dt>Pipeline</dt><dd>${esc(p.pipeline||'Not in a batch')}</dd>
+      <dt>Est. traffic</dt><dd class="num">${esc(p.trafficAug12)} → ${esc(p.trafficOct8)}</dd>
+    </dl>
+    <div data-stop><h3><label for="n-${esc(p.slug)}">Notes</label></h3><textarea id="n-${esc(p.slug)}" rows="4" data-field="notes" placeholder="What you changed, ticket link…" ${state.readOnly?'disabled':''}>${esc(pr.notes||'')}</textarea><div class="saving" data-saving></div></div>
+   </div>
+  </div>`;
+}
+function render(){
+  renderLevels(); renderStatusSeg();
+  document.getElementById('scope').innerHTML=lv(state.level).scope;
+  const meta=state.meta;
+  document.getElementById('lastrun').textContent=meta?.lastRun?`Last check: ${fmtDate(meta.lastRun)}. ${meta.lastRunNote||''}`:'Last check: none yet.';
+  const pending=meta?.refreshRequestedAt&&(!meta.lastRunAt||meta.lastRunAt<meta.refreshRequestedAt);
+  const btn=document.getElementById('refreshBtn');
+  if(pending&&!refreshError){btn.disabled=true;btn.textContent='Refresh requested';refreshMsg('Requested '+new Date(meta.refreshRequestedAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})+'. It runs with the next scheduled check; this page updates by itself when it finishes.')}
+  else if(!refreshBusy){btn.disabled=!refreshReady;btn.textContent='Refresh now';if(refreshReady&&!refreshError)refreshMsg('Checks every page\'s "Updated on" date and records positions for pages that are due. Runs automatically every weekday morning.')}
+  const rows=document.getElementById('rows');
+  if(!state.ready){return}
+  if(!state.pages.size){rows.innerHTML='<div class="empty">No pages yet. The page list is being loaded into the tracker.</div>';return}
+  const q=state.q.trim().toLowerCase();
+  const list=[...state.pages.values()].filter(p=>p.level===state.level)
+    .filter(p=>state.status==='all'||statusOf(p.slug)===state.status)
+    .filter(p=>!q||p.slug.includes(q)||(p.keywords||[]).some(k=>k.kw.toLowerCase().includes(q)))
+    .sort((a,b)=>b.volume-a.volume);
+  rows.innerHTML=list.length?list.map(rowHTML).join(''):'<div class="empty">No pages match these filters.</div>';
+}
+async function save(slug,patch,item){
+  if(!db||state.readOnly)return;
+  const cur=state.progress.get(slug)||{};
+  const next={status:'todo',updatedOn:'',notes:'',...cur,...patch,changedAt:new Date().toISOString()};
+  if(patch.status==='done'&&!next.updatedOn){next.updatedOn=new Date().toISOString().slice(0,10)}
+  state.progress.set(slug,next); render();
+  try{await db.collection('progress').doc(slug).set(next)}
+  catch(e){
+    if(e?.code==='invalid_argument'){state.readOnly=true;showBanner('You can view this tracker but not change it.')}
+    else showBanner('Could not save that change. Try again in a moment.');
+  }
+}
+function showBanner(t){const b=document.getElementById('banner');b.textContent=t;b.hidden=false}
+
+document.getElementById('rows').addEventListener('click',e=>{
+  if(e.target.closest('[data-stop]'))return;
+  const row=e.target.closest('[data-toggle]'); if(!row)return;
+  const slug=row.parentElement.dataset.slug;
+  state.open.has(slug)?state.open.delete(slug):state.open.add(slug); render();
+});
+document.getElementById('rows').addEventListener('change',e=>{
+  const f=e.target.dataset.field; if(!f||f==='notes')return;
+  const slug=e.target.closest('.item').dataset.slug;
+  save(slug,{[f]:e.target.value});
+});
+document.getElementById('rows').addEventListener('focusout',e=>{
+  if(e.target.dataset.field!=='notes')return;
+  const slug=e.target.closest('.item').dataset.slug;
+  if((state.progress.get(slug)?.notes||'')!==e.target.value) save(slug,{notes:e.target.value});
+});
+document.getElementById('q').addEventListener('input',e=>{state.q=e.target.value;render()});
+
+let refreshReady=false, refreshBusy=false, refreshError=false;
+function refreshMsg(t){document.getElementById('refreshMsg').textContent=t}
+async function runRefresh(){
+  if(!db||refreshBusy||state.readOnly)return;
+  refreshBusy=true; refreshError=false;
+  const btn=document.getElementById('refreshBtn'); btn.disabled=true; btn.textContent='Requesting…';
+  try{
+    const now=new Date().toISOString(), ref=db.doc('meta/info'), s=await ref.get();
+    s.exists?await ref.update({refreshRequestedAt:now}):await ref.set({refreshRequestedAt:now});
+  }catch(e){
+    refreshError=true;
+    refreshMsg(e?.code==='invalid_argument'?'You can view this tracker but not request a refresh.':'Could not save the request. Try again in a moment.');
+  }finally{refreshBusy=false;render()}
+}
+document.getElementById('refreshBtn').addEventListener('click',runRefresh);
+render();
+
+(async()=>{
+  db=await window.claude?.use?.('db');
+  if(!db){state.ready=true;document.getElementById('rows').innerHTML='<div class="empty">Open this tracker signed in to claude.ai to see and update pages.</div>';return}
+  try{const user=await window.claude.use('user');if(user&&user.can&&(await user.can('data.write'))===false){state.readOnly=true}}catch(_){}
+  const sub=(name,map)=>db.collection(name).onSnapshot(s=>{map.clear();s.docs.forEach(d=>map.set(d.id,d.data()));if(name==='pages')state.ready=true;render()},err=>showBanner('Live updates stopped. Reload the page to reconnect.'));
+  sub('pages',state.pages); sub('progress',state.progress); sub('checks',state.checks);
+  db.doc('meta/info').onSnapshot(s=>{state.meta=s.exists?s.data():null;render()},()=>{});
+  if(!state.readOnly){refreshReady=true}else{refreshMsg('Refresh is not available in this view.')}
+  render();
+})();
+</script>
+
+</body></html>

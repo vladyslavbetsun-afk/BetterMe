@@ -1,0 +1,263 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Blog Spend Dashboard</title>
+<style>
+:root{
+  --bg:#faf8f4; --card:#ffffff; --border:#e7e1d6; --text:#2b2620; --muted:#8a8072;
+  --accent:#c96f3e; --accent-soft:#f4e3d6; --writing:#5b8a72; --review:#4a7fb5; --proof:#b58a3f; --else:#8a6bb5;
+  --input-bg:#fbfaf7;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#1c1a17; --card:#252220; --border:#3a352e; --text:#ece7dd; --muted:#a89c8a;
+    --accent:#e08a5c; --accent-soft:#3a2c22; --input-bg:#2b2823;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#1c1a17; --card:#252220; --border:#3a352e; --text:#ece7dd; --muted:#a89c8a;
+  --accent:#e08a5c; --accent-soft:#3a2c22; --input-bg:#2b2823;
+}
+*{box-sizing:border-box;}
+body{background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; padding-block:24px;}
+.wrap{max-width:920px; margin:0 auto; padding-inline:16px;}
+h1{font-size:1.4rem; margin:0 0 4px;}
+.sub{color:var(--muted); font-size:0.88rem; margin:0 0 24px;}
+.summary{display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin-bottom:28px;}
+.stat{background:var(--card); border:1px solid var(--border); border-radius:12px; padding:14px 16px;}
+.stat .label{font-size:0.72rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.04em;}
+.stat .value{font-size:1.35rem; font-weight:700; margin-top:4px;}
+.stat.total{background:var(--accent-soft); border-color:var(--accent);}
+.bar{height:8px; border-radius:6px; background:var(--border); overflow:hidden; display:flex; margin-bottom:24px;}
+.bar > div{height:100%;}
+.legend{display:flex; flex-wrap:wrap; gap:14px; font-size:0.78rem; color:var(--muted); margin:-16px 0 24px;}
+.legend span{display:inline-flex; align-items:center; gap:6px;}
+.dot{width:9px; height:9px; border-radius:50%; display:inline-block;}
+.section{background:var(--card); border:1px solid var(--border); border-radius:14px; margin-bottom:18px; overflow:hidden;}
+.section-head{display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid var(--border);}
+.section-head h2{font-size:1rem; margin:0; display:flex; align-items:center; gap:8px;}
+.section-total{font-weight:700;}
+table{width:100%; border-collapse:collapse;}
+th{text-align:left; font-size:0.72rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.03em; padding:8px 18px; font-weight:600;}
+td{padding:8px 18px; border-top:1px solid var(--border); font-size:0.9rem; vertical-align:middle;}
+tr:first-child td{border-top:none;}
+.name{font-weight:500;}
+.rate{color:var(--muted); font-size:0.8rem;}
+input.amount{width:110px; padding:6px 8px; border:1px solid var(--border); border-radius:7px; background:var(--input-bg); color:var(--text); font-size:0.9rem; text-align:right;}
+input.note{width:100%; padding:6px 8px; border:1px solid var(--border); border-radius:7px; background:var(--input-bg); color:var(--text); font-size:0.82rem;}
+input.amount:focus, input.note:focus{outline:2px solid var(--accent); outline-offset:1px;}
+.fixed-badge{font-size:0.68rem; background:var(--accent-soft); color:var(--accent); padding:2px 7px; border-radius:6px; margin-left:6px; white-space:nowrap;}
+.saved-flash{font-size:0.72rem; color:var(--writing); opacity:0; transition:opacity 0.3s; margin-left:8px;}
+.saved-flash.show{opacity:1;}
+.foot{color:var(--muted); font-size:0.78rem; text-align:center; margin-top:20px;}
+.col-amount{width:130px;}
+.col-note{width:34%;}
+@media (max-width:600px){
+  td, th{padding:8px 10px;}
+  .col-note{display:none;}
+  input.amount{width:90px;}
+}
+</style>
+
+<div class="wrap">
+  <h1>October Blog Spend</h1>
+  <p class="sub">Writing · Experts · Proofreading · Else — add amounts as invoices and Upwork numbers come in. Changes save automatically and sync for everyone.</p>
+
+  <div class="summary" id="summary"></div>
+  <div class="bar" id="bar"></div>
+  <div class="legend" id="legend"></div>
+
+  <div id="sections"></div>
+
+  <p class="foot">Numbers save as you type (a moment after you stop). Fixed-rate rows (Colette, Polina) are pre-set monthly retainers — edit if the amount ever changes.</p>
+</div>
+
+<script>
+const CATEGORIES = [
+  { key: "writing", label: "Writing", color: "var(--writing)" },
+  { key: "review", label: "Experts", color: "var(--review)" },
+  { key: "proofreading", label: "Proofreading", color: "var(--proof)" },
+  { key: "else", label: "Else", color: "var(--else)" },
+];
+
+// Seed roster — id, display name, category, optional rate label, optional fixed amount
+const ROSTER = [
+  { id: "zindzy", name: "Zindzy Gracia", category: "writing", rate: "$0.03/word" },
+  { id: "jeremy", name: "Jeremy Mukhwana", category: "writing", rate: "$0.03/word" },
+  { id: "samuel", name: "Samuel Nderitu Munuhe", category: "writing", rate: "$0.04/word" },
+  { id: "eve", name: "Eve Chalicha", category: "writing", rate: "$0.035/word" },
+  { id: "anosha", name: "Anosha Riaz", category: "writing", rate: "$0.04/word" },
+  { id: "clare", name: "Clare Camau", category: "writing", rate: "$32.50/article" },
+  { id: "maria_rubiolo", name: "Maria Lourdes Rubiolo", category: "writing", rate: "invoice" },
+  { id: "eva_deangelis", name: "Eva De Angelis", category: "writing", rate: "invoice" },
+  { id: "stephanie", name: "Stephanie Wright", category: "writing", rate: "invoice" },
+  { id: "giulia", name: "Giulia Ralph", category: "writing", rate: "invoice" },
+  { id: "brenda", name: "Brenda Peralta", category: "writing", rate: "invoice" },
+
+  { id: "maria_corrarello", name: "Maria Eugenia Corrarello", category: "review", rate: "invoice" },
+  { id: "angelica", name: "Angelica Galvan", category: "review", rate: "invoice" },
+  { id: "carter", name: "Carter Lee", category: "review", rate: "invoice" },
+  { id: "amanda_pasko", name: "Amanda Pasko", category: "review", rate: "$0.07/word" },
+  { id: "garett", name: "Garett Reid", category: "review", rate: "Upwork" },
+  { id: "colette", name: "Z. Colette Edwards", category: "review", rate: "$2,500/month retainer", fixed: 2500 },
+
+  { id: "tim", name: "Tim Jones", category: "proofreading", rate: "Upwork" },
+
+  { id: "oksana", name: "Oksana Pidlisna", category: "else", rate: "Designer — invoice" },
+  { id: "polina", name: "Polina Klieshcheva", category: "else", rate: "$600/month Researcher", fixed: 600 },
+  { id: "ecom", name: "E-com", category: "else", rate: "E-commerce" },
+];
+
+const fmt = n => "$" + (Number(n)||0).toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2});
+
+let db = null;
+let peopleData = {}; // id -> {amount, note}
+let unsub = null;
+
+function ensureSeedDom(){
+  const sectionsEl = document.getElementById("sections");
+  sectionsEl.innerHTML = "";
+  CATEGORIES.forEach(cat => {
+    const rows = ROSTER.filter(r => r.category === cat.key);
+    const section = document.createElement("div");
+    section.className = "section";
+    section.innerHTML = `
+      <div class="section-head">
+        <h2><span class="dot" style="background:${cat.color}"></span>${cat.label}</h2>
+        <span class="section-total" data-total="${cat.key}">$0.00</span>
+      </div>
+      <table>
+        <thead><tr><th>Name</th><th class="col-amount">Amount</th><th class="col-note">Note</th></tr></thead>
+        <tbody>
+          ${rows.map(r => `
+            <tr>
+              <td class="name">${r.name}${r.fixed ? '<span class="fixed-badge">fixed</span>' : ''}<div class="rate">${r.rate || ""}</div></td>
+              <td class="col-amount">
+                <input type="number" step="0.01" class="amount" data-id="${r.id}" placeholder="0.00" />
+                <span class="saved-flash" data-flash="${r.id}">saved</span>
+              </td>
+              <td class="col-note"><input type="text" class="note" data-note="${r.id}" placeholder="invoice #, date, etc." /></td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    `;
+    sectionsEl.appendChild(section);
+  });
+}
+
+function recompute(){
+  const totals = {};
+  CATEGORIES.forEach(c => totals[c.key] = 0);
+  let grand = 0;
+  ROSTER.forEach(r => {
+    const amt = Number(peopleData[r.id]?.amount) || 0;
+    totals[r.category] += amt;
+    grand += amt;
+  });
+
+  const summaryEl = document.getElementById("summary");
+  summaryEl.innerHTML = CATEGORIES.map(c => `
+    <div class="stat">
+      <div class="label">${c.label}</div>
+      <div class="value">${fmt(totals[c.key])}</div>
+    </div>
+  `).join("") + `
+    <div class="stat total">
+      <div class="label">Total</div>
+      <div class="value">${fmt(grand)}</div>
+    </div>
+  `;
+
+  CATEGORIES.forEach(c => {
+    const el = document.querySelector(`[data-total="${c.key}"]`);
+    if (el) el.textContent = fmt(totals[c.key]);
+  });
+
+  const barEl = document.getElementById("bar");
+  barEl.innerHTML = "";
+  CATEGORIES.forEach(c => {
+    const pct = grand > 0 ? (totals[c.key] / grand * 100) : 0;
+    const seg = document.createElement("div");
+    seg.style.width = pct + "%";
+    seg.style.background = c.color;
+    barEl.appendChild(seg);
+  });
+
+  const legendEl = document.getElementById("legend");
+  legendEl.innerHTML = CATEGORIES.map(c => `<span><span class="dot" style="background:${c.color}"></span>${c.label}</span>`).join("");
+}
+
+function applySnapshotToInputs(){
+  ROSTER.forEach(r => {
+    const amtInput = document.querySelector(`input.amount[data-id="${r.id}"]`);
+    const noteInput = document.querySelector(`input.note[data-note="${r.id}"]`);
+    const d = peopleData[r.id];
+    if (amtInput && document.activeElement !== amtInput) {
+      amtInput.value = d && d.amount != null ? d.amount : "";
+    }
+    if (noteInput && document.activeElement !== noteInput) {
+      noteInput.value = d && d.note ? d.note : "";
+    }
+  });
+  recompute();
+}
+
+let saveTimers = {};
+function scheduleSave(id, field, value){
+  clearTimeout(saveTimers[id]);
+  saveTimers[id] = setTimeout(async () => {
+    if (!db) return;
+    const roster = ROSTER.find(r => r.id === id);
+    const payload = { name: roster.name, category: roster.category };
+    payload[field] = field === "amount" ? (value === "" ? null : Number(value)) : value;
+    try {
+      await db.doc("spend/" + id).set({ ...(peopleData[id]||{}), ...payload, updatedAt: new Date().toISOString() });
+      const flash = document.querySelector(`[data-flash="${id}"]`);
+      if (flash) { flash.classList.add("show"); setTimeout(()=>flash.classList.remove("show"), 1200); }
+    } catch (e) {
+      console.error("save failed", e);
+    }
+  }, 500);
+}
+
+function wireInputs(){
+  document.querySelectorAll("input.amount").forEach(inp => {
+    inp.addEventListener("input", e => {
+      const id = e.target.dataset.id;
+      peopleData[id] = peopleData[id] || {};
+      peopleData[id].amount = e.target.value === "" ? null : Number(e.target.value);
+      recompute();
+      scheduleSave(id, "amount", e.target.value);
+    });
+  });
+  document.querySelectorAll("input.note").forEach(inp => {
+    inp.addEventListener("input", e => {
+      const id = e.target.dataset.note;
+      peopleData[id] = peopleData[id] || {};
+      peopleData[id].note = e.target.value;
+      scheduleSave(id, "note", e.target.value);
+    });
+  });
+}
+
+async function init(){
+  ensureSeedDom();
+  wireInputs();
+  recompute();
+
+  db = await claude.use("db");
+  if (!db) return; // static fallback already rendered
+
+  const col = db.collection("spend");
+  col.onSnapshot(snap => {
+    snap.docs.forEach(doc => {
+      const data = doc.data();
+      if (data) peopleData[doc.id] = data;
+    });
+    applySnapshotToInputs();
+  }, err => console.error("db error", err));
+}
+
+init();
+</script>
+
+</body></html>

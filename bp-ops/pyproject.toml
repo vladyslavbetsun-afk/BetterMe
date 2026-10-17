@@ -1,0 +1,22 @@
+[project]
+name = "bp-ops"
+version = "0.1.0"
+requires-python = ">=3.11"
+
+[tool.ruff]
+line-length = 135
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S"]
+ignore = ["S101", "S608", "B008"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S", "E501"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src", "tests"]
+testpaths = ["tests"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "config", "core", "db", "jobs", "modules", "web", "conftest", "factory"]

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% from "_macros.html" import key, st %}
+{% block title %}Load{% endblock %}
+{% block content %}
+<h1>Load: who has which tickets</h1>
+<p class="legal">Operational view only. Ages and flags are about tickets; people are listed alphabetically and never ranked (spec 05 §4).</p>
+{% for tb in v.tables %}
+<h2>{{ tb.label }}</h2>
+<div class="tablewrap"><table>
+  <tr><th>Person</th><th class="num">Open</th><th>Ticket</th><th>Stage</th><th class="num">Age in stage</th><th>Last activity</th><th>Flags</th>{% if user.sees_money %}<th class="num">Month to date</th>{% endif %}</tr>
+  {% for p in tb.rows %}{% for t in p.tickets %}<tr>
+    {% if loop.first %}<td rowspan="{{ p.tickets|length }}"><strong>{{ p.name }}</strong></td><td class="num" rowspan="{{ p.tickets|length }}">{{ p.open }}</td>{% endif %}
+    <td>{{ key(t.jira_key) }} <span class="sub">{{ t.summary[:70] }}</span></td><td>{{ st(t.status) }}</td>
+    <td class="num">{{ t.age|bdays }}</td><td class="nowrap">{{ t.last_activity|ago }}</td>
+    <td>{% for f in t.flags %}<span class="tag warn">{{ f }}</span>{% endfor %}</td>
+    {% if user.sees_money and loop.first %}<td class="num" rowspan="{{ p.tickets|length }}">{{ p.mtd[0]|usd(p.mtd[1]) if p.mtd else '—' }}</td>{% endif %}
+  </tr>{% endfor %}{% else %}<tr><td colspan="8" class="sub">No open tickets.</td></tr>{% endfor %}
+</table></div>
+{% if tb.idle %}<p class="sub">No open tickets: {{ tb.idle|map(attribute='display_name')|join(', ') }}</p>{% endif %}
+{% endfor %}
+{% endblock %}

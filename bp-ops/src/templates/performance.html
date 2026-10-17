@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Performance{% endblock %}
+{% block content %}
+<h1>Performance</h1>
+<div class="note">The live dashboard (GSC, Ahrefs, AI citations, cohorts, slipped pages) is Phase 4: docs/specs/01-live-performance-dashboard.md. It needs AHREFS_API_KEY and the GSC decision. Below is the data already imported from the October Updates Tracker and Slipped Pages Tracker{% if week %} (latest week {{ week }}){% endif %}.</div>
+<div class="tablewrap"><table><tr><th>URL</th><th>Cohort</th><th>Level</th><th class="num">Traffic</th><th class="num">Keywords</th><th class="num">Top 3</th><th class="num">4–10</th><th class="num">AI citations</th><th class="num">AIO</th><th class="num">ChatGPT</th><th class="num">Perplexity</th></tr>
+{% for r in rows %}<tr><td><a href="{{ r.url }}" target="_blank" rel="noopener">{{ r.url.replace('https://betterme.world/articles/', '') }}</a></td><td>{{ r.cohort }}</td><td>{{ r.slipped_level or '' }}</td>
+<td class="num">{{ r.traffic|num }}</td><td class="num">{{ r.keywords|num }}</td><td class="num">{{ r.top3|num }}</td><td class="num">{{ r.top4_10|num }}</td><td class="num">{{ r.ai_all|num }}</td><td class="num">{{ r.aio|num }}</td><td class="num">{{ r.chatgpt|num }}</td><td class="num">{{ r.perplexity|num }}</td></tr>
+{% else %}<tr><td colspan="11" class="sub">Nothing imported yet.</td></tr>{% endfor %}</table></div>
+{% endblock %}

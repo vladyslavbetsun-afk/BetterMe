@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Import report{% endblock %}
+{% block content %}
+<h1>Import report</h1>
+<p class="sub">Row counts per table, and every row the importer couldn't match (spec 05 §7). Run <code>python scripts/import_exports.py import/</code> after the Cowork export.</p>
+<div class="grid">{% for t, n in counts.items() %}<div class="kpi"><div class="l">{{ t }}</div><div class="v">{{ n }}</div></div>{% endfor %}</div>
+<h2>Unmatched or skipped rows ({{ issues|length }})</h2>
+<div class="tablewrap"><table><tr><th>When</th><th>Source</th><th>Ref</th><th>Problem</th><th>Detail</th></tr>
+{% for i in issues %}<tr><td>{{ i.at|when }}</td><td>{{ i.source }}</td><td>{{ i.ref or '' }}</td><td>{{ i.problem }}</td><td class="sub">{{ i.detail|tojson }}</td></tr>
+{% else %}<tr><td colspan="5" class="sub">Nothing unmatched.</td></tr>{% endfor %}</table></div>
+{% endblock %}

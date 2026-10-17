@@ -1,0 +1,36 @@
+# DRAFT for Phase 0 (spec 05 §3, §10). Reconcile the keys with the slop template's own slop.yaml schema
+# when the repo is created with slop-create-app; the values below are the decisions, the key names may differ.
+name: bp-ops
+tier: S
+replicas: 1                      # one container; the in-process scheduler also takes a Postgres advisory lock per job
+run: uvicorn app:app --app-dir src --host 0.0.0.0 --port ${PORT:-8080}
+health:
+  liveness: /ping
+  readiness: /startup
+  selftest: /selftest
+needs:
+  db: postgres                   # DATABASE_URL; migrations + seed run at boot (src/db)
+  llm:
+    monthly_budget_usd: 20       # not used yet (Phase 4: intake screening, briefs, report wording)
+    default_model: claude-haiku
+  atlassian: read                # the shared read-only account; Phase 0 test: can it see project BP?
+secrets: []                      # first deploy has NO custom secrets (the app starts without them)
+# Phase 4+ (add one at a time with /slop-ship, after storing the value in the portal):
+#   NOTION_TOKEN                  egress custom: api.notion.com
+#   AHREFS_API_KEY                egress custom: api.ahrefs.com
+#   GOOGLE_SERVICE_ACCOUNT_JSON   egress custom: searchconsole.googleapis.com, oauth2.googleapis.com, sheets.googleapis.com
+#   SLACK_BOT_TOKEN + SLACK_OPS_CHANNEL  only if decision (b)/(c) in docs/decisions.md D-03 is approved; egress alias: slack
+env:
+  OWNER_EMAILS: ""               # set in the portal: Vladyslav's BetterMe email (bootstrap owner before people.email is filled)
+  SLACK_TEAM_ID: ""              # optional: nicer "Open DM" deep links
+access:
+  mode: named-people             # Vladyslav (owner), Volodymyr (viewer), Yuliia Horetska (finance, /spend only)
+legal:
+  personal_data_external: true   # freelancers: names, Jira/Slack IDs, rates, amounts owed (warn and continue)
+  personal_data_colleagues: operational-only   # no evaluation, ranking or speed metrics
+  outside_services: [notion, ahrefs, google-search-console, google-sheets]
+  acts_on_its_own: confirmation-or-flagged-automation   # every write via core/outbound.py, all flags start off
+  retention:
+    operational_days: 90         # audit_log, outbound_messages, actions, job_runs
+    history_months: 12           # spend, performance
+    enforced: automatic          # nightly job `retention`

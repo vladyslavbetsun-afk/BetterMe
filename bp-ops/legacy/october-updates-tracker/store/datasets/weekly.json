@@ -1,0 +1,16 @@
+{
+  "description": "One row per page per weekly check: Ahrefs estimated organic traffic, keywords (all, top 3, 4–10) and AI citations by platform for the 74 October 2026 update pages, plus the live \"Updated on\" date. Collected by Claude each Monday from Ahrefs (batch-analysis, exact URL; AI responses count, exact URL) and the live page.",
+  "schedule": "Weekly, every Monday morning (Europe/Kyiv), by a scheduled Claude task that appends that week's rows.",
+  "source": {
+    "format": "json",
+    "kind": "file",
+    "name": "october-updates-weekly.json",
+    "url": "/_blob/27c37e251cf73ea34a74fa5c22d4af9a"
+  },
+  "staleAfterHours": 336,
+  "title": "October update pages, weekly",
+  "updated": {
+    "at": "2026-10-13T10:50:00Z",
+    "by": "Claude (baseline)"
+  }
+}
