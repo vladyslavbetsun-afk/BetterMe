@@ -102,6 +102,9 @@ td.page .kw{display:block;color:var(--muted);font-size:12.5px}
 .flag.hot{color:var(--l3);border-color:color-mix(in srgb,var(--l3) 40%,var(--line))}
 .state{font-size:12.5px;white-space:nowrap}
 .state.proposed{color:var(--accent);font-weight:600}
+.statecell{display:inline-flex;flex-wrap:wrap;align-items:center;gap:4px 8px}
+a.ticket{font-family:var(--f-mono);font-size:12.5px;font-weight:500}
+.btn.tiny{padding:1px 8px;font-size:12px;border-radius:6px}
 tr.drawer td{background:var(--sunk);padding:16px}
 .dgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:18px}
 .dgrid > section{min-width:0}
@@ -206,7 +209,7 @@ ol.prep{padding-left:20px}
     <input type="search" id="q" placeholder="Filter by keyword or slug" aria-label="Filter by keyword or slug">
     <select id="stateFilter" aria-label="Filter by state">
       <option value="active">This run</option><option value="proposed">Proposed</option><option value="watch">Watch</option>
-      <option value="carded">Ticket created / updated</option><option value="excluded">Excluded</option><option value="all">Everything on the board</option>
+      <option value="carded">Ticket created / updated</option><option value="excluded">Excluded</option><option value="all">Everything on the board</option><option value="removed">Deleted rows</option>
     </select>
     <div class="sel"><span class="muted" id="selCount">0 selected</span><button class="btn primary small" id="btnCards" type="button" disabled>Create Jira tickets</button></div>
   </div>
@@ -843,7 +846,7 @@ async function runRadar(){
       results.push({ slug:p.slug, doc:{ url:p.url, slug:p.slug, firstRun:prev.firstRun||runId, lastRun:runId, weeks:seenWeeks, confirmations:conf, confirmed,
         state, level:res.level, rule:res.rule, tag:res.tag, why:res.why, checklist:res.checklist, priority:prio, intent, page:p,
         audit:{...audit, qMissing:(audit.qMissing||[]).slice(0,8)}, screen, jira:j, notionOpen:nc?{url:nc.url, status:nc.Status, name:nc.Name}:null,
-        flags, notes:itemNotes, override:prev.override||null, excluded:prev.excluded||null, notionUrl:prev.notionUrl||(nc&&nc.url)||null,
+        flags, notes:itemNotes, override:prev.override||null, excluded:prev.excluded||null, removed:prev.removed||null, jiraKey:prev.jiraKey||null, jiraUrl:prev.jiraUrl||null, notionUrl:prev.notionUrl||(nc&&nc.url)||null,
         cardLevel:prev.cardLevel||null, cardWeek:prev.cardWeek||null, updatedOnNew, followups, followupOutcome:prev.followupOutcome||null,
         history:[...(prev.history||[]).filter(h=>h.date!==date), {date, now:p.mainNow}].slice(-12) } });
     }
@@ -1238,13 +1241,34 @@ async function setExcluded(slug, reason){
   if (!reason.trim()){ toast("Add a reason for excluding the page."); return; }
   await dbSet("items/"+slug, { ...it, state:"excluded", excluded:{ reason:reason.trim(), at:todayISO() } }); S.selected.delete(slug); toast("Excluded until you include it again.");
 }
+async function removeRow(slug){
+  const it=S.items[slug]; if (!it) return; S.pendingDelete=null; S.open.delete(slug); S.selected.delete(slug);
+  await dbSet("items/"+slug, { ...it, removed:{ at:new Date().toISOString() } });
+  toast(`Row deleted. ${it.jiraKey||"The ticket"} stays in Jira; restore the row from "Deleted rows".`);
+}
+async function restoreRow(slug){ const it=S.items[slug]; if (!it) return; await dbSet("items/"+slug, { ...it, removed:null }); toast("Row restored."); }
 async function include(slug){ const it=S.items[slug]; if (!it) return; await dbSet("items/"+slug, { ...it, state:"confirmed", excluded:null }); toast("Included again; the next run re-evaluates it."); }
 
 /* ---------- render ---------- */
+// A page with a ticket shows the ticket key as a link; later states (updated, recovered…) follow it.
+function stateCell(it){
+  const t = it.jiraKey ? { key:it.jiraKey, url:it.jiraUrl||JIRA_BROWSE_URL+it.jiraKey }
+    : (it.jira && it.jira.open && it.level==="L0" && it.tag==="in_pipeline") ? it.jira.open : null;
+  const st = it.state==="carded" ? "" : (STATE_LABEL[it.state]||it.state.replace("_"," "));
+  const link = t ? `<a class="ticket" href="${esc(t.url)}" target="_blank" rel="noopener">${esc(t.key)}</a>` : "";
+  let action="";
+  if (it.removed) action=`<button class="btn tiny" type="button" data-act="restore" data-slug="${esc(it.slug)}">Restore</button>`;
+  else if (it.jiraKey) action = S.pendingDelete===it.slug
+    ? `<button class="btn tiny danger" type="button" data-act="delete" data-slug="${esc(it.slug)}">Confirm delete</button>`
+    : `<button class="btn tiny" type="button" data-act="askdelete" data-slug="${esc(it.slug)}" aria-label="Delete row ${esc(it.slug)}">Delete</button>`;
+  return `<span class="statecell">${link}${link&&st?" · ":""}${esc(st)}${action}</span>`;
+}
 function latestRun(){ return S.runs.find(r=>r.status==="ok") || null; }
 function visibleItems(){
   const run=latestRun(); const all=Object.values(S.items);
   let list=all.filter(it=>{
+    if (S.stateFilter==="removed") return !!it.removed;
+    if (it.removed) return false;
     switch (S.stateFilter){
       case "active": return run && it.lastRun===run.id;
       case "proposed": return it.state==="proposed";
@@ -1314,7 +1338,7 @@ function render(){
       `<span><b>${fmt(run.units)}</b> Ahrefs units</span>`, run.crawlDate?`<span>Site Audit crawl <b>${esc(run.crawlDate)}</b></span>`:""].join("")
     : `<span>${S.dbReady||!S.db?"No run yet. Run radar pulls this week's top-3 losses from Ahrefs.":"Loading the board…"}</span>`;
   const counts={}; for (const l of LEVELS) counts[l]=0;
-  for (const it of Object.values(S.items)) if (run && it.lastRun===run.id) counts[(it.override&&it.override.level)||it.level]++;
+  for (const it of Object.values(S.items)) if (run && it.lastRun===run.id && !it.removed) counts[(it.override&&it.override.level)||it.level]++;
   $("levels").innerHTML=LEVELS.map(l=>`<button type="button" class="lv c-${l}" data-level="${l}" aria-pressed="${S.levelFilter===l}"><span class="n num">${counts[l]}</span><span class="t"><b>${l}</b>${LEVEL_NAMES[l]}</span></button>`).join("");
   const proposed=Object.values(S.items).filter(it=>it.state==="proposed").length;
   $("proposed").textContent=`Proposed this week: ${proposed} / ${c.weekly_card_cap}`;
@@ -1339,7 +1363,7 @@ function render(){
         <td><span class="pill c-${lvl}">${lvl}</span></td>
         <td class="pos">${pos(p.mainWas)} → <span class="${p.mainNow==null?"lost":""}">${pos(p.mainNow)}</span></td>
         <td class="r">${p.lostTop3}</td><td class="r">${fmt(p.trafficLost)}</td><td class="r">${fmt(it.priority)}</td>
-        <td class="mono">${esc(a.updatedOn||"—")}</td><td>${flags}</td><td class="state ${esc(it.state)}">${esc(STATE_LABEL[it.state]||it.state.replace("_"," "))}</td></tr>`
+        <td class="mono">${esc(a.updatedOn||"—")}</td><td>${flags}</td><td class="state ${esc(it.state)}">${stateCell(it)}</td></tr>`
         + (S.open.has(it.slug)?drawer(it):""); }).join("");
   }
   $("selCount").textContent=`${S.selected.size} selected`; $("btnCards").disabled=!S.selected.size || !S.mcp;
@@ -1427,6 +1451,9 @@ document.addEventListener("click", e => {
     if (act.dataset.act==="override"){ const lv=document.querySelector(`[data-ovl="${CSS.escape(slug)}"]`).value, r=document.querySelector(`[data-ovr="${CSS.escape(slug)}"]`).value; setOverride(slug, lv, r); }
     if (act.dataset.act==="exclude") setExcluded(slug, document.querySelector(`[data-exr="${CSS.escape(slug)}"]`).value);
     if (act.dataset.act==="include") include(slug);
+    if (act.dataset.act==="askdelete"){ S.pendingDelete=slug; clearTimeout(S._delT); S._delT=setTimeout(()=>{ S.pendingDelete=null; render(); },5000); render(); }
+    if (act.dataset.act==="delete") removeRow(slug);
+    if (act.dataset.act==="restore") restoreRow(slug);
     return; }
   if (e.target.matches("[data-pick]")){ const s=e.target.dataset.pick; e.target.checked?S.selected.add(s):S.selected.delete(s); render(); return; }
   const row=e.target.closest("tr.row");
