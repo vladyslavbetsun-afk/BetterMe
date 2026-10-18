@@ -159,8 +159,14 @@ fieldset.draft legend{font-weight:600;padding:0 6px;display:flex;gap:8px;align-i
 .orig{margin:4px 0 8px;font-size:13px;word-break:break-all}
 .opts{display:flex;flex-wrap:wrap;gap:6px 18px;margin:6px 0 10px}
 .opts label{display:flex;gap:6px;align-items:center;font-size:13.5px}
-.form label.wide{grid-column:1/-1}
+.form .wide{grid-column:1/-1}
 .form textarea{min-height:84px}
+.linkset{display:grid;gap:6px}.linkset .lbl{font-size:12.5px;color:var(--muted)}
+.linkrow{display:grid;grid-template-columns:20px minmax(0,1fr) minmax(0,1.6fr);gap:8px;align-items:center}
+.linkrow .n{color:var(--muted);font-size:12px;text-align:right}
+.linkrow input{border:1px solid var(--line);background:var(--bg);border-radius:6px;padding:6px 8px;min-width:0}
+p.missing{color:var(--bad);font-size:12.5px;margin:8px 0 0}
+@media (max-width:640px){.linkrow{grid-template-columns:20px 1fr}.linkrow input+input{grid-column:2}}
 .count{margin-left:6px;font-size:11.5px}.count.ok{color:var(--l1)}.count.off{color:var(--bad)}
 .notice ul{margin:6px 0 0;padding-left:18px;font-size:13px}
 ol.prep{padding-left:20px}
@@ -200,25 +206,25 @@ ol.prep{padding-left:20px}
     <input type="search" id="q" placeholder="Filter by keyword or slug" aria-label="Filter by keyword or slug">
     <select id="stateFilter" aria-label="Filter by state">
       <option value="active">This run</option><option value="proposed">Proposed</option><option value="watch">Watch</option>
-      <option value="carded">Carded / updated</option><option value="excluded">Excluded</option><option value="all">Everything on the board</option>
+      <option value="carded">Ticket created / updated</option><option value="excluded">Excluded</option><option value="all">Everything on the board</option>
     </select>
-    <div class="sel"><span class="muted" id="selCount">0 selected</span><button class="btn primary small" id="btnCards" type="button" disabled>Cards &amp; Jira tickets</button></div>
+    <div class="sel"><span class="muted" id="selCount">0 selected</span><button class="btn primary small" id="btnCards" type="button" disabled>Create Jira tickets</button></div>
   </div>
   <div class="tablewrap">
     <table>
-      <thead><tr><th style="width:28px"><span class="muted" title="Select for cards">✓</span></th><th>Page</th><th>Level</th><th>Was → now</th><th class="r">Lost top-3</th><th class="r">Traffic lost</th><th class="r">Priority</th><th>Updated on</th><th>Flags</th><th>State</th></tr></thead>
+      <thead><tr><th style="width:28px"><span class="muted" title="Select for a Jira ticket">✓</span></th><th>Page</th><th>Level</th><th>Was → now</th><th class="r">Lost top-3</th><th class="r">Traffic lost</th><th class="r">Priority</th><th>Updated on</th><th>Flags</th><th>State</th></tr></thead>
       <tbody id="rows"></tbody>
     </table>
   </div>
   <div class="panels">
-    <section class="panel"><h2>Follow-ups</h2><p>Pages updated after a card: checked at +14 and +28 days.</p><ul id="followList"><li class="muted">Nothing scheduled yet.</li></ul></section>
-    <section class="panel"><h2>Cards this week</h2><p>Notion cards and Jira tickets created from this page, deduped per page and ISO week.</p><ul id="cardList"><li class="muted">No cards yet.</li></ul></section>
+    <section class="panel"><h2>Follow-ups</h2><p>Pages updated after a ticket: checked at +14 and +28 days; the result is added to the ticket as a comment.</p><ul id="followList"><li class="muted">Nothing scheduled yet.</li></ul></section>
+    <section class="panel"><h2>Jira tickets this week</h2><p>BP tickets created from this page. A page never gets a second ticket while one is open.</p><ul id="cardList"><li class="muted">No tickets yet.</li></ul></section>
     <section class="panel"><h2>Tools</h2><p>One-time imports and the §7 calibration against the old Slipped Pages export.</p>
       <div class="actrow"><button class="btn small" id="btnImport" type="button">Import "Already suggested"</button><button class="btn small" id="btnCalib" type="button">Calibrate</button></div>
       <p style="margin-top:10px" id="suggCount"></p>
     </section>
   </div>
-  <footer>Decay Radar (spec 06). Rankings from Ahrefs organic keywords (US); page audits from the Ahrefs Site Audit crawl of betterme.world; Jira and Notion are only written to after you confirm cards or tickets. Source: decay-radar/ in the BetterMe repo.</footer>
+  <footer>Decay Radar (spec 06). Rankings from Ahrefs organic keywords (US); page audits from the Ahrefs Site Audit crawl of betterme.world; Notion is read-only (open-card check); Jira is only written to after you confirm tickets. Source: decay-radar/ in the BetterMe repo.</footer>
 </main>
 
 <dialog id="dlgSettings"><form class="dlg" method="dialog" id="fSettings">
@@ -229,7 +235,7 @@ ol.prep{padding-left:20px}
 </form></dialog>
 
 <dialog id="dlgCards"><div class="dlg">
-  <header><h2 id="cardsTitle">Create Notion cards</h2></header>
+  <header><h2 id="cardsTitle">Create Jira tickets</h2></header>
   <div class="body" id="cardsBody"></div>
   <footer id="cardsFoot"></footer>
 </div></dialog>
@@ -259,6 +265,7 @@ const CLOUD = "657e24cd-f643-4482-aba5-7e848607df28", JIRA_BROWSE_URL = "https:/
 const DS = "1e997cc2-2a80-8086-a8ea-000bcc1073a4", DS_URL = "collection://" + DS;
 const SITE_AUDIT_PROJECT = 3897375;
 const LEVELS = ["L0","L1","L2","L3","NOSEO"];
+const STATE_LABEL = { carded:"ticket created", in_progress:"in progress", not_recovered:"not recovered" };
 const LEVEL_NAMES = { L0:"Hold", L1:"Targeted fix", L2:"Standard refresh", L3:"Full rewrite", NOSEO:"No SEO work" };
 // Stand-ins until 00-shared-reference §6.6 is pasted in (docs/decisions.md D-05).
 const LEVEL_SCOPE = {
@@ -283,9 +290,8 @@ const SETTING_FIELDS = [
   ["max_rows","Detection rows (cap)","number"],["audit_max_pages","Pages audited per run","number"],["max_units","Unit guard (max units per run)","number"],
   ["units_per_row","Units per detection row","number"],["min_volume","Volume floor","number"],["min_volume_core","Volume floor, core topics","number"],
   ["min_traffic_lost","Min. traffic lost per keyword","number"],["severe_traffic_lost","Severe page traffic loss","number"],
-  ["hold_recent_days","Hold after update (days)","number"],["weekly_card_cap","Weekly card cap","number"],
+  ["hold_recent_days","Hold after update (days)","number"],["weekly_card_cap","Weekly ticket cap","number"],
   ["cannibalization_max_rank","Cannibalization: swapped URL rank ≤","number"],["l2_age_days","Stale after (days)","number"],
-  ["card_name_format","Card name format","text"],["choose_primary_top","Mark top N as (Week)","number"]
 ];
 const CORE_TOPICS = { "Wall Pilates":["wall pilates","wall-pilates"], "Chair Yoga":["chair yoga","chair-yoga"], "Calisthenics":["calisthenics"],
   "Meal Plans":["meal plan","meal-plan"], "Fasting":["fasting","intermittent fasting","intermittent-fasting"] };
@@ -806,8 +812,8 @@ async function runRadar(){
       p.cluster=inferCategory(p.mainKeyword,p.slug)||p.coreTopic;
       const screen=screenText(audit.title, audit.h1, p.mainKeyword, p.slug.replace(/-/g," "));
       const j=jira?jira[p.url]||{}:{}; const nc=notion?openCardOf(notion[p.url]):null;
-      const ownCard=!nc && prev.notionUrl && ["carded","in_progress"].includes(prev.state) ? {url:prev.notionUrl} : null;
-      const ctx={ page:p, audit, screen, today, confirmed, openTicket:j.open, openCard:nc||ownCard, recentTicket:j.recent };
+      const ownTicket=!j.open && prev.jiraKey && ["carded","in_progress"].includes(prev.state) ? { key:prev.jiraKey, url:prev.jiraUrl, status:"created here", via:"created here" } : null;
+      const ctx={ page:p, audit, screen, today, confirmed, openTicket:j.open||ownTicket, openCard:nc, recentTicket:j.recent };
       let res=assignLevel(c, ctx);
       const itemNotes=[...notes];
       if (audit.status==="not_crawled") itemNotes.push("Audit unavailable: page not in the latest Site Audit crawl. Age, structure and claim checks were skipped.");
@@ -897,22 +903,24 @@ async function runFollowups(){
       if (outcome==="not_recovered"){ const nl=escalate(it.cardLevel||it.level); upd.level=nl; upd.state="not_recovered"; upd.override=null; msg+=` Escalated to ${nl}; re-proposed next week.`; }
       else upd.state=outcome; }
     await dbSet("items/"+it.slug, upd); n++;
-    const pid=notionPageId(it.notionUrl);
-    if (pid){ try { await call(NOTION,"notion-create-comment",{ page_id:pid, markdown:msg }); } catch(e){ toast("Notion comment failed: "+errText(e,NOTION)); } }
+    if (it.jiraKey){ try { await call(JIRA,"addCommentToJiraIssue",{ cloudId:CLOUD, issueIdOrKey:it.jiraKey, commentBody:msg, contentFormat:"markdown" }); } catch(e){ toast("Jira comment failed: "+errText(e,JIRA)); } }
   }
   toast(n ? `${n} follow-up check${n>1?"s":""} done (${fmt(tally.units)} units).` : "No follow-up checks are due today.");
 }
 
-/* ---------- Notion cards + Jira tickets (§10; blog-notion-ticket-creation, blog-jira-ticket-creation) ---------- */
+/* ---------- Jira tickets (§10, as BP Article tickets per blog-jira-ticket-creation) ---------- */
 const SHEETS = "Google Sheets", QUIZ_SHEET = "17qXKwEt2eY-e06PCREkh_mziYeEdGpRRcRo1wRjJgzs";
 const JIRA_BROWSE = "https://newsiteam.atlassian.net/browse/";
-const DRAFT_UNITS = 650; // PAA + two related-terms lists + one Site Audit read, per page
+const DRAFT_UNITS = 700; // PAA + two related-terms lists + Site Audit page read + related-article lookup, per page
+const STOP = new Set("a an the for to of and or in on with how what is are do does can your you my vs at by from per day week".split(" "));
 function mdEsc(s){ return String(s??"").replace(/([\\*~`$\[\]<>{}|^])/g,"\\$1"); }
 const sentenceCase = s => s ? s.charAt(0).toUpperCase()+s.slice(1) : s;
 const titleUnderscore = kw => kw.split(/\s+/).filter(Boolean).map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join("_").replace(/[^A-Za-z0-9_]/g,"");
 const linesOf = s => String(s||"").split(/\n/).map(x=>x.trim()).filter(Boolean);
 const uniqStr = arr => [...new Map(arr.filter(Boolean).map(x=>[String(x).toLowerCase().trim(), String(x).trim()])).values()];
 const clean = s => String(s||"").replace(/\b(best|personali[sz]ed|guaranteed)\b\s*/gi,"").replace(/\s{2,}/g," ").trim();
+const cleanTitle = t => String(Array.isArray(t)?t[0]:t||"").replace(/\s*[-|–]\s*BetterMe\s*$/i,"").trim();
+const kwWords = kw => kw.toLowerCase().split(/[^a-z0-9]+/).filter(w=>w.length>2 && !STOP.has(w));
 
 async function loadQuizzes(){
   if (S.quizzes) return S.quizzes;
@@ -944,11 +952,29 @@ async function typicalWords(){
   } catch {}
   return S.typicalWords=n;
 }
+// Real, live betterme.world articles to link to: the page's own internal links, related URLs from the Site Audit crawl, same-category pages on the board.
+async function linkCandidates(it, pageLinks, tally, notes){
+  const words=kwWords(it.page.mainKeyword).slice(0,3); let crawl=[];
+  if (words.length){
+    try {
+      crawl=((await ahrefs("site-audit-page-explorer",{ project_id:SITE_AUDIT_PROJECT, select:"url,http_code,title", limit:60,
+        where:JSON.stringify({ and:[{ field:"http_code", is:["eq",200] }, { or:words.flatMap(w=>[{ field:"url", is:["substring","/articles/"+w] }, { field:"url", is:["substring","-"+w] }]) }] }) },tally)).pages||[])
+        .map(r=>({ href:normalizeUrl(r.url), title:cleanTitle(r.title) }));
+    } catch(e){ notes.push("Related articles: "+errText(e,AHREFS)); }
+  }
+  const cat=inferCategory(it.page.mainKeyword,it.slug);
+  const board=Object.values(S.items).filter(x=>x.page && cat && inferCategory(x.page.mainKeyword,x.slug)===cat).map(x=>({ href:x.url, title:sentenceCase(x.page.mainKeyword) }));
+  const seen=new Set([it.url]); const kw=new Set(words);
+  return [...pageLinks.map(l=>({ href:l.href, title:l.text })), ...crawl, ...board]
+    .filter(c=>c.href && !seen.has(c.href) && seen.add(c.href))
+    .map(c=>({ ...c, score:kwWords(c.title+" "+slugOf(c.href).replace(/-/g," ")).filter(w=>kw.has(w)).length }))
+    .sort((a,b)=>b.score-a.score).slice(0,40);
+}
 
 async function draftFor(c, it, tally, quizzes, words){
   const kw=it.page.mainKeyword, a=it.audit||{}, today=todayISO();
   const level=(it.override&&it.override.level)||it.level;
-  const d={ slug:it.slug, url:it.url, kw, level, notes:[], hasCard:!!(it.notionUrl && ["carded","in_progress","updated"].includes(it.state)) };
+  const d={ slug:it.slug, url:it.url, kw, level, notes:[] };
   // Existing BP tickets for this article URL or main keyword.
   const jm=await jiraCheck([{ slug:it.slug, url:it.url, mainKeyword:kw }], c, today, t=>d.notes.push("Jira check: "+t));
   d.jira = jm ? (jm[it.url]||{ open:null, recent:null, matches:[] }) : null;
@@ -966,21 +992,21 @@ async function draftFor(c, it, tally, quizzes, words){
   catch(e){ d.notes.push("Also-rank-for keywords: "+errText(e,AHREFS)); }
   try { talkAbout=((await ahrefs("keywords-explorer-related-terms",{ keywords:kw, country:c.country, select:"keyword,volume", terms:"also_talk_about", view_for:"top_10", limit:30, order_by:"volume:desc" },tally)).keywords||[]).map(k=>k.keyword); }
   catch(e){ d.notes.push("LSI terms: "+errText(e,AHREFS)); }
+  d.candidates=await linkCandidates(it, links, tally, d.notes);
   const notMain=k=>k && k.toLowerCase().trim()!==kw.toLowerCase().trim();
   d.category=inferCategory(kw,it.slug)||"";
   d.title=sentenceCase(kw); d.metaTitle=""; d.metaDescription="";
   d.additional=uniqStr([...it.page.lostKeywords.map(k=>k.kw), ...rankFor].filter(notMain)).slice(0,10);
   d.lsis=uniqStr(talkAbout.filter(t=>t.includes(" ") && notMain(t))).slice(0,15);
   d.faqs=uniqStr(paa).slice(0,6);
-  d.subheadings=h2s;
-  const sameCluster=Object.values(S.items).filter(x=>x.slug!==it.slug && x.page && d.category && inferCategory(x.page.mainKeyword,x.slug)===d.category)
-    .map(x=>({ href:x.url, text:sentenceCase(x.page.mainKeyword) }));
-  const seen=new Set(); d.links=[...links, ...sameCluster].filter(l=>l.href && !seen.has(l.href) && seen.add(l.href)).slice(0,3);
+  d.subheadings=h2s.slice(0,10);
+  d.links=d.candidates.slice(0,3).map(x=>({ href:x.href, text:sentenceCase(x.title.toLowerCase()) }));
   d.words=words; d.quiz="";
   if (S.sample){
-    const prompt=`You prepare a BetterMe blog UPDATE ticket for an existing article that lost its Google top-3 rankings.
+    const prompt=`You prepare a BetterMe blog UPDATE ticket (Jira, project BP) for an existing article that lost its Google top-3 rankings.
 Original article: ${it.url}
 Current page title: ${a.title||"unknown"} | H1: ${a.h1||"unknown"}
+Current H2 subheadings: ${h2s.join(" | ")||"unknown"}
 Main keyword: ${kw}
 Category: ${d.category||"unknown"}
 Decay level: ${level} ${LEVEL_NAMES[level]}. ${it.why}
@@ -988,13 +1014,17 @@ Lost keywords: ${it.page.lostKeywords.map(k=>k.kw).join("; ")}
 Candidate additional keywords (Ahrefs "also rank for"): ${rankFor.join("; ")||"none"}
 Candidate LSI terms (Ahrefs "also talk about"): ${talkAbout.join("; ")||"none"}
 People Also Ask questions: ${paa.join(" | ")||"none"}
+Candidate internal links (live BetterMe articles; use only these URLs):
+${d.candidates.map(x=>`- ${x.href} — ${x.title}`).join("\n")||"none"}
 Quiz topics (choose one name exactly as written, or "" if none fits): ${quizzes.map(q=>q.name).join(" | ")||"none"}
 
-Return only JSON: {"title":"","metaTitle":"","metaDescription":"","additionalKeywords":[],"lsis":[],"faqs":[],"quizTopic":""}
+Return only JSON: {"title":"","metaTitle":"","metaDescription":"","subheadings":[],"linkedArticles":[{"url":"","anchor":""}],"additionalKeywords":[],"lsis":[],"faqs":[],"quizTopic":""}
 Rules:
 - title: sentence case, built on the main keyword.
 - metaTitle: 50-60 characters, main keyword near the front, end with " | BetterMe" when it fits.
 - metaDescription: 150-160 characters, uses the main keyword naturally, answers the search intent, ends with a soft call to action such as "Learn how..." or "Find out...".
+- subheadings: 6-10 H2s for the updated article in sentence case; keep the strong current H2s, add answer-first question H2s from People Also Ask where they fit; do not include Key takeaways, FAQs or The bottom line.
+- linkedArticles: exactly 3, chosen only from the candidate internal links, the most topically useful for a reader of this article, never the article itself; anchor is a natural 2-6 word phrase describing the linked page (no "click here", no "best").
 - additionalKeywords: 5-10 close variations of the main keyword, taken from the lost keywords and the "also rank for" list only.
 - lsis: 10-15 multi-word topical terms taken from the "also talk about" list; no single generic words, no brand or competitor names.
 - faqs: 4-6 questions, starting from People Also Ask; fix grammar only; each ends with "?".
@@ -1005,40 +1035,20 @@ Rules:
       if (o.title) d.title=clean(o.title);
       if (o.metaTitle) d.metaTitle=clean(o.metaTitle);
       if (o.metaDescription) d.metaDescription=clean(o.metaDescription);
+      if (Array.isArray(o.subheadings) && o.subheadings.length) d.subheadings=uniqStr(o.subheadings.map(s=>clean(String(s)))).slice(0,10);
+      if (Array.isArray(o.linkedArticles)){
+        const ok=new Set(d.candidates.map(x=>x.href));
+        const picked=o.linkedArticles.map(l=>({ href:normalizeUrl(l&&l.url), text:clean(l&&l.anchor) })).filter(l=>l.href && ok.has(l.href) && l.text);
+        if (picked.length) d.links=[...picked, ...d.links.filter(l=>!picked.some(p=>p.href===l.href))].slice(0,3);
+      }
       if (Array.isArray(o.additionalKeywords) && o.additionalKeywords.length) d.additional=uniqStr(o.additionalKeywords.map(String).filter(notMain)).slice(0,10);
       if (Array.isArray(o.lsis) && o.lsis.length) d.lsis=uniqStr(o.lsis.map(String)).slice(0,15);
       if (Array.isArray(o.faqs) && o.faqs.length) d.faqs=uniqStr(o.faqs.map(String)).slice(0,6);
       if (o.quizTopic && quizzes.some(q=>q.name===o.quizTopic)) d.quiz=o.quizTopic;
-    } catch(e){ d.notes.push(e && e.code==="not_granted" ? "Claude drafting isn't allowed for this page; fill the title and meta fields by hand." : `Claude couldn't draft the title and meta fields (${(e&&e.code)||"error"}); fill them by hand.`); }
-  } else d.notes.push("Claude drafting isn't available in this view; fill the title and meta fields by hand.");
+    } catch(e){ d.notes.push(e && e.code==="not_granted" ? "Claude drafting isn't allowed for this page; fill the title, meta fields, subheadings and anchors by hand." : `Claude couldn't draft (${(e&&e.code)||"error"}); fill the title, meta fields, subheadings and anchors by hand.`); }
+  } else d.notes.push("Claude drafting isn't available in this view; fill the title, meta fields, subheadings and anchors by hand.");
+  while (d.links.length<3) d.links.push({ href:"", text:"" });
   return d;
-}
-
-function cardFor(c, it, rank, today, x){
-  const level=(it.override&&it.override.level)||it.level; const a=it.audit||{};
-  let name;
-  if (x.jiraSummary) name=x.jiraSummary; // blog-notion-ticket-creation: Name = the Jira ticket's exact summary
-  else { let n=null; if (c.card_name_format.includes("{n}")) n=x.words||Math.round((a.wordCount||0)/100)*100;
-    name=c.card_name_format.replace("{kw}", it.page.mainKeyword).replace("{n}", n); }
-  const props={ "Name":name, "New/Upd":"Update", "Status":"Not started", "URL 1":it.url, "date:Date:start":today, "date:Date:is_datetime":0 };
-  if (x.category) props["Blog Category"]=x.category;
-  if (x.jiraUrl) props["JIRA"]=x.jiraUrl;
-  if (c.choose_primary_top && rank<=c.choose_primary_top) props["Choose Primary"]="(Week)";
-  const rows=it.page.lostKeywords.map(k=>`\t<tr>\n\t\t<td>${mdEsc(k.kw)}</td>\n\t\t<td>${k.vol}</td>\n\t\t<td>${pos(k.was)} → ${pos(k.now)}</td>\n\t\t<td>${Math.max((k.trafficPrev||0)-(k.trafficNow||0),0)}</td>\n\t</tr>`).join("\n");
-  const checklist=(level===it.level?it.checklist:checklistFor(c,level,it.page,a,a.claimFlags||[]));
-  const body=[`## Decay radar — ${level} ${LEVEL_NAMES[level]}`,
-    `**Original article:** [${mdEsc(it.url)}](${it.url})`,
-    x.jiraUrl?`**Jira:** [${mdEsc(x.jiraKey||x.jiraUrl)}](${x.jiraUrl})`:"",
-    `**Main keyword:** ${mdEsc(it.page.mainKeyword)}`,
-    mdEsc(it.override?`${it.why} Level set to ${level} by hand: ${it.override.reason}`:it.why),
-    `<table header-row="true">\n\t<tr>\n\t\t<td>Keyword</td>\n\t\t<td>Volume</td>\n\t\t<td>Was → now</td>\n\t\t<td>Traffic lost</td>\n\t</tr>\n${rows}\n</table>`,
-    "### Checklist", ...checklist.map(v=>`- [ ] ${mdEsc(v)}`),
-    x.additional.length?"### Additional keywords":"", ...x.additional.map(v=>`- ${mdEsc(v)}`),
-    x.lsis.length?"### LSIs":"", x.lsis.length?mdEsc(x.lsis.join(", ")):"",
-    x.faqs.length?"### FAQs":"", ...x.faqs.map(v=>`- ${mdEsc(v)}`),
-    "### Audit", `- Updated on: ${a.updatedOn||"unknown"}`, `- Words: ${a.wordCount||"unknown"}`, `- FAQs: ${a.faqCount??"unknown"}`, `- Key Takeaways: ${a.status==="ok"?(a.keyTakeaways?"yes":"no"):"unknown"}`,
-    `Generated by Decay Radar run ${mdEsc(it.lastRun)} on ${today}`].filter(Boolean).join("\n");
-  return { slug:it.slug, url:it.url, level, props, body, name, mainNow:it.page.mainNow, mainKeyword:it.page.mainKeyword };
 }
 
 function jiraDescription(d, v, it){
@@ -1054,71 +1064,68 @@ function jiraDescription(d, v, it){
     "**Expert**: " ].filter(Boolean).join("\n\n");
 }
 const adfLines = arr => ({ type:"doc", version:1, content:[{ type:"paragraph", content:arr.flatMap((t,i)=>[...(i?[{type:"hardBreak"}]:[]), {type:"text", text:t}]) }] });
-const adfLinks = ls => ({ type:"doc", version:1, content:[{ type:"paragraph", content:ls.flatMap((l,i)=>[...(i?[{type:"hardBreak"}]:[]), {type:"text", text:l.text||l.href, marks:[{type:"link", attrs:{href:l.href}}]}]) }] });
+const adfLinks = ls => ({ type:"doc", version:1, content:[{ type:"paragraph", content:ls.flatMap((l,i)=>[...(i?[{type:"hardBreak"}]:[]), {type:"text", text:l.text, marks:[{type:"link", attrs:{href:l.href}}]}]) }] });
 
-/* dialog: step 1 options, step 2 editable drafts, step 3 results */
-function openCardsDialog(){
-  const n=S.selected.size;
-  S.drafts=null;
-  $("cardsTitle").textContent=`Cards and tickets for ${n} page${n>1?"s":""}`;
-  $("cardsBody").innerHTML=`<p>For each page the radar drafts the extra content: additional keywords and LSIs from Ahrefs related terms, FAQs from live People Also Ask, the current outline and internal links from the Site Audit crawl, and a title and meta fields from Claude. You review and edit every draft before anything is written.</p>
-    <div class="opts"><label><input type="checkbox" id="optNotion" checked> Create Notion cards (Articles)</label>
-    <label><input type="checkbox" id="optJira"> Create Jira tickets (BP, Article)</label></div>
-    <p class="muted">Before writing, BP is searched for an existing ticket by the article link and by the main keyword. Pages with one get no new ticket. Drafting uses about ${fmt(n*DRAFT_UNITS)} Ahrefs units.</p>`;
+/* dialog: step 1 confirm drafting, step 2 editable drafts, step 3 results */
+function openTicketsDialog(){
+  const n=S.selected.size; S.drafts=null;
+  $("cardsTitle").textContent=`Jira tickets for ${n} page${n>1?"s":""}`;
+  $("cardsBody").innerHTML=`<p>For each page the radar drafts a BP Article ticket: title and meta fields, subheadings, 3 linked articles with anchors, additional keywords, LSIs, FAQs and the quiz link. You review and edit every draft before anything is written to Jira.</p>
+    <p class="muted">Before writing, BP is searched for an existing ticket by the article link and by the main keyword; pages with one get no new ticket. Drafting uses about ${fmt(n*DRAFT_UNITS)} Ahrefs units.</p>`;
   $("cardsFoot").innerHTML=`<button class="btn" type="button" data-close="dlgCards">Cancel</button><button class="btn primary" type="button" id="btnPrepare">Prepare drafts</button>`;
   $("dlgCards").showModal();
 }
 async function prepareDrafts(){
-  const wantNotion=$("optNotion").checked, wantJira=$("optJira").checked;
-  if (!wantNotion && !wantJira){ toast("Choose Notion cards, Jira tickets or both."); return; }
   const c=cfg(), tally={units:0};
   const items=[...S.selected].map(s=>S.items[s]).filter(Boolean).sort((x,y)=>(y.priority||0)-(x.priority||0));
   $("cardsFoot").innerHTML=`<button class="btn" type="button" data-close="dlgCards">Cancel</button><button class="btn primary" type="button" disabled>Preparing…</button>`;
   const prog=[]; const say=t=>{ prog.push(t); $("cardsBody").innerHTML=`<ol class="prep">${prog.map(x=>`<li>${esc(x)}</li>`).join("")}</ol>`; };
   say("Loading quiz topics and recent BP word counts");
-  const [quizzes, words]=await Promise.all([loadQuizzes(), wantJira?typicalWords():Promise.resolve(2000)]);
+  const [quizzes, words]=await Promise.all([loadQuizzes(), typicalWords()]);
   const drafts=[];
   for (const it of items){ say(`Drafting ${it.slug}`); drafts.push(await draftFor(c, it, tally, quizzes, words)); }
-  S.drafts={ drafts, wantNotion, wantJira, units:tally.units };
+  S.drafts={ drafts, units:tally.units };
   renderDrafts();
 }
-function draftForm(d, i, wantNotion, wantJira){
+function draftForm(d, i){
   const ex=d.jira||{}, existing=ex.open||ex.recent;
   const matches=(ex.matches||[]).map(m=>`<li><a href="${esc(m.url)}" target="_blank" rel="noopener">${esc(m.key)}</a> · ${esc(m.status)} · matched by ${esc(m.via)} · ${esc(m.summary)}</li>`).join("");
-  const jiraOk=wantJira && !existing && d.jira!==null;
+  const blocked=d.jira===null || !!existing;
   const quizOpts=[`<option value="">No quiz</option>`, ...(S.quizzes||[]).map(q=>`<option ${q.name===d.quiz?"selected":""}>${esc(q.name)}</option>`)].join("");
   const ta=(k,label,val,hint)=>`<label class="wide" for="d${i}_${k}">${label}<span class="muted"> ${hint}</span><textarea id="d${i}_${k}" data-f="${k}" rows="4">${esc(val)}</textarea></label>`;
   const inp=(k,label,val,wide=false)=>`<label class="${wide?"wide":""}" for="d${i}_${k}">${label}<input id="d${i}_${k}" data-f="${k}" value="${esc(val)}"></label>`;
+  const dl=`d${i}_cands`;
+  const linkRows=d.links.map((l,j)=>`<div class="linkrow"><span class="n">${j+1}</span>
+      <input data-f="anchor${j}" value="${esc(l.text)}" placeholder="Anchor text" aria-label="Anchor ${j+1}">
+      <input data-f="href${j}" value="${esc(l.href)}" list="${dl}" placeholder="https://betterme.world/articles/…" aria-label="Linked article ${j+1} URL"></div>`).join("");
   return `<fieldset class="draft" data-i="${i}">
     <legend><span class="pill c-${d.level}">${d.level}</span> ${esc(d.kw)}</legend>
     <p class="orig">Original article: <a href="${esc(d.url)}" target="_blank" rel="noopener">${esc(d.url)}</a></p>
     ${d.jira===null?`<div class="notice bad">The Jira check failed, so no ticket will be created for this page. ${esc(d.notes.find(n=>n.startsWith("Jira"))||"")}</div>`
-      : matches?`<div class="notice ${existing?"bad":""}"><b>${existing?"A BP ticket already exists for this article; no new ticket will be created.":"Earlier BP tickets for this article (published more than "+cfg().recent_ticket_days+" days ago):"}</b><ul>${matches}</ul>${existing&&wantNotion?"The Notion card will link to "+esc(existing.key)+".":""}</div>`
+      : matches?`<div class="notice ${existing?"bad":""}"><b>${existing?"A BP ticket already exists for this article; no new ticket will be created.":"Earlier BP tickets for this article (published more than "+cfg().recent_ticket_days+" days ago):"}</b><ul>${matches}</ul></div>`
       : `<p class="muted">No BP ticket found for this link or keyword.</p>`}
-    <div class="opts">
-      <label><input type="checkbox" data-f="mkNotion" ${wantNotion?"checked":""}> ${d.hasCard?"Notion: update the existing card":"Create Notion card"}</label>
-      <label><input type="checkbox" data-f="mkJira" ${jiraOk?"checked":""} ${(d.jira===null||existing)?"disabled":""}> Create Jira ticket</label>
-    </div>
+    <div class="opts"><label><input type="checkbox" data-f="mkJira" ${blocked?"disabled":"checked"}> Create Jira ticket</label></div>
     <div class="form">
-      ${inp("summary","Jira summary",`${d.kw}, ${d.words} words, update`,true)}
+      ${inp("summary","Summary",`${d.kw}, ${d.words} words, update`,true)}
       ${inp("title","Title",d.title,true)}
       ${inp("metaTitle",`Meta title <span class="count" data-count="metaTitle" data-min="50" data-max="60"></span>`,d.metaTitle,true)}
       ${inp("metaDescription",`Meta description <span class="count" data-count="metaDescription" data-min="150" data-max="160"></span>`,d.metaDescription,true)}
       ${inp("category","Category (leaf)",d.category)}
       <label for="d${i}_quiz">Quiz/topic<select id="d${i}_quiz" data-f="quiz">${quizOpts}</select></label>
-      ${ta("additional","Additional keywords","" + d.additional.join("\n"),"one per line")}
+      ${ta("subheadings","Subheadings","" + d.subheadings.join("\n"),"one H2 per line, required")}
+      <div class="wide linkset"><span class="lbl">Linked articles <span class="muted">3 required: anchor text and a live betterme.world article</span></span>${linkRows}
+        <datalist id="${dl}">${d.candidates.map(x=>`<option value="${esc(x.href)}">${esc(x.title)}</option>`).join("")}</datalist></div>
+      ${ta("additional","Additional keywords",d.additional.join("\n"),"one per line")}
       ${ta("lsis","LSIs",d.lsis.join(", "),"comma-separated")}
       ${ta("faqs","FAQs",d.faqs.join("\n"),"one per line")}
-      ${ta("subheadings","Subheadings (Jira)",d.subheadings.join("\n"),"current H2s, one per line")}
-      ${ta("links","Linked articles (Jira)",d.links.map(l=>`${l.text} | ${l.href}`).join("\n"),"anchor | URL, 3 lines")}
     </div>
     ${d.notes.filter(n=>!n.startsWith("Jira")).map(n=>`<p class="muted">${esc(n)}</p>`).join("")}
   </fieldset>`;
 }
 function renderDrafts(){
-  const { drafts, wantNotion, wantJira, units }=S.drafts;
-  $("cardsBody").innerHTML=`<p class="muted">Drafting used ${fmt(units)} Ahrefs units${S.quizError?` · quiz topics unavailable: ${esc(S.quizError)}`:""}. Edit anything below; the Notion card body gets the original article link, additional keywords, LSIs and FAQs, and the Jira ticket follows the BP Article format.</p>`
-    + drafts.map((d,i)=>draftForm(d,i,wantNotion,wantJira)).join("");
+  const { drafts, units }=S.drafts;
+  $("cardsBody").innerHTML=`<p class="muted">Drafting used ${fmt(units)} Ahrefs units${S.quizError?` · quiz topics unavailable: ${esc(S.quizError)}`:""}. Edit anything below. Subheadings, Linked Articles, Additional Keywords and FAQs go into their own Jira fields; everything else goes into the description.</p>`
+    + drafts.map((d,i)=>draftForm(d,i)).join("");
   updateCounts();
   $("cardsFoot").innerHTML=`<button class="btn" type="button" data-close="dlgCards">Cancel</button><button class="btn primary" type="button" id="btnConfirmCards">Create</button>`;
   updateCreateLabel();
@@ -1131,28 +1138,40 @@ function updateCounts(){
 }
 function readDraft(fs){
   const g=k=>{ const el=fs.querySelector(`[data-f="${k}"]`); return el ? (el.type==="checkbox" ? (el.checked && !el.disabled) : el.value.trim()) : ""; };
-  return { mkNotion:g("mkNotion"), mkJira:g("mkJira"), summary:g("summary"), title:g("title"), metaTitle:g("metaTitle"), metaDescription:g("metaDescription"),
+  return { mkJira:g("mkJira"), summary:g("summary"), title:g("title"), metaTitle:g("metaTitle"), metaDescription:g("metaDescription"),
     category:g("category"), quiz:g("quiz"), additional:linesOf(g("additional")), lsis:g("lsis").split(",").map(s=>s.trim()).filter(Boolean),
     faqs:linesOf(g("faqs")), subheadings:linesOf(g("subheadings")),
-    links:linesOf(g("links")).map(l=>{ const [t,u]=l.includes("|")?l.split("|").map(s=>s.trim()):["",l]; return { text:t||u, href:u }; }).filter(l=>/^https?:\/\//.test(l.href)) };
+    links:[0,1,2].map(j=>({ text:g("anchor"+j), href:normalizeUrl(g("href"+j)) || g("href"+j) })) };
+}
+function draftProblems(d, v){
+  const p=[];
+  for (const [k,label] of [["summary","summary"],["title","title"],["metaTitle","meta title"],["metaDescription","meta description"]]) if (!v[k]) p.push(label);
+  if (!v.subheadings.length) p.push("subheadings");
+  v.links.forEach((l,j)=>{ if (!l.text) p.push(`anchor ${j+1}`); if (!ARTICLE_RE.test(l.href||"") || l.href===d.url) p.push(`linked article ${j+1} URL`); });
+  if (new Set(v.links.map(l=>l.href)).size<3) p.push("3 different linked articles");
+  return [...new Set(p)];
 }
 function updateCreateLabel(){
-  const b=$("btnConfirmCards"); if (!b) return; let n=0, j=0;
-  for (const fs of $("cardsBody").querySelectorAll("fieldset.draft")){ const v=readDraft(fs); if (v.mkNotion) n++; if (v.mkJira) j++; }
-  b.textContent=`Create ${[n&&`${n} Notion card${n>1?"s":""}`, j&&`${j} Jira ticket${j>1?"s":""}`].filter(Boolean).join(" and ")||"nothing"}`;
-  b.disabled=!(n||j);
+  const b=$("btnConfirmCards"); if (!b) return; let j=0;
+  for (const fs of $("cardsBody").querySelectorAll("fieldset.draft")){
+    const d=S.drafts.drafts[+fs.dataset.i], v=readDraft(fs), probs=v.mkJira?draftProblems(d,v):[];
+    let st=fs.querySelector(".missing"); if (!st){ st=document.createElement("p"); st.className="missing"; fs.appendChild(st); }
+    st.textContent=probs.length?`Still needed: ${probs.join(", ")}.`:""; st.hidden=!probs.length;
+    if (v.mkJira) j++;
+  }
+  b.textContent=j?`Create ${j} Jira ticket${j>1?"s":""}`:"Nothing selected"; b.disabled=!j;
 }
 
 async function createJiraTicket(d, v, it, log){
-  const missing=[!v.title&&"title", !v.metaTitle&&"meta title", !v.metaDescription&&"meta description", !v.summary&&"summary"].filter(Boolean);
-  if (missing.length){ log(`<p class="result bad"><b>No Jira ticket</b> for ${esc(d.kw)}: fill in the ${missing.join(", ")} first.</p>`); return null; }
+  const probs=draftProblems(d,v);
+  if (probs.length){ log(`<p class="result bad"><b>No ticket</b> for ${esc(d.kw)}: still needed: ${esc(probs.join(", "))}.</p>`); return null; }
   // Re-check right before writing, by article link and by keyword.
   const jm=await jiraCheck([{ slug:d.slug, url:d.url, mainKeyword:d.kw }], cfg(), todayISO(), ()=>{});
-  if (!jm){ log(`<p class="result bad"><b>No Jira ticket</b> for ${esc(d.kw)}: the duplicate check failed.</p>`); return null; }
+  if (!jm){ log(`<p class="result bad"><b>No ticket</b> for ${esc(d.kw)}: the duplicate check failed. Try again.</p>`); return null; }
   const ex=(jm[d.url]||{}); const t=ex.open||ex.recent;
   const own=S.tickets[d.slug];
   const ownRecent=own && own.key && own.at && daysBetween(own.at.slice(0,10), todayISO())<=cfg().recent_ticket_days;
-  if (t || ownRecent){ const k=t?t.key:own.key; const u=t?t.url:own.url;
+  if (t || ownRecent){ const k=t?t.key:own.key; const u=t?t.url:own.jiraUrl;
     log(`<p class="result"><b>Existing ticket</b> <a href="${esc(u)}" target="_blank" rel="noopener">${esc(k)}</a> for ${esc(d.kw)}; no new ticket created.</p>`); return { key:k, url:u, summary:t?t.summary:own.summary, existing:true }; }
   const acct=await jiraAccount();
   const add={ customfield_11100:"110" }; if (acct) add.customfield_11709={ accountId:acct };
@@ -1162,14 +1181,13 @@ async function createJiraTicket(d, v, it, log){
   const key=(JSON.stringify(payloadOf(res)||res).match(/\bBP-\d+\b/)||[])[0];
   if (!key){ log(`<p class="result bad"><b>Check Jira</b>: the ticket for ${esc(d.kw)} may have been created, but no key came back. Search BP before trying again.</p>`); return null; }
   const url=JIRA_BROWSE+key;
-  await dbSet("tickets/"+d.slug, { url:d.url, key, jiraUrl:url, summary:v.summary, at:new Date().toISOString() });
-  const fields={};
-  if (v.subheadings.length) fields.customfield_11717=adfLines(v.subheadings);
+  await dbSet("tickets/"+d.slug, { url:d.url, key, jiraUrl:url, summary:v.summary, level:d.level, at:new Date().toISOString() });
+  const fields={ customfield_11717:adfLines(v.subheadings), customfield_11719:adfLinks(v.links) };
   if (v.additional.length) fields.customfield_11718=adfLines(v.additional);
-  if (v.links.length) fields.customfield_11719=adfLinks(v.links.slice(0,3));
   if (v.faqs.length) fields.customfield_11720=adfLines(v.faqs);
   const problems=[];
-  if (Object.keys(fields).length){ try { await call(JIRA,"editJiraIssue",{ cloudId:CLOUD, issueIdOrKey:key, fields, contentFormat:"adf" }); } catch(e){ problems.push("Subheadings/Additional Keywords/Linked Articles/FAQs not set: "+errText(e,JIRA)); } }
+  try { await call(JIRA,"editJiraIssue",{ cloudId:CLOUD, issueIdOrKey:key, fields, contentFormat:"adf" }); }
+  catch(e){ problems.push("Subheadings/Linked Articles/Additional Keywords/FAQs not set: "+errText(e,JIRA)); }
   try {
     const p=payloadOf(await call(JIRA,"getJiraIssue",{ cloudId:CLOUD, issueIdOrKey:key, responseContentFormat:"markdown",
       fields:["summary","description","customfield_11100","customfield_11717","customfield_11718","customfield_11719","customfield_11720"] }))||{};
@@ -1179,65 +1197,31 @@ async function createJiraTicket(d, v, it, log){
     if (!/Article/.test(JSON.stringify(f.customfield_11100||""))) problems.push("Request Type is not Article");
     for (const [k,label] of [["customfield_11717","Subheadings"],["customfield_11718","Additional Keywords"],["customfield_11719","Linked Articles"],["customfield_11720","FAQs"]])
       if (fields[k] && !f[k]) problems.push(`${label} empty`);
+    const linked=JSON.stringify(f.customfield_11719||"");
+    for (const l of v.links) if (!linked.includes(l.href.replace(/\/$/,""))) { problems.push("Linked Articles missing a link"); break; }
   } catch(e){ problems.push("could not re-read the ticket: "+errText(e,JIRA)); }
   log(`<p class="result ${problems.length?"bad":"ok"}"><b>${problems.length?"Ticket created, check fields":"Ticket created and verified"}</b> <a href="${esc(url)}" target="_blank" rel="noopener">${esc(key)}</a> ${esc(v.summary)}${problems.length?": "+esc(problems.join("; ")):""}</p>`);
   return { key, url, summary:v.summary };
 }
 
-async function createCards(){
-  const c=cfg(), today=todayISO(), week=isoWeek(today); const out=[];
+async function createTickets(){
+  const today=todayISO(), week=isoWeek(today); const out=[];
   const forms=[...$("cardsBody").querySelectorAll("fieldset.draft")].map(fs=>({ d:S.drafts.drafts[+fs.dataset.i], v:readDraft(fs) }));
   $("btnConfirmCards").disabled=true; $("btnConfirmCards").textContent="Creating…";
   const log=t=>{ out.push(t); $("cardsBody").innerHTML=out.join(""); };
-  let rank=0;
   for (const { d, v } of forms){
-    const it=S.items[d.slug]; rank++;
-    if (!it || (!v.mkNotion && !v.mkJira)) continue;
-    let jira=null;
+    const it=S.items[d.slug]; if (!it || !v.mkJira) continue;
     try {
-      if (v.mkJira) jira=await createJiraTicket(d, v, it, log);
-      else { const ex=d.jira||{}; const t=ex.open||ex.recent; if (t) jira={ key:t.key, url:t.url, summary:t.summary, existing:true }; }
+      const t=await createJiraTicket(d, v, it, log);
+      if (t){
+        await dbSet("items/"+d.slug, { ...S.items[d.slug], state:"carded", jiraKey:t.key, jiraUrl:t.url, cardLevel:d.level, cardWeek:week, cardAt:today });
+        if (!S.suggestions[d.slug]) await dbSet("suggestions/"+d.slug, { url:d.url, first:today, source:"decay-radar" });
+      }
     } catch(e){ log(`<p class="result bad"><b>Jira failed</b> for ${esc(d.kw)}: ${esc(errText(e, e.server||JIRA))} The next attempt checks BP first, so it will not duplicate.</p>`); }
-    if (jira) await dbSet("items/"+d.slug, { ...S.items[d.slug], jiraKey:jira.key, jiraUrl:jira.url });
-    if (!v.mkNotion){ // Jira only: link the ticket on the page's existing card.
-      if (jira && it.notionUrl){ try { await call(NOTION,"notion-update-page",{ page_id:notionPageId(it.notionUrl), command:"update_properties", properties:{ "JIRA":jira.url } });
-        log(`<p class="result ok"><b>Linked</b> ${esc(jira.key)} on the existing Notion card. <a href="${esc(notionHref(it.notionUrl))}" target="_blank" rel="noopener">Open in Notion</a></p>`); }
-        catch(e){ log(`<p class="result bad"><b>Couldn't link</b> ${esc(jira.key)} on the Notion card: ${esc(errText(e,NOTION))}</p>`); } }
-      continue;
-    }
-    const cd=cardFor(c, S.items[d.slug]||it, rank, today, { category:v.category, additional:v.additional, lsis:v.lsis, faqs:v.faqs, words:d.words,
-      jiraUrl:jira&&jira.url, jiraKey:jira&&jira.key, jiraSummary:jira&&jira.summary });
-    const key=`${cd.slug}__${week}`, prior=S.cards[key];
-    if (prior && prior.notionUrl){ log(`<p class="result"><b>Skipped card</b> ${esc(cd.name)}: already carded this week. <a href="${esc(notionHref(prior.notionUrl))}" target="_blank" rel="noopener">Open in Notion</a></p>`); continue; }
-    try {
-      const open=openCardOf((await notionCards([cd.url]))[cd.url]);
-      if (open && prior){ await finishCard(cd, key, week, today, open.url, "adopted", jira); log(`<p class="result ok"><b>Adopted</b> ${esc(cd.name)} from an interrupted attempt. <a href="${esc(notionHref(open.url))}" target="_blank" rel="noopener">Open in Notion</a></p>`); continue; }
-      if (open){
-        const pid=notionPageId(open.url);
-        await call(NOTION,"notion-create-comment",{ page_id:pid, markdown:`Decay radar ${today}: still slipping, now ${pos(cd.mainNow)} for '${mdEsc(cd.mainKeyword)}'.${jira?` Jira: ${jira.key}.`:""}` });
-        if (jira) await call(NOTION,"notion-update-page",{ page_id:pid, command:"update_properties", properties:{ "JIRA":jira.url } });
-        log(`<p class="result"><b>Commented</b> on the open card for ${esc(cd.slug)} instead of creating a duplicate${jira?" and linked "+esc(jira.key):""}. <a href="${esc(notionHref(open.url))}" target="_blank" rel="noopener">Open in Notion</a></p>`); continue; }
-      await dbSet("cards/"+key, { url:cd.url, slug:cd.slug, week, notionUrl:null, at:new Date().toISOString(), name:cd.name, level:cd.level, pending:true });
-      await call(NOTION,"notion-create-pages",{ parent:{ type:"data_source_id", data_source_id:DS }, pages:[{ properties:cd.props, content:cd.body }], allow_async:false });
-      let row=null;
-      for (let tries=0; tries<3 && !row; tries++){ if (tries) await new Promise(r=>setTimeout(r,2500)); row=((await notionCards([cd.url]))[cd.url]||[])[0]; }
-      if (!row){ log(`<p class="result bad"><b>Check Notion</b> ${esc(cd.name)}: created, but the card was not found on re-fetch.</p>`); continue; }
-      const bad=[]; if ((row.Name||"")!==cd.props.Name) bad.push(`Name is "${row.Name}"`); if (normalizeUrl(row["URL 1"])!==cd.url) bad.push(`URL 1 is ${row["URL 1"]}`);
-      if (row.Status!=="Not started") bad.push(`Status is ${row.Status}`); if (row["New/Upd"]!=="Update") bad.push(`New/Upd is ${row["New/Upd"]}`);
-      if ((row["date:Date:start"]||"").slice(0,10)!==today) bad.push(`Date is ${row["date:Date:start"]}`);
-      await finishCard(cd, key, week, today, row.url, "created", jira);
-      log(`<p class="result ${bad.length?"bad":"ok"}"><b>${bad.length?"Card created, check fields":"Card created and verified"}</b> ${esc(cd.name)}${v.category?` · category ${esc(v.category)}`:""}${jira?` · JIRA ${esc(jira.key)}`:""}${bad.length?": "+esc(bad.join("; ")):""}. <a href="${esc(notionHref(row.url))}" target="_blank" rel="noopener">Open in Notion</a></p>`);
-    } catch(e){ log(`<p class="result bad"><b>Card failed</b> ${esc(cd.name)}: ${esc(errText(e, e.server||NOTION))} Try again: the page checks Notion first, so it will not duplicate.</p>`); }
   }
   S.selected.clear(); S.drafts=null;
   $("cardsFoot").innerHTML=`<button class="btn primary" type="button" data-close="dlgCards">Done</button>`;
   render();
-}
-async function finishCard(cd, key, week, today, notionUrl, how, jira){
-  notionUrl=notionHref(notionUrl);
-  await dbSet("cards/"+key, { url:cd.url, slug:cd.slug, week, notionUrl, at:new Date().toISOString(), name:cd.name, level:cd.level, how, jiraKey:jira?jira.key:null, jiraUrl:jira?jira.url:null });
-  const it=S.items[cd.slug]; if (it) await dbSet("items/"+cd.slug, { ...it, state:"carded", notionUrl, cardLevel:cd.level, cardWeek:week, cardAt:today, ...(jira?{ jiraKey:jira.key, jiraUrl:jira.url }:{}) });
-  if (!S.suggestions[cd.slug]) await dbSet("suggestions/"+cd.slug, { url:cd.url, first:today, source:"decay-radar" });
 }
 
 /* ---------- row actions ---------- */
@@ -1277,8 +1261,8 @@ function slackText(){
   const run=latestRun(); if (!run) return "No run yet.";
   const d=new Date(run.at); const label=d.toLocaleDateString("en-US",{month:"short",day:"numeric"});
   const lv=run.levels||{}; const parts=LEVELS.filter(l=>lv[l]).map(l=>`${lv[l]} ${l}`);
-  const created=Object.values(S.cards).filter(c=>c.week===isoWeek(todayISO()) && c.notionUrl).length;
-  return `Decay radar (${label}): ${run.pages} pages lost top-3 · ${parts.join(", ")||"no pages"} · est. ${fmt(run.trafficAtRisk)} visits/mo at risk · ${created} Notion cards created.`;
+  const created=Object.values(S.tickets).filter(t=>t.key && t.at && isoWeek(t.at.slice(0,10))===isoWeek(todayISO())).length;
+  return `Decay radar (${label}): ${run.pages} pages lost top-3 · ${parts.join(", ")||"no pages"} · est. ${fmt(run.trafficAtRisk)} visits/mo at risk · ${created} Jira tickets created.`;
 }
 function spark(history){
   const pts=(history||[]).filter(h=>h.date); if (pts.length<2) return "";
@@ -1314,7 +1298,7 @@ function drawer(it){
     <section><h3>Lost keywords</h3><div class="inner"><table><thead><tr><th>Keyword</th><th>Vol</th><th>Was → now</th><th>Traffic</th><th>Kind</th></tr></thead><tbody>${kwRows}</tbody></table></div>
       <h3>Main keyword by run</h3>${spark(it.history)||`<p class="muted">One run so far.</p>`}${fups?`<p class="muted">Follow-ups: ${esc(fups)}</p>`:""}</section>
     <section><h3>Audit</h3><ul class="facts">${facts}<li>Screen: ${esc(screen)}</li><li>Install intent ${esc(it.intent)} · confirmations ${it.confirmations}</li>
-      <li>Jira: ${jira} · Notion: ${notion}</li>${(it.notes||[]).map(n=>`<li class="muted">${esc(n)}</li>`).join("")}</ul>
+      <li>Jira: ${jira}${it.notionUrl||it.notionOpen?` · Notion: ${notion}`:""}</li>${(it.notes||[]).map(n=>`<li class="muted">${esc(n)}</li>`).join("")}</ul>
       <h3>Actions</h3>
       <div class="actrow"><select data-ovl="${esc(it.slug)}" aria-label="Level">${lvOpts}</select><input data-ovr="${esc(it.slug)}" placeholder="Reason (required)" aria-label="Reason for level change"><button class="btn small" type="button" data-act="override" data-slug="${esc(it.slug)}">Change level</button></div>
       <div class="actrow">${it.state==="excluded"?`<button class="btn small" type="button" data-act="include" data-slug="${esc(it.slug)}">Include again</button><span class="muted">Excluded: ${esc(it.excluded&&it.excluded.reason)}</span>`
@@ -1343,28 +1327,28 @@ function render(){
   // queue
   const list=visibleItems();
   if (!list.length){
-    $("rows").innerHTML=`<tr><td colspan="10"><div class="empty">${!run?`<h2>No run yet</h2><p>Run radar asks Ahrefs which betterme.world articles lost top-3 Google positions (US) over the last ${c.compare_days} days, audits each page from the Site Audit crawl, checks Jira and Notion, and levels every page L0–L3 or NOSEO with a reason and a checklist.</p><p>Nothing is written to Notion until you select pages and confirm the cards.</p>`
+    $("rows").innerHTML=`<tr><td colspan="10"><div class="empty">${!run?`<h2>No run yet</h2><p>Run radar asks Ahrefs which betterme.world articles lost top-3 Google positions (US) over the last ${c.compare_days} days, audits each page from the Site Audit crawl, checks Jira and Notion, and levels every page L0–L3 or NOSEO with a reason and a checklist.</p><p>Nothing is written to Jira until you select pages, review the drafts and confirm the tickets.</p>`
       :`<p>No pages match this filter.</p>`}</div></td></tr>`;
   } else {
     $("rows").innerHTML=list.map(it=>{ const p=it.page, a=it.audit||{}, lvl=(it.override&&it.override.level)||it.level;
-      const cardable=["L1","L2","L3"].includes(lvl) && !["excluded","noseo"].includes(it.state) && !(it.notionUrl && it.jiraKey);
+      const cardable=["L1","L2","L3"].includes(lvl) && !["excluded","noseo"].includes(it.state) && !it.jiraKey;
       const flags=(it.flags||[]).map(f=>`<span class="flag ${f==="claims"||f==="cannibalization"?"hot":""}">${esc(f)}</span>`).join("")+(it.override?`<span class="flag">override</span>`:"");
       return `<tr class="row" data-slug="${esc(it.slug)}" tabindex="0" aria-expanded="${S.open.has(it.slug)}">
-        <td>${cardable?`<input type="checkbox" data-pick="${esc(it.slug)}" ${S.selected.has(it.slug)?"checked":""} aria-label="Select ${esc(it.slug)} for a card or ticket">`:""}</td>
+        <td>${cardable?`<input type="checkbox" data-pick="${esc(it.slug)}" ${S.selected.has(it.slug)?"checked":""} aria-label="Select ${esc(it.slug)} for a Jira ticket">`:""}</td>
         <td class="page"><a href="${esc(it.url)}" target="_blank" rel="noopener">${esc(it.slug)}</a><span class="kw">${esc(p.mainKeyword)}</span></td>
         <td><span class="pill c-${lvl}">${lvl}</span></td>
         <td class="pos">${pos(p.mainWas)} → <span class="${p.mainNow==null?"lost":""}">${pos(p.mainNow)}</span></td>
         <td class="r">${p.lostTop3}</td><td class="r">${fmt(p.trafficLost)}</td><td class="r">${fmt(it.priority)}</td>
-        <td class="mono">${esc(a.updatedOn||"—")}</td><td>${flags}</td><td class="state ${esc(it.state)}">${esc(it.state.replace("_"," "))}</td></tr>`
+        <td class="mono">${esc(a.updatedOn||"—")}</td><td>${flags}</td><td class="state ${esc(it.state)}">${esc(STATE_LABEL[it.state]||it.state.replace("_"," "))}</td></tr>`
         + (S.open.has(it.slug)?drawer(it):""); }).join("");
   }
   $("selCount").textContent=`${S.selected.size} selected`; $("btnCards").disabled=!S.selected.size || !S.mcp;
   $("q").value!==S.q && ($("q").value=S.q); $("stateFilter").value=S.stateFilter;
   // lower panels
   const fl=Object.values(S.items).filter(it=>(it.followups||[]).length).sort((x,y)=>(x.followups[0].due>y.followups[0].due?1:-1));
-  $("followList").innerHTML=fl.length?fl.map(it=>`<li><a href="${esc(it.url)}" target="_blank" rel="noopener">${esc(it.slug)}</a>: ${it.followups.map(f=>`${f.label} ${f.due} ${f.outcome?"· "+f.outcome.replace("_"," "):""}`).join(", ")}</li>`).join(""):`<li class="muted">Nothing scheduled yet. A carded page gets checks when its "Updated on" date changes.</li>`;
-  const wk=isoWeek(todayISO()); const cards=Object.values(S.cards).filter(x=>x.week===wk);
-  $("cardList").innerHTML=cards.length?cards.map(x=>`<li>${x.notionUrl?`<a href="${esc(notionHref(x.notionUrl))}" target="_blank" rel="noopener">${esc(x.name)}</a>`:esc(x.name)+" <span class='muted'>(pending)</span>"} <span class="pill c-${esc(x.level)}">${esc(x.level)}</span>${x.jiraKey?` · <a href="${esc(x.jiraUrl)}" target="_blank" rel="noopener">${esc(x.jiraKey)}</a>`:""}</li>`).join(""):`<li class="muted">No cards created in ${wk}.</li>`;
+  $("followList").innerHTML=fl.length?fl.map(it=>`<li><a href="${esc(it.url)}" target="_blank" rel="noopener">${esc(it.slug)}</a>: ${it.followups.map(f=>`${f.label} ${f.due} ${f.outcome?"· "+f.outcome.replace("_"," "):""}`).join(", ")}</li>`).join(""):`<li class="muted">Nothing scheduled yet. A page with a ticket gets checks when its "Updated on" date changes.</li>`;
+  const wk=isoWeek(todayISO()); const tks=Object.values(S.tickets).filter(x=>x.key && x.at && isoWeek(x.at.slice(0,10))===wk);
+  $("cardList").innerHTML=tks.length?tks.map(x=>`<li><a href="${esc(x.jiraUrl)}" target="_blank" rel="noopener">${esc(x.key)}</a> ${esc(x.summary)}${x.level?` <span class="pill c-${esc(x.level)}">${esc(x.level)}</span>`:""}</li>`).join(""):`<li class="muted">No tickets created in ${wk}.</li>`;
   $("suggCount").textContent=`${Object.keys(S.suggestions).length} pages on the "already suggested" list.`;
 }
 
@@ -1380,7 +1364,6 @@ async function saveSettings(){
   for (const el of $("settingsForm").querySelectorAll("input[data-k]")){ const k=el.dataset.k; next[k]= el.type==="number" ? Number(el.value) : el.value.trim(); }
   if (!/^[a-z]{2}$/i.test(next.country)){ toast("Country must be a two-letter code, such as us."); return; }
   next.country=next.country.toLowerCase();
-  if (!String(next.card_name_format).includes("{kw}")){ toast("The card name format needs {kw}."); return; }
   try { await dbSet("settings/main", next); S.settings=next; $("dlgSettings").close(); toast("Settings saved."); render(); } catch {}
 }
 async function doImport(){
@@ -1426,7 +1409,7 @@ $("btnResetSettings").addEventListener("click", () => { S.settings={...DEFAULTS}
 $("settingsForm").addEventListener("input", () => { const t={...cfg()}; for (const el of $("settingsForm").querySelectorAll("input[type=number]")) t[el.dataset.k]=Number(el.value); const e=$("estUnits"); if (e) e.textContent=fmt(estimateUnits(t)); });
 $("btnCopy").addEventListener("click", () => copy(slackText(), "Summary copied."));
 $("btnCsv").addEventListener("click", () => copy(csv(), "CSV copied."));
-$("btnCards").addEventListener("click", openCardsDialog);
+$("btnCards").addEventListener("click", openTicketsDialog);
 $("btnImport").addEventListener("click", () => $("dlgImport").showModal());
 $("btnDoImport").addEventListener("click", doImport);
 $("btnCalib").addEventListener("click", () => $("dlgCalib").showModal());
@@ -1437,7 +1420,7 @@ $("stateFilter").addEventListener("change", e => { S.stateFilter=e.target.value;
 $("levels").addEventListener("click", e => { const b=e.target.closest(".lv"); if (!b) return; S.levelFilter = S.levelFilter===b.dataset.level ? null : b.dataset.level; render(); });
 document.addEventListener("click", e => {
   const close=e.target.closest("[data-close]"); if (close){ $(close.dataset.close).close(); return; }
-  if (e.target.id==="btnConfirmCards"){ createCards(); return; }
+  if (e.target.id==="btnConfirmCards"){ createTickets(); return; }
   if (e.target.id==="btnPrepare"){ prepareDrafts(); return; }
   const act=e.target.closest("[data-act]");
   if (act){ const slug=act.dataset.slug;
