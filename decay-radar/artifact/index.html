@@ -173,6 +173,7 @@ p.missing{color:var(--bad);font-size:12.5px;margin:8px 0 0}
 .count{margin-left:6px;font-size:11.5px}.count.ok{color:var(--l1)}.count.off{color:var(--bad)}
 .notice ul{margin:6px 0 0;padding-left:18px;font-size:13px}
 ol.prep{padding-left:20px}
+ul.excl{padding-left:18px;margin:0}ul.excl li{margin:4px 0;font-size:13px}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:9px 14px;border-radius:8px;font-size:13px;z-index:20;max-width:calc(100vw - 32px)}
 @media (max-width:640px){.bar .actions{margin-left:0}.lv{min-width:0;flex:1 1 30%}}
 @media (prefers-reduced-motion:no-preference){.sweep .arm{transform-origin:13px 13px;animation:spin 3.2s linear infinite}.sweep.idle .arm{animation-play-state:paused}}
@@ -209,7 +210,7 @@ ol.prep{padding-left:20px}
     <input type="search" id="q" placeholder="Filter by keyword or slug" aria-label="Filter by keyword or slug">
     <select id="stateFilter" aria-label="Filter by state">
       <option value="active">This run</option><option value="proposed">Proposed</option><option value="watch">Watch</option>
-      <option value="carded">Ticket created / updated</option><option value="excluded">Excluded</option><option value="all">Everything on the board</option><option value="removed">Deleted rows</option>
+      <option value="carded">Ticket created / updated</option><option value="all">Everything on the board</option><option value="excluded">Excluded (skipped by runs)</option>
     </select>
     <div class="sel"><button class="btn small danger" id="btnBulk" type="button" hidden></button><span class="muted" id="selCount">0 selected</span><button class="btn primary small" id="btnCards" type="button" disabled>Create Jira tickets</button></div>
   </div>
@@ -223,7 +224,7 @@ ol.prep{padding-left:20px}
     <section class="panel"><h2>Follow-ups</h2><p>Pages updated after a ticket: checked at +14 and +28 days; the result is added to the ticket as a comment.</p><ul id="followList"><li class="muted">Nothing scheduled yet.</li></ul></section>
     <section class="panel"><h2>Jira tickets this week</h2><p>BP tickets created from this page. A page never gets a second ticket while one is open.</p><ul id="cardList"><li class="muted">No tickets yet.</li></ul></section>
     <section class="panel"><h2>Tools</h2><p>One-time imports and the §7 calibration against the old Slipped Pages export.</p>
-      <div class="actrow"><button class="btn small" id="btnImport" type="button">Import "Already suggested"</button><button class="btn small" id="btnCalib" type="button">Calibrate</button></div>
+      <div class="actrow"><button class="btn small" id="btnExcl" type="button">Exclude URLs or tickets</button><button class="btn small" id="btnImport" type="button">Import "Already suggested"</button><button class="btn small" id="btnCalib" type="button">Calibrate</button></div>
       <p style="margin-top:10px" id="suggCount"></p>
     </section>
   </div>
@@ -243,6 +244,15 @@ ol.prep{padding-left:20px}
   <footer id="cardsFoot"></footer>
 </div></dialog>
 
+<dialog id="dlgExcl"><div class="dlg">
+  <header><h2>Exclude URLs or tickets</h2></header>
+  <div class="body"><p class="muted">Paste betterme.world article URLs or BP ticket keys (BP-1234), one per line. A ticket key excludes the article on its Article / Original article line. Excluded pages are skipped by every future run until you include them again.</p>
+    <textarea id="exclText" aria-label="URLs or ticket keys to exclude" placeholder="https://betterme.world/articles/wall-pilates-arms/&#10;BP-1668"></textarea>
+    <div class="actrow"><button class="btn primary small" id="btnAddExcl" type="button">Exclude</button></div>
+    <div id="exclMsg"></div>
+    <h3 style="font-size:13px;margin:14px 0 6px">Excluded pages</h3><ul id="exclList" class="excl"></ul></div>
+  <footer><button class="btn" type="button" data-close="dlgExcl">Close</button></footer>
+</div></dialog>
 <dialog id="dlgImport"><div class="dlg">
   <header><h2>Import "Already suggested"</h2></header>
   <div class="body"><p class="muted">Paste the "Article Update Pipeline — Already Suggested (tracking)" doc. Every betterme.world/articles/ URL is recorded; a heading line with a YYYY-MM-DD date sets the date for the lines under it. These pages are not proposed again for 180 days.</p>
@@ -353,7 +363,7 @@ const TAXONOMY = [["Calisthenics for men",/calisthenics.*\b(men|male|guys?)\b|\b
   ["Corporate Wellness",/corporate|workplace|employee/i]];
 
 /* ---------- state ---------- */
-const S = { mcp:null, db:null, user:null, sample:null, tickets:{}, quizzes:null, drafts:null, dbReady:false, items:{}, runs:[], settings:{...DEFAULTS}, suggestions:{}, cards:{},
+const S = { mcp:null, db:null, user:null, sample:null, tickets:{}, exclusions:{}, quizzes:null, drafts:null, dbReady:false, items:{}, runs:[], settings:{...DEFAULTS}, suggestions:{}, cards:{},
   levelFilter:null, stateFilter:"active", q:"", open:new Set(), selected:new Set(), running:false, progress:null, alerts:[] };
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -721,6 +731,7 @@ function subscribeDb(){
   coll("suggestions", m => S.suggestions=m);
   coll("cards", m => S.cards=m);
   coll("tickets", m => S.tickets=m);
+  coll("exclusions", m => { S.exclusions=m; if ($("dlgExcl").open) renderExclusions(); });
   db.collection("runs").orderBy("at","desc").limit(40).onSnapshot(snap => { S.runs=snap.docs.map(d=>({id:d.id, ...d.data()})); render(); }, () => {});
   db.doc("settings/main").onSnapshot(d => { S.settings = d.exists ? {...DEFAULTS, ...d.data()} : {...DEFAULTS}; render(); }, () => {});
 }
@@ -758,11 +769,14 @@ async function runRadar(){
     try { aioRows=(await ahrefs("site-explorer-organic-keywords", { ...base, select:"keyword,keyword_prev,best_position_url_prev", where:JSON.stringify(aioW), limit:c.aio_max_rows }, tally)).keywords||[]; }
     catch(e){ notes.push("AI Overview check failed: "+errText(e,AHREFS)); }
     const { signals, dropped }=detect(c, rows, aioRows);
-    const pages=aggregate(signals).sort((x,y)=>y.trafficLost-x.trafficLost);
+    const allPages=aggregate(signals).sort((x,y)=>y.trafficLost-x.trafficLost);
+    const skipped=allPages.filter(p=>S.exclusions[p.slug] || isExcluded(S.items[p.slug]));
+    const pages=allPages.filter(p=>!skipped.includes(p));
+    if (skipped.length) st.note(`${skipped.length} excluded page${skipped.length>1?"s":""} skipped`);
     st.note(`${signals.length} keyword signals on ${pages.length} pages after noise filters`);
 
     // Pages we watch for an update even when they are no longer slipping (§11).
-    const watched=Object.values(S.items).filter(it=>["proposed","carded","in_progress"].includes(it.state) && !pages.some(p=>p.url===it.url));
+    const watched=Object.values(S.items).filter(it=>["proposed","carded","in_progress"].includes(it.state) && !isExcluded(it) && !pages.some(p=>p.url===it.url));
 
     st.add(`Jira: open or recent update tickets for ${pages.length} pages`);
     const jira=pages.length ? await jiraCheck(pages, c, today, t=>notes.push(t)) : {};
@@ -866,7 +880,7 @@ async function runRadar(){
     for (const r of results) await dbSet("items/"+r.slug, r.doc);
     const lv={}; for (const l of LEVELS) lv[l]=results.filter(r=>r.doc.lastRun===runId && r.doc.level===l).length;
     await dbSet("runs/"+runId, { ...runDoc, status:"ok", units:tally.units, estimate:est, rows:rows.length, aioRows:aioRows.length, pages:pages.length,
-      signals:signals.length, dropped, levels:lv, proposed:Math.min(cands.length,c.weekly_card_cap), trafficAtRisk:pages.reduce((a,p)=>a+p.trafficLost,0),
+      signals:signals.length, dropped, excludedSkipped:skipped.length, levels:lv, proposed:Math.min(cands.length,c.weekly_card_cap), trafficAtRisk:pages.reduce((a,p)=>a+p.trafficLost,0),
       crawlDate, notes:notes.slice(0,10), seconds:Math.round((Date.now()-t0)/1000) });
     S.stateFilter="active"; st.end();
     if (notes.length) S.alerts=notes.map(t=>({text:t}));
@@ -1236,61 +1250,93 @@ async function setOverride(slug, level, reason){
     priority:priorityOf(c, it.page.trafficLost, it.intent, !!it.page.coreTopic, it.confirmed?1:0.5, level) });
   toast(`Level set to ${level}.`);
 }
-async function setExcluded(slug, reason){
+// Exclusions are permanent: the weekly run skips these URLs entirely (no audit, no units, no row) until included again.
+const isExcluded = it => !!(it && (it.state==="excluded" || it.removed || S.exclusions[it.slug]));
+const ticketOf = it => it.jiraKey ? { key:it.jiraKey, url:it.jiraUrl||JIRA_BROWSE_URL+it.jiraKey } : (it.jira && it.jira.open) || null;
+async function dbDelete(path){ if (!S.db) return; try { await S.db.doc(path).delete(); } catch(e){ toast("Couldn't save: "+(e.message||e.code)); throw e; } }
+async function excludeRow(slug, reason){
   const it=S.items[slug]; if (!it) return;
-  if (!reason.trim()){ toast("Add a reason for excluding the page."); return; }
-  await dbSet("items/"+slug, { ...it, state:"excluded", excluded:{ reason:reason.trim(), at:todayISO() } }); S.selected.delete(slug); toast("Excluded until you include it again.");
+  const t=ticketOf(it); const why=(reason||"").trim() || (t ? `Has ticket ${t.key}` : "Excluded by hand");
+  S.pendingExclude=null; S.open.delete(slug); S.selected.delete(slug);
+  await dbSet("exclusions/"+slug, { url:it.url, slug, reason:why, jiraKey:t?t.key:null, jiraUrl:t?t.url:null, at:new Date().toISOString() });
+  await dbSet("items/"+slug, { ...it, state:"excluded", excluded:{ reason:why, at:todayISO() }, removed:null });
 }
-async function removeRow(slug){
-  const it=S.items[slug]; if (!it) return; S.pendingDelete=null; S.open.delete(slug); S.selected.delete(slug);
-  await dbSet("items/"+slug, { ...it, removed:{ at:new Date().toISOString() } });
-  toast(`Row deleted. ${it.jiraKey||"The ticket"} stays in Jira; restore the row from "Deleted rows".`);
+async function setExcluded(slug, reason){
+  if (!reason.trim()){ toast("Add a reason for excluding the page."); return; }
+  await excludeRow(slug, reason); toast("Excluded. Future runs skip this page until you include it again.");
+}
+async function include(slug){
+  const it=S.items[slug];
+  if (S.exclusions[slug]) await dbDelete("exclusions/"+slug);
+  if (it) await dbSet("items/"+slug, { ...it, state:"confirmed", excluded:null, removed:null });
+  toast("Included again; the next run re-evaluates it.");
 }
 async function bulkRows(){
-  const restoring=S.stateFilter==="removed";
-  const list=visibleItems().filter(it=>restoring ? it.removed : (it.jiraKey && !it.removed));
+  const including=S.stateFilter==="excluded";
+  const list=including ? visibleItems() : visibleItems().filter(it=>ticketOf(it));
   if (!list.length) return;
-  if (!restoring && !S.bulkConfirm){ S.bulkConfirm=true; clearTimeout(S._bulkT); S._bulkT=setTimeout(()=>{ S.bulkConfirm=false; render(); },5000); render(); return; }
+  if (!including && !S.bulkConfirm){ S.bulkConfirm=true; clearTimeout(S._bulkT); S._bulkT=setTimeout(()=>{ S.bulkConfirm=false; render(); },5000); render(); return; }
   S.bulkConfirm=false; S.bulkBusy=true; render();
-  const at=new Date().toISOString(); let n=0;
-  try {
-    for (const it of list){
-      await dbSet("items/"+it.slug, { ...S.items[it.slug], removed: restoring ? null : { at } }); n++;
-      S.open.delete(it.slug); S.selected.delete(it.slug);
-    }
-  } catch {}
+  let n=0;
+  try { for (const it of list){ if (including) await include(it.slug); else await excludeRow(it.slug); n++; } } catch {}
   S.bulkBusy=false; render();
-  toast(restoring ? `${n} row${n>1?"s":""} restored.` : `${n} row${n>1?"s":""} deleted. The tickets stay in Jira; restore rows from "Deleted rows".`);
+  toast(including ? `${n} page${n>1?"s":""} included again.` : `${n} page${n>1?"s":""} excluded. Future runs skip them; the tickets stay in Jira.`);
 }
-async function restoreRow(slug){ const it=S.items[slug]; if (!it) return; await dbSet("items/"+slug, { ...it, removed:null }); toast("Row restored."); }
-async function include(slug){ const it=S.items[slug]; if (!it) return; await dbSet("items/"+slug, { ...it, state:"confirmed", excluded:null }); toast("Included again; the next run re-evaluates it."); }
+// "Exclude URLs or tickets": article URLs directly, BP keys resolved to their article through Jira.
+async function addExclusions(){
+  const text=$("exclText").value; const out=[]; let n=0;
+  const urls=new Map();
+  for (const u of text.match(/https?:\/\/(?:www\.)?betterme\.world\/articles\/[^\s)\]>"'|,]+/gi)||[]){ const x=normalizeUrl(u); if (x) urls.set(x,{ reason:"Excluded by URL" }); }
+  const keys=[...new Set((text.match(/\bBP-\d+\b/gi)||[]).map(k=>k.toUpperCase()))];
+  $("btnAddExcl").disabled=true;
+  for (const key of keys){
+    try {
+      const p=payloadOf(await call(JIRA,"getJiraIssue",{ cloudId:CLOUD, issueIdOrKey:key, fields:["summary","description"], responseContentFormat:"markdown" }))||{};
+      const f=p.fields||(p.issue&&p.issue.fields)||{}; const found=[...articleUrlsFromDescription(f.description)];
+      if (!found.length) out.push(`${key}: no Article / Original article link in the ticket, nothing excluded.`);
+      for (const u of found) urls.set(u,{ reason:`Has ticket ${key}`, jiraKey:key, jiraUrl:JIRA_BROWSE_URL+key });
+    } catch(e){ out.push(`${key}: ${errText(e,JIRA)}`); }
+  }
+  for (const [url, x] of urls){
+    const slug=slugOf(url);
+    await dbSet("exclusions/"+slug, { url, slug, reason:x.reason, jiraKey:x.jiraKey||null, jiraUrl:x.jiraUrl||null, at:new Date().toISOString() }); n++;
+    const it=S.items[slug]; if (it && it.state!=="excluded") await dbSet("items/"+slug, { ...it, state:"excluded", excluded:{ reason:x.reason, at:todayISO() }, removed:null });
+  }
+  $("btnAddExcl").disabled=false; $("exclText").value="";
+  $("exclMsg").innerHTML=[`<p class="result ok"><b>${n} page${n===1?"":"s"} excluded.</b></p>`, ...out.map(t=>`<p class="result bad">${esc(t)}</p>`)].join("");
+  renderExclusions();
+}
+function renderExclusions(){
+  const ex=Object.values(S.exclusions).sort((a,b)=>(b.at||"").localeCompare(a.at||""));
+  $("exclList").innerHTML = ex.length ? ex.map(x=>`<li><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.slug)}</a>${x.jiraKey?` · <a class="ticket" href="${esc(x.jiraUrl)}" target="_blank" rel="noopener">${esc(x.jiraKey)}</a>`:""} <span class="muted">${esc(x.reason||"")}</span> <button class="btn tiny" type="button" data-act="include" data-slug="${esc(x.slug)}">Include again</button></li>`).join("")
+    : `<li class="muted">No exclusions yet.</li>`;
+}
 
 /* ---------- render ---------- */
 // A page with a ticket shows the ticket key as a link; later states (updated, recovered…) follow it.
 function stateCell(it){
   const t = it.jiraKey ? { key:it.jiraKey, url:it.jiraUrl||JIRA_BROWSE_URL+it.jiraKey }
     : (it.jira && it.jira.open && it.level==="L0" && it.tag==="in_pipeline") ? it.jira.open : null;
-  const st = it.state==="carded" ? "" : (STATE_LABEL[it.state]||it.state.replace("_"," "));
+  const st = it.state==="carded" ? "" : isExcluded(it) ? "excluded" : (STATE_LABEL[it.state]||it.state.replace("_"," "));
   const link = t ? `<a class="ticket" href="${esc(t.url)}" target="_blank" rel="noopener">${esc(t.key)}</a>` : "";
   let action="";
-  if (it.removed) action=`<button class="btn tiny" type="button" data-act="restore" data-slug="${esc(it.slug)}">Restore</button>`;
-  else if (it.jiraKey) action = S.pendingDelete===it.slug
-    ? `<button class="btn tiny danger" type="button" data-act="delete" data-slug="${esc(it.slug)}">Confirm delete</button>`
-    : `<button class="btn tiny" type="button" data-act="askdelete" data-slug="${esc(it.slug)}" aria-label="Delete row ${esc(it.slug)}">Delete</button>`;
+  if (isExcluded(it)) action=`<button class="btn tiny" type="button" data-act="include" data-slug="${esc(it.slug)}">Include again</button>`;
+  else if (t) action = S.pendingExclude===it.slug
+    ? `<button class="btn tiny danger" type="button" data-act="exclude1" data-slug="${esc(it.slug)}">Confirm exclude</button>`
+    : `<button class="btn tiny" type="button" data-act="askexclude" data-slug="${esc(it.slug)}" aria-label="Exclude ${esc(it.slug)} from future runs">Exclude</button>`;
   return `<span class="statecell">${link}${link&&st?" · ":""}${esc(st)}${action}</span>`;
 }
 function latestRun(){ return S.runs.find(r=>r.status==="ok") || null; }
 function visibleItems(){
   const run=latestRun(); const all=Object.values(S.items);
   let list=all.filter(it=>{
-    if (S.stateFilter==="removed") return !!it.removed;
-    if (it.removed) return false;
+    if (S.stateFilter==="excluded") return isExcluded(it);
+    if (isExcluded(it)) return false;
     switch (S.stateFilter){
       case "active": return run && it.lastRun===run.id;
       case "proposed": return it.state==="proposed";
       case "watch": return it.state==="watch";
       case "carded": return ["carded","in_progress","updated","recovered","partial","not_recovered"].includes(it.state);
-      case "excluded": return it.state==="excluded";
       default: return true;
     }});
   if (S.levelFilter) list=list.filter(it=>((it.override&&it.override.level)||it.level)===S.levelFilter);
@@ -1354,7 +1400,7 @@ function render(){
       `<span><b>${fmt(run.units)}</b> Ahrefs units</span>`, run.crawlDate?`<span>Site Audit crawl <b>${esc(run.crawlDate)}</b></span>`:""].join("")
     : `<span>${S.dbReady||!S.db?"No run yet. Run radar pulls this week's top-3 losses from Ahrefs.":"Loading the board…"}</span>`;
   const counts={}; for (const l of LEVELS) counts[l]=0;
-  for (const it of Object.values(S.items)) if (run && it.lastRun===run.id && !it.removed) counts[(it.override&&it.override.level)||it.level]++;
+  for (const it of Object.values(S.items)) if (run && it.lastRun===run.id && !isExcluded(it)) counts[(it.override&&it.override.level)||it.level]++;
   $("levels").innerHTML=LEVELS.map(l=>`<button type="button" class="lv c-${l}" data-level="${l}" aria-pressed="${S.levelFilter===l}"><span class="n num">${counts[l]}</span><span class="t"><b>${l}</b>${LEVEL_NAMES[l]}</span></button>`).join("");
   const proposed=Object.values(S.items).filter(it=>it.state==="proposed").length;
   $("proposed").textContent=`Proposed this week: ${proposed} / ${c.weekly_card_cap}`;
@@ -1383,13 +1429,12 @@ function render(){
         + (S.open.has(it.slug)?drawer(it):""); }).join("");
   }
   // Bulk delete / restore over the rows in the current view.
-  const restoring=S.stateFilter==="removed";
-  const bulk=restoring ? list : list.filter(it=>it.jiraKey && !it.removed);
-  const bb=$("btnBulk"); bb.disabled=!!S.bulkBusy;
-  bb.classList.toggle("danger", !restoring);
-  bb.textContent = S.bulkBusy ? (restoring?"Restoring…":"Deleting…")
-    : restoring ? `Restore all (${bulk.length})`
-    : S.bulkConfirm ? `Confirm: delete ${bulk.length} row${bulk.length>1?"s":""}` : `Delete all with tickets (${bulk.length})`;
+  const including=S.stateFilter==="excluded";
+  const bulk=including ? list : list.filter(it=>ticketOf(it));
+  const bb=$("btnBulk"); bb.disabled=!!S.bulkBusy; bb.classList.toggle("danger", !including);
+  bb.textContent = S.bulkBusy ? (including?"Including…":"Excluding…")
+    : including ? `Include all again (${bulk.length})`
+    : S.bulkConfirm ? `Confirm: exclude ${bulk.length} page${bulk.length>1?"s":""}` : `Exclude all with tickets (${bulk.length})`;
   bb.hidden=!bulk.length && !S.bulkBusy;
   $("selCount").textContent=`${S.selected.size} selected`; $("btnCards").disabled=!S.selected.size || !S.mcp;
   $("q").value!==S.q && ($("q").value=S.q); $("stateFilter").value=S.stateFilter;
@@ -1398,7 +1443,7 @@ function render(){
   $("followList").innerHTML=fl.length?fl.map(it=>`<li><a href="${esc(it.url)}" target="_blank" rel="noopener">${esc(it.slug)}</a>: ${it.followups.map(f=>`${f.label} ${f.due} ${f.outcome?"· "+f.outcome.replace("_"," "):""}`).join(", ")}</li>`).join(""):`<li class="muted">Nothing scheduled yet. A page with a ticket gets checks when its "Updated on" date changes.</li>`;
   const wk=isoWeek(todayISO()); const tks=Object.values(S.tickets).filter(x=>x.key && x.at && isoWeek(x.at.slice(0,10))===wk);
   $("cardList").innerHTML=tks.length?tks.map(x=>`<li><a href="${esc(x.jiraUrl)}" target="_blank" rel="noopener">${esc(x.key)}</a> ${esc(x.summary)}${x.level?` <span class="pill c-${esc(x.level)}">${esc(x.level)}</span>`:""}</li>`).join(""):`<li class="muted">No tickets created in ${wk}.</li>`;
-  $("suggCount").textContent=`${Object.keys(S.suggestions).length} pages on the "already suggested" list.`;
+  $("suggCount").textContent=`${Object.keys(S.exclusions).length} excluded pages (skipped by runs) · ${Object.keys(S.suggestions).length} on the "already suggested" list.`;
 }
 
 /* ---------- settings, import, calibration ---------- */
@@ -1467,6 +1512,8 @@ $("calibFile").addEventListener("change", e => { const f=e.target.files[0]; if (
   r.onload=() => { try { calibrate(JSON.parse(r.result)); } catch { $("calibOut").innerHTML=`<p class="result bad"><b>Couldn't read that file.</b> Choose the JSON export of the old tracker.</p>`; } }; r.readAsText(f); });
 $("q").addEventListener("input", e => { S.q=e.target.value.trim(); render(); });
 $("stateFilter").addEventListener("change", e => { S.stateFilter=e.target.value; S.bulkConfirm=false; render(); });
+$("btnExcl").addEventListener("click", () => { $("exclMsg").innerHTML=""; renderExclusions(); $("dlgExcl").showModal(); });
+$("btnAddExcl").addEventListener("click", addExclusions);
 $("levels").addEventListener("click", e => { const b=e.target.closest(".lv"); if (!b) return; S.levelFilter = S.levelFilter===b.dataset.level ? null : b.dataset.level; render(); });
 document.addEventListener("click", e => {
   const close=e.target.closest("[data-close]"); if (close){ $(close.dataset.close).close(); return; }
@@ -1477,9 +1524,8 @@ document.addEventListener("click", e => {
     if (act.dataset.act==="override"){ const lv=document.querySelector(`[data-ovl="${CSS.escape(slug)}"]`).value, r=document.querySelector(`[data-ovr="${CSS.escape(slug)}"]`).value; setOverride(slug, lv, r); }
     if (act.dataset.act==="exclude") setExcluded(slug, document.querySelector(`[data-exr="${CSS.escape(slug)}"]`).value);
     if (act.dataset.act==="include") include(slug);
-    if (act.dataset.act==="askdelete"){ S.pendingDelete=slug; clearTimeout(S._delT); S._delT=setTimeout(()=>{ S.pendingDelete=null; render(); },5000); render(); }
-    if (act.dataset.act==="delete") removeRow(slug);
-    if (act.dataset.act==="restore") restoreRow(slug);
+    if (act.dataset.act==="askexclude"){ S.pendingExclude=slug; clearTimeout(S._exT); S._exT=setTimeout(()=>{ S.pendingExclude=null; render(); },5000); render(); }
+    if (act.dataset.act==="exclude1") excludeRow(slug).then(()=>toast("Excluded. Future runs skip this page; the ticket stays in Jira."));
     return; }
   if (e.target.matches("[data-pick]")){ const s=e.target.dataset.pick; e.target.checked?S.selected.add(s):S.selected.delete(s); render(); return; }
   const row=e.target.closest("tr.row");
