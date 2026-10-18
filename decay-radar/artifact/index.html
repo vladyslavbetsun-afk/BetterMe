@@ -567,6 +567,8 @@ async function notionCards(urls){
 }
 const openCardOf = rows => (rows||[]).find(r => !/^done$/i.test(r.Status||""));
 function notionPageId(url){ const m=String(url||"").replace(/-/g,"").match(/([0-9a-f]{32})(?:[?#]|$)/i); return m?m[1]:null; }
+// Notion's SQL `url` column omits the /p/ path segment and does not open; this is the canonical page link.
+function notionHref(url){ const id=notionPageId(url); return id ? `https://app.notion.com/p/${id}` : (url||""); }
 
 /* ---------- screen, level, priority (§6–§8) ---------- */
 function screenText(...texts){
@@ -910,11 +912,11 @@ async function createCards(){
     try {
       const existing=await notionCards([cd.url]); const open=openCardOf(existing[cd.url]);
       if (open && prior){ // our pending write from an interrupted attempt: adopt it (D-12)
-        await finishCard(cd, key, week, today, open.url, "adopted"); log(`<p class="result ok"><b>Adopted</b> ${esc(cd.name)} from an interrupted attempt. <a href="${esc(open.url)}" target="_blank" rel="noopener">Open</a></p>`); continue; }
+        await finishCard(cd, key, week, today, open.url, "adopted"); log(`<p class="result ok"><b>Adopted</b> ${esc(cd.name)} from an interrupted attempt. <a href="${esc(notionHref(open.url))}" target="_blank" rel="noopener">Open in Notion</a></p>`); continue; }
       if (open){
         const pid=notionPageId(open.url);
         await call(NOTION,"notion-create-comment",{ page_id:pid, markdown:`Decay radar ${today}: still slipping, now ${pos(cd.mainNow)} for '${mdEsc(cd.mainKeyword)}'.` });
-        log(`<p class="result"><b>Commented</b> on the open card for ${esc(cd.slug)} instead of creating a duplicate. <a href="${esc(open.url)}" target="_blank" rel="noopener">Open</a></p>`); continue; }
+        log(`<p class="result"><b>Commented</b> on the open card for ${esc(cd.slug)} instead of creating a duplicate. <a href="${esc(notionHref(open.url))}" target="_blank" rel="noopener">Open in Notion</a></p>`); continue; }
       await dbSet("cards/"+key, { url:cd.url, slug:cd.slug, week, notionUrl:null, at:new Date().toISOString(), name:cd.name, level:cd.level, pending:true });
       await call(NOTION,"notion-create-pages",{ parent:{ type:"data_source_id", data_source_id:DS }, pages:[{ properties:cd.props, content:cd.body }], allow_async:false });
       // Re-fetch and verify Name, URL 1, Status, New/Upd, Date.
@@ -925,7 +927,7 @@ async function createCards(){
       if (row.Status!=="Not started") bad.push(`Status is ${row.Status}`); if (row["New/Upd"]!=="Update") bad.push(`New/Upd is ${row["New/Upd"]}`);
       if ((row["date:Date:start"]||"").slice(0,10)!==today) bad.push(`Date is ${row["date:Date:start"]}`);
       await finishCard(cd, key, week, today, row.url, "created");
-      log(`<p class="result ${bad.length?"bad":"ok"}"><b>${bad.length?"Created, check fields":"Created and verified"}</b> ${esc(cd.name)}${cd.category?` · category ${esc(cd.category)} (inferred)`:""}${bad.length?": "+esc(bad.join("; ")):""}. <a href="${esc(row.url)}" target="_blank" rel="noopener">Open</a></p>`);
+      log(`<p class="result ${bad.length?"bad":"ok"}"><b>${bad.length?"Created, check fields":"Created and verified"}</b> ${esc(cd.name)}${cd.category?` · category ${esc(cd.category)} (inferred)`:""}${bad.length?": "+esc(bad.join("; ")):""}. <a href="${esc(notionHref(row.url))}" target="_blank" rel="noopener">Open in Notion</a></p>`);
     } catch(e){ log(`<p class="result bad"><b>Failed</b> ${esc(cd.name)}: ${esc(errText(e, e.server||NOTION))} Run "Create Notion cards" again: the page checks Notion first, so it will not duplicate.</p>`); }
   }
   S.selected.clear();
@@ -933,6 +935,7 @@ async function createCards(){
   render();
 }
 async function finishCard(cd, key, week, today, notionUrl, how){
+  notionUrl=notionHref(notionUrl);
   await dbSet("cards/"+key, { url:cd.url, slug:cd.slug, week, notionUrl, at:new Date().toISOString(), name:cd.name, level:cd.level, how });
   const it=S.items[cd.slug]; if (it) await dbSet("items/"+cd.slug, { ...it, state:"carded", notionUrl, cardLevel:cd.level, cardWeek:week, cardAt:today });
   if (!S.suggestions[cd.slug]) await dbSet("suggestions/"+cd.slug, { url:cd.url, first:today, source:"decay-radar" });
@@ -1000,7 +1003,7 @@ function drawer(it){
   const screen=it.screen.matches.length?it.screen.matches.map(m=>`#${m.cat} ${m.name}: ${m.note} (${m.verdict})`).join("; "):"PASS";
   const jira=[it.jira&&it.jira.open&&`open <a href="${esc(it.jira.open.url)}" target="_blank" rel="noopener">${esc(it.jira.open.key)}</a> (${esc(it.jira.open.status)})`,
     it.jira&&it.jira.recent&&`published <a href="${esc(it.jira.recent.url)}" target="_blank" rel="noopener">${esc(it.jira.recent.key)}</a> ${it.jira.recent.days} days ago`].filter(Boolean).join(" · ")||"none";
-  const notion=it.notionUrl?`<a href="${esc(it.notionUrl)}" target="_blank" rel="noopener">card</a>${it.notionOpen?` (${esc(it.notionOpen.status)})`:""}`:"none";
+  const notion=it.notionUrl?`<a href="${esc(notionHref(it.notionUrl))}" target="_blank" rel="noopener">Open card in Notion</a>${it.notionOpen?` (${esc(it.notionOpen.status)})`:""}`:"none";
   const fups=(it.followups||[]).map(f=>`${f.label} due ${f.due}: ${f.outcome||"pending"}`).join(" · ");
   const lvOpts=LEVELS.map(l=>`<option value="${l}" ${l===lvl?"selected":""}>${l} · ${LEVEL_NAMES[l]}</option>`).join("");
   return `<tr class="drawer"><td colspan="10"><div class="dgrid">
@@ -1060,7 +1063,7 @@ function render(){
   const fl=Object.values(S.items).filter(it=>(it.followups||[]).length).sort((x,y)=>(x.followups[0].due>y.followups[0].due?1:-1));
   $("followList").innerHTML=fl.length?fl.map(it=>`<li><a href="${esc(it.url)}" target="_blank" rel="noopener">${esc(it.slug)}</a>: ${it.followups.map(f=>`${f.label} ${f.due} ${f.outcome?"· "+f.outcome.replace("_"," "):""}`).join(", ")}</li>`).join(""):`<li class="muted">Nothing scheduled yet. A carded page gets checks when its "Updated on" date changes.</li>`;
   const wk=isoWeek(todayISO()); const cards=Object.values(S.cards).filter(x=>x.week===wk);
-  $("cardList").innerHTML=cards.length?cards.map(x=>`<li>${x.notionUrl?`<a href="${esc(x.notionUrl)}" target="_blank" rel="noopener">${esc(x.name)}</a>`:esc(x.name)+" <span class='muted'>(pending)</span>"} <span class="pill c-${esc(x.level)}">${esc(x.level)}</span></li>`).join(""):`<li class="muted">No cards created in ${wk}.</li>`;
+  $("cardList").innerHTML=cards.length?cards.map(x=>`<li>${x.notionUrl?`<a href="${esc(notionHref(x.notionUrl))}" target="_blank" rel="noopener">${esc(x.name)}</a>`:esc(x.name)+" <span class='muted'>(pending)</span>"} <span class="pill c-${esc(x.level)}">${esc(x.level)}</span></li>`).join(""):`<li class="muted">No cards created in ${wk}.</li>`;
   $("suggCount").textContent=`${Object.keys(S.suggestions).length} pages on the "already suggested" list.`;
 }
 
