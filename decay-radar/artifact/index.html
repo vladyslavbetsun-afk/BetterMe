@@ -211,7 +211,7 @@ ol.prep{padding-left:20px}
       <option value="active">This run</option><option value="proposed">Proposed</option><option value="watch">Watch</option>
       <option value="carded">Ticket created / updated</option><option value="excluded">Excluded</option><option value="all">Everything on the board</option><option value="removed">Deleted rows</option>
     </select>
-    <div class="sel"><span class="muted" id="selCount">0 selected</span><button class="btn primary small" id="btnCards" type="button" disabled>Create Jira tickets</button></div>
+    <div class="sel"><button class="btn small danger" id="btnBulk" type="button" hidden></button><span class="muted" id="selCount">0 selected</span><button class="btn primary small" id="btnCards" type="button" disabled>Create Jira tickets</button></div>
   </div>
   <div class="tablewrap">
     <table>
@@ -1246,6 +1246,22 @@ async function removeRow(slug){
   await dbSet("items/"+slug, { ...it, removed:{ at:new Date().toISOString() } });
   toast(`Row deleted. ${it.jiraKey||"The ticket"} stays in Jira; restore the row from "Deleted rows".`);
 }
+async function bulkRows(){
+  const restoring=S.stateFilter==="removed";
+  const list=visibleItems().filter(it=>restoring ? it.removed : (it.jiraKey && !it.removed));
+  if (!list.length) return;
+  if (!restoring && !S.bulkConfirm){ S.bulkConfirm=true; clearTimeout(S._bulkT); S._bulkT=setTimeout(()=>{ S.bulkConfirm=false; render(); },5000); render(); return; }
+  S.bulkConfirm=false; S.bulkBusy=true; render();
+  const at=new Date().toISOString(); let n=0;
+  try {
+    for (const it of list){
+      await dbSet("items/"+it.slug, { ...S.items[it.slug], removed: restoring ? null : { at } }); n++;
+      S.open.delete(it.slug); S.selected.delete(it.slug);
+    }
+  } catch {}
+  S.bulkBusy=false; render();
+  toast(restoring ? `${n} row${n>1?"s":""} restored.` : `${n} row${n>1?"s":""} deleted. The tickets stay in Jira; restore rows from "Deleted rows".`);
+}
 async function restoreRow(slug){ const it=S.items[slug]; if (!it) return; await dbSet("items/"+slug, { ...it, removed:null }); toast("Row restored."); }
 async function include(slug){ const it=S.items[slug]; if (!it) return; await dbSet("items/"+slug, { ...it, state:"confirmed", excluded:null }); toast("Included again; the next run re-evaluates it."); }
 
@@ -1366,6 +1382,15 @@ function render(){
         <td class="mono">${esc(a.updatedOn||"—")}</td><td>${flags}</td><td class="state ${esc(it.state)}">${stateCell(it)}</td></tr>`
         + (S.open.has(it.slug)?drawer(it):""); }).join("");
   }
+  // Bulk delete / restore over the rows in the current view.
+  const restoring=S.stateFilter==="removed";
+  const bulk=restoring ? list : list.filter(it=>it.jiraKey && !it.removed);
+  const bb=$("btnBulk"); bb.disabled=!!S.bulkBusy;
+  bb.classList.toggle("danger", !restoring);
+  bb.textContent = S.bulkBusy ? (restoring?"Restoring…":"Deleting…")
+    : restoring ? `Restore all (${bulk.length})`
+    : S.bulkConfirm ? `Confirm: delete ${bulk.length} row${bulk.length>1?"s":""}` : `Delete all with tickets (${bulk.length})`;
+  bb.hidden=!bulk.length && !S.bulkBusy;
   $("selCount").textContent=`${S.selected.size} selected`; $("btnCards").disabled=!S.selected.size || !S.mcp;
   $("q").value!==S.q && ($("q").value=S.q); $("stateFilter").value=S.stateFilter;
   // lower panels
@@ -1434,13 +1459,14 @@ $("settingsForm").addEventListener("input", () => { const t={...cfg()}; for (con
 $("btnCopy").addEventListener("click", () => copy(slackText(), "Summary copied."));
 $("btnCsv").addEventListener("click", () => copy(csv(), "CSV copied."));
 $("btnCards").addEventListener("click", openTicketsDialog);
+$("btnBulk").addEventListener("click", bulkRows);
 $("btnImport").addEventListener("click", () => $("dlgImport").showModal());
 $("btnDoImport").addEventListener("click", doImport);
 $("btnCalib").addEventListener("click", () => $("dlgCalib").showModal());
 $("calibFile").addEventListener("change", e => { const f=e.target.files[0]; if (!f) return; const r=new FileReader();
   r.onload=() => { try { calibrate(JSON.parse(r.result)); } catch { $("calibOut").innerHTML=`<p class="result bad"><b>Couldn't read that file.</b> Choose the JSON export of the old tracker.</p>`; } }; r.readAsText(f); });
 $("q").addEventListener("input", e => { S.q=e.target.value.trim(); render(); });
-$("stateFilter").addEventListener("change", e => { S.stateFilter=e.target.value; render(); });
+$("stateFilter").addEventListener("change", e => { S.stateFilter=e.target.value; S.bulkConfirm=false; render(); });
 $("levels").addEventListener("click", e => { const b=e.target.closest(".lv"); if (!b) return; S.levelFilter = S.levelFilter===b.dataset.level ? null : b.dataset.level; render(); });
 document.addEventListener("click", e => {
   const close=e.target.closest("[data-close]"); if (close){ $(close.dataset.close).close(); return; }
