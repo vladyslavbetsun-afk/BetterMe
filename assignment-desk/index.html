@@ -116,8 +116,24 @@ h1{margin:0 0 4px;font-family:var(--f-display);font-weight:600;font-size:34px;le
 .picked .row{display:flex;flex-wrap:wrap;gap:5px 10px;align-items:center;font-size:12.5px;color:var(--ink-soft)}
 .picked.none{border-style:dashed;border-color:var(--line);box-shadow:none;color:var(--ink-soft);font-size:13px}
 
-.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
-.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px 13px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:8px;min-width:0}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(165px,1fr));gap:8px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 11px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:6px;min-width:0}
+.card .name{font-size:15px}
+.card .load{font-size:17px}
+.card .stats{grid-template-columns:1fr;gap:4px;padding:6px 8px}
+.card .card-foot .btn{flex:1 1 auto;justify-content:center}
+.pill.top{background:var(--text-bg);color:var(--text-fg)}
+.modal-bg{position:fixed;inset:0;z-index:20;background:rgba(10,18,14,.45);display:flex;align-items:flex-start;justify-content:center;padding:calc(40px + env(safe-area-inset-top,0px)) 16px calc(16px + env(safe-area-inset-bottom,0px));overflow-y:auto}
+.modal{background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);width:100%;max-width:480px;display:flex;flex-direction:column;gap:12px;padding:16px}
+.modal-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.modal-head h3{margin:0;font-family:var(--f-display);font-size:18px;font-weight:600;line-height:1.3;overflow-wrap:anywhere}
+.modal .grp{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-faint);font-weight:600;margin-top:2px}
+.wlist{display:flex;flex-direction:column;gap:4px}
+.wpick{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;text-align:left;background:var(--surface-2);border:1px solid transparent;border-radius:8px;padding:8px 10px;cursor:pointer}
+.wpick:hover{border-color:var(--accent-line)}
+.wpick .nm{font-weight:600}
+.wpick .pr{font-family:var(--f-mono);font-size:12.5px;font-weight:600;text-align:right}
+.wpick .sub{grid-column:1 / -1;display:flex;flex-wrap:wrap;gap:4px 8px;font-size:11.5px;color:var(--ink-soft)}
 .card.dim{opacity:.62}
 .card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
 .name{font-family:var(--f-display);font-weight:600;font-size:16px;line-height:1.25;text-wrap:balance}
@@ -207,6 +223,7 @@ h1{margin:0 0 4px;font-family:var(--f-display);font-weight:600;font-size:34px;le
     </div>
   </div>
 </div>
+<div class="modal-bg" id="modal" hidden></div>
 <div class="toast" id="toast" hidden></div>
 
 <script>
@@ -227,10 +244,10 @@ const TEXT_TRANSITION_FALLBACK = "11";
 
 // Roster from the Byline Board (Writers & Experts sheet). id = Jira account id.
 const WRITERS = [
-  { id:"70121:064c601e-cbf1-4550-8d17-8fea2b338118", name:"Zindzy Gracia",         niche:"exercise",  rateType:"word", rate:0.03 },
-  { id:"712020:51b52722-9eb1-4aa8-8b6d-527b045f3913", name:"Eve Chalicha",         niche:"exercise",  rateType:"word", rate:0.035 },
-  { id:"712020:4e42fbfd-ec2b-414f-99d4-41dfb6faa417", name:"Jeremy Mukhwana",      niche:"both",      rateType:"word", rate:0.03 },
-  { id:"712020:4e7281a8-604f-46bd-9f0e-61aa6a42030b", name:"Nderitu Munuhe",       niche:"any",       rateType:"word", rate:0.04 },
+  { id:"70121:064c601e-cbf1-4550-8d17-8fea2b338118", name:"Zindzy Gracia",         niche:"exercise",  rateType:"word", rate:0.03 , top:true },
+  { id:"712020:51b52722-9eb1-4aa8-8b6d-527b045f3913", name:"Eve Chalicha",         niche:"exercise",  rateType:"word", rate:0.035 , top:true },
+  { id:"712020:4e42fbfd-ec2b-414f-99d4-41dfb6faa417", name:"Jeremy Mukhwana",      niche:"both",      rateType:"word", rate:0.03 , top:true },
+  { id:"712020:4e7281a8-604f-46bd-9f0e-61aa6a42030b", name:"Nderitu Munuhe",       niche:"any",       rateType:"word", rate:0.04 , top:true },
   { id:"6348b6fe94b0b260830778d6",                    name:"Eva De Angelis",       niche:"nutrition", rateType:"word", rate:0.11, noReview:true },
   { id:"712020:44ae3ce5-c8c9-43b3-b106-63585b9a2edf", name:"Maria Lourdes Rubiolo",niche:"nutrition", rateType:"word", rate:0.10, noReview:true },
   { id:"70121:fb24c986-30fc-4274-b096-e53d17aad7a4", name:"Anoshia Riaz",          niche:"any",       rateType:"word", rate:0.04 },
@@ -249,7 +266,7 @@ const NUT_KW = ["diet","diets","dieta","meal","meals","snack","snacks","drink","
 const S = {
   mcp:null, loading:false, error:null, at:null,
   open:[], load:{}, selected:null, confirm:null, busy:{}, log:[],
-  q:"", cat:"all", earned:{}, titles:{},
+  q:"", cat:"all", earned:{}, titles:{}, modal:null, lastFocus:null,
   panel: (() => { try { return localStorage.getItem("desk.panel") !== "off"; } catch { return true; } })()
 };
 
@@ -472,14 +489,13 @@ function renderQueue(){
       <span class="meta">${catPill(t.cat)}${t.wc ? `<span class="wc">${t.wc.min === t.wc.max ? t.wc.min : t.wc.min+"–"+t.wc.max} words</span>` : ""}
         ${t.author ? `<span class="pill ${authorW ? "open" : "warn"}" title="Current Author">Author: ${esc(authorW ? authorW.name : t.author.name)}</span>` : ""}
         ${busy ? `<span class="pill text">Assigning to ${esc(firstName(BY_ID[busy].name))}…</span>` : ""}</span>
-    </button>${on && !S.panel && !busy ? quickRow(t) : ""}</div>`;
+    </button></div>`;
   }).join("");
 }
-// Compact assign controls shown under the picked ticket while the writers panel is hidden.
 function sortedWriters(t){
-  // Writers whose drafts go to an expert come first, then the lightest Text load. Topic never blocks an assignment.
+  // Top writers first, then writers whose drafts go to an expert, then the lightest Text load. Topic never blocks an assignment.
   return [...WRITERS].map(w => ({ w, ld:loadOf(w.id) }))
-    .sort((a,b) => (!!a.w.noReview - !!b.w.noReview) || (a.ld.text - b.ld.text));
+    .sort((a,b) => (!!b.w.top - !!a.w.top) || (!!a.w.noReview - !!b.w.noReview) || (a.ld.text - b.ld.text));
 }
 function confirmBody(t, w){
   const isAuthor = t.author && t.author.id === w.id;
@@ -487,11 +503,21 @@ function confirmBody(t, w){
     <ul><li>Author → ${esc(w.name)}${t.author && !isAuthor ? ` (replaces ${esc(t.author.name)})` : ""}</li><li>Added to Request participants</li><li>Status Open → Text</li></ul>
     <div class="acts"><button class="btn primary sm" data-act="go" data-w="${esc(w.id)}">Assign</button><button class="btn ghost sm" data-act="cancel">Cancel</button></div>`;
 }
-function quickRow(t){
+// Pop-up writer picker opened by clicking a ticket.
+function renderModal(){
+  const t = S.modal && S.open.find(x => x.key === S.modal);
+  if (!t) return "";
   const conf = S.confirm && S.confirm.key === t.key && BY_ID[S.confirm.wid];
-  if (conf) return `<div class="quick"><div class="confirm" style="flex:1 1 100%">${confirmBody(t, conf)}</div></div>`;
-  const opts = sortedWriters(t).map(({ w, ld }) => `<option value="${esc(w.id)}">${esc(w.name)}${w.noReview ? " (no expert review)" : ""} · ${ld.total} in Text${priceFor(w, t) ? " · " + priceFor(w, t) : ""}</option>`).join("");
-  return `<div class="quick"><label for="qw-${esc(t.key)}" class="wc">Writer</label><select id="qw-${esc(t.key)}">${opts}</select><button class="btn primary sm" data-act="quick" data-k="${esc(t.key)}">Assign</button></div>`;
+  const row = ({ w, ld }) => { const pr = priceFor(w, t); return `<button class="wpick" data-act="pickw" data-w="${esc(w.id)}">
+      <span class="nm">${esc(w.name)}</span><span class="pr">${pr ? esc(pr) : esc(rateLabel(w))}</span>
+      <span class="sub"><span>${ld.text} in Text</span><span>${esc(nicheTag(w).label)}</span><span>${w.noReview ? "no expert review" : "goes to expert"}</span></span></button>`; };
+  const ws = sortedWriters(t);
+  const body = conf ? `<div class="confirm">${confirmBody(t, conf)}</div>`
+    : `<span class="grp">Top writers</span><div class="wlist">${ws.filter(x => x.w.top).map(row).join("")}</div>
+       <span class="grp">Other writers</span><div class="wlist">${ws.filter(x => !x.w.top).map(row).join("")}</div>`;
+  return `<div class="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+    <div class="modal-head"><div><span class="wc"><a href="${esc(t.url)}" target="_blank" rel="noopener">${esc(t.key)} ↗</a> · ${t.wc ? (t.wc.min === t.wc.max ? t.wc.min : t.wc.min+"–"+t.wc.max) + " words" : "no word count"}</span><h3 id="mTitle">${esc(t.title)}</h3></div>
+      <button class="btn ghost sm" data-act="closem" aria-label="Close">✕</button></div>${body}</div>`;
 }
 function renderMonth(){
   const vals = Object.values(S.earned || {});
@@ -500,7 +526,7 @@ function renderMonth(){
   return `<span class="big">${money(lo, hi)}</span><span class="lbl">earned by these writers in ${MONTH} · ${n} article${n === 1 ? "" : "s"} handed in (left Text this month), priced as word count × rate (or flat fee) plus the expert's review fee: +$50 for Carter Lee, Garett Reid and Angelica Galvan, +$20 for Maria</span>`;
 }
 function renderPicked(t){
-  if (!t) return `<div class="picked none">Pick an Open ticket on the left. The writers below then show the price for it and an Assign button. Any writer can take any ticket.</div>`;
+  if (!t) return `<div class="picked none">Click an Open ticket on the left to choose its writer in a pop-up. The cards below then also show the price for that ticket. Any writer can take any ticket.</div>`;
   const others = t.parts.filter(p => !(t.author && p.id === t.author.id));
   return `<div class="picked"><span class="lbl">Assigning</span>
     <span class="ttl">${esc(t.title)}</span>
@@ -521,9 +547,10 @@ function renderCards(t){
       foot = conf
         ? `<div class="confirm">${confirmBody(t, w)}</div>`
         : `<div class="card-foot"><span class="price ${price ? "" : "none"}" title="${w.noReview ? "No expert review" : "Includes the expert review fee"}">${price ? esc(price) + (w.noReview ? "" : `<span class="wc"> incl. expert</span>`) : esc(rateLabel(w))}</span>
-             ${busy === w.id ? `<span class="working">Assigning…</span>` : `<button class="btn primary sm" data-act="ask" data-w="${esc(w.id)}" ${busy ? "disabled" : ""}>Assign ${esc(t.key)}</button>`}</div>`;
+             ${busy === w.id ? `<span class="working">Assigning…</span>` : `<button class="btn primary sm" data-act="ask" data-w="${esc(w.id)}" ${busy ? "disabled" : ""}>Assign</button>`}</div>`;
     }
     return `<div class="card">
+      ${w.top ? `<span class="pill top" style="align-self:flex-start">★ Top writer</span>` : ""}
       <div class="card-top"><span class="name">${esc(w.name)}</span><span class="load">${S.at ? ld.total : "–"}<small>in Text</small></span></div>
       <div class="card-meta"><span class="pill ${n.cls}">${esc(n.label)}</span><span class="rate">${esc(rateLabel(w))}</span></div>
       ${w.noReview ? `<span class="noreview">✓ no expert review needed</span>` : ""}
@@ -554,6 +581,7 @@ function render(){
   $("picked").innerHTML = renderPicked(t);
   $("cards").innerHTML = renderCards(t);
   $("log").innerHTML = renderLog();
+  const m = renderModal(); $("modal").innerHTML = m; $("modal").hidden = !m;
   document.querySelectorAll("#catSeg button").forEach(b => b.setAttribute("aria-pressed", b.dataset.cat === S.cat));
 }
 
@@ -561,9 +589,12 @@ function render(){
 document.addEventListener("click", async ev => {
   const tk = ev.target.closest(".tk");
   if (tk) {
-    S.selected = S.selected === tk.dataset.k ? null : tk.dataset.k; S.confirm = null; render();
-    if (S.selected && S.panel && matchMedia("(max-width:900px)").matches) $("writersCol").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block:"start" });
+    if (S.busy[tk.dataset.k]) return;
+    S.selected = tk.dataset.k; S.modal = tk.dataset.k; S.confirm = null; S.lastFocus = tk; render();
+    const first = document.querySelector("#modal .wpick"); if (first) first.focus();
     return;
+  }
+  if (ev.target.id === "modal") { closeModal(); return;
   }
   const cb = ev.target.closest("#catSeg button");
   if (cb) { S.cat = cb.dataset.cat; render(); return; }
@@ -572,12 +603,15 @@ document.addEventListener("click", async ev => {
     case "unpick": S.selected = null; S.confirm = null; render(); break;
     case "ask": S.confirm = { key:S.selected, wid:b.dataset.w }; render(); break;
     case "cancel": S.confirm = null; render(); break;
-    case "quick": { const sel = $("qw-" + b.dataset.k); if (sel) { S.confirm = { key:b.dataset.k, wid:sel.value }; render(); } break; }
-    case "go": if (S.confirm) await assign(S.confirm.key, S.confirm.wid); break;
+    case "pickw": S.confirm = { key:S.modal, wid:b.dataset.w }; render(); { const g = document.querySelector('#modal [data-act="go"]'); if (g) g.focus(); } break;
+    case "closem": closeModal(); break;
+    case "go": if (S.confirm) { const c = S.confirm; S.modal = null; await assign(c.key, c.wid); } break;
     case "perms": try { const p = await claude.use("permissions"); await p.request(["mcp"]); load(); } catch { toast("Open the page's Permissions menu to allow Atlassian."); } break;
   }
 });
 $("refresh").addEventListener("click", load);
+function closeModal(){ S.modal = null; S.confirm = null; render(); const k = S.lastFocus && S.lastFocus.dataset.k; const el = k && document.querySelector(`.tk[data-k="${CSS.escape(k)}"]`); if (el) el.focus(); }
+document.addEventListener("keydown", e => { if (e.key === "Escape" && S.modal) closeModal(); });
 $("togglePanel").addEventListener("click", () => { S.panel = !S.panel; S.confirm = null; try { localStorage.setItem("desk.panel", S.panel ? "on" : "off"); } catch {} render(); });
 $("q").addEventListener("input", e => { S.q = e.target.value; $("queue").innerHTML = renderQueue(); });
 
