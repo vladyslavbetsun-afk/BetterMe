@@ -404,24 +404,27 @@ async function sendBatch(id, skipParts){
 // message; the old one stays listed on the batch until you confirm you deleted it in Slack.
 async function reschedule(id, sendNow){
   const b = S.batches[id]; if (!b) return;
-  const postAt = sendNow ? null : new Date(S.ui.when[id] || toLocalInput(new Date(b.postAt))).getTime();
+  // a batch already delivered can be sent again; only a still-pending scheduled message needs deleting in Slack
+  const upcoming = !!(b.postAt && b.postAt > Date.now());
+  const was = upcoming ? fmtWhen(b.postAt) : null;
+  const postAt = sendNow ? null : new Date(S.ui.when[id] || (upcoming ? toLocalInput(new Date(b.postAt)) : defaultWhen())).getTime();
   if (!sendNow) { const er = scheduleError(postAt); if (er) { S.ui.whenErr[id] = er; render(); return; } }
   S.ui.whenErr[id] = ""; S.running[id] = true; render();
-  const stale = [...(b.stale || []), b.postAt].filter(Boolean);
+  const stale = [...(b.stale || []), upcoming ? b.postAt : null].filter(Boolean);
   try {
     if (sendNow) {
       await call(SLACK, "slack_send_message", { channel_id:YULIIA.slack, message:slackText(b.keys) });
       await saveBatch({ ...b, sentAt: Date.now(), postAt: null, stale });
-      await logIt("slack", `Batch ${b.n}: sent the Slack DM to Yuliia now instead of ${fmtWhen(b.postAt)}`);
+      await logIt("slack", was ? `Batch ${b.n}: sent the Slack DM to Yuliia now instead of ${was}` : `Batch ${b.n}: sent the Slack DM to Yuliia again`);
       toast(`Batch ${b.n} sent to Yuliia`);
     } else {
       await call(SLACK, "slack_schedule_message", { channel_id:YULIIA.slack, message:slackText(b.keys), post_at:Math.floor(postAt/1000) });
       await saveBatch({ ...b, sentAt: Date.now(), postAt, stale });
-      await logIt("slack", `Batch ${b.n}: rescheduled the Slack DM to Yuliia from ${fmtWhen(b.postAt)} to ${fmtWhen(postAt)}`);
+      await logIt("slack", was ? `Batch ${b.n}: rescheduled the Slack DM to Yuliia from ${was} to ${fmtWhen(postAt)}` : `Batch ${b.n}: scheduled the Slack DM to Yuliia again for ${fmtWhen(postAt)}`);
       toast(`Batch ${b.n} rescheduled for ${fmtWhen(postAt)}`);
     }
     S.ui.edit[id] = false;
-  } catch (e) { await logIt("fail", `Batch ${b.n}: ${sendNow ? "sending" : "rescheduling"} the Slack DM failed; the message for ${fmtWhen(b.postAt)} is unchanged. ${errText(e, SLACK)}`); }
+  } catch (e) { await logIt("fail", `Batch ${b.n}: ${sendNow ? "sending" : "rescheduling"} the Slack DM failed; ${was ? `the message for ${was} is unchanged.` : "nothing new was sent."} ${errText(e, SLACK)}`); }
   delete S.running[id]; render();
 }
 async function publish(key){
@@ -519,15 +522,17 @@ function renderBatches(){
         + (failed ? ` <button class="btn sm" data-act="sendslack" data-b="${esc(b.id)}" ${busy ? "disabled" : ""}>${later ? "Schedule" : "Send"} Slack anyway</button>` : "")
         + ` <button class="btn ghost sm" data-act="preview" data-b="${esc(b.id)}">${S.ui.preview[b.id] ? "Hide message" : "Preview message"}</button>`
         + (S.ui.confirmDel === b.id ? ` <span class="confirm">Delete batch ${b.n}? <button class="btn sm" data-act="delyes" data-b="${esc(b.id)}">Delete</button><button class="btn ghost sm" data-act="delno">Keep</button></span>` : ` <button class="btn ghost sm" data-act="del" data-b="${esc(b.id)}">Delete</button>`);
-    } else if (b.postAt && b.postAt > Date.now()) {
+    } else if (!done) {
+      const upcoming = !!(b.postAt && b.postAt > Date.now());
       if (S.ui.edit[b.id]) {
-        when = `<div class="when"><input type="datetime-local" id="when-${esc(b.id)}" data-act="when" data-b="${esc(b.id)}" value="${esc(S.ui.when[b.id] || toLocalInput(new Date(b.postAt)))}" min="${esc(toLocalInput(new Date()))}" aria-label="New date and time for the Slack message"><span class="sub">your local time</span>
+        when = `<div class="when"><input type="datetime-local" id="when-${esc(b.id)}" data-act="when" data-b="${esc(b.id)}" value="${esc(S.ui.when[b.id] || (upcoming ? toLocalInput(new Date(b.postAt)) : defaultWhen()))}" min="${esc(toLocalInput(new Date()))}" aria-label="New date and time for the Slack message"><span class="sub">your local time</span>
           ${S.ui.whenErr[b.id] ? `<span class="chip bad">${esc(S.ui.whenErr[b.id])}</span>` : ""}</div>
-          <div class="sub">Slack doesn't let the dashboard change a scheduled message, so it schedules a new one. You'll then delete the old one in Slack.</div>`;
-        acts = `<button class="btn pri sm" data-act="resched" data-b="${esc(b.id)}" ${busy ? "disabled" : ""}>${busy ? "Saving…" : "Reschedule"}</button>`
-          + ` <button class="btn sm" data-act="sendnow" data-b="${esc(b.id)}" ${busy ? "disabled" : ""}>Send now instead</button>`
+          <div class="sub">${upcoming ? "Slack doesn't let the dashboard change a scheduled message, so it schedules a new one. You'll then delete the old one in Slack." : "The message to Yuliia was already sent. If you deleted it in Slack, schedule it again or send it now."}</div>`;
+        acts = `<button class="btn pri sm" data-act="resched" data-b="${esc(b.id)}" ${busy ? "disabled" : ""}>${busy ? "Saving…" : upcoming ? "Reschedule" : "Schedule"}</button>`
+          + ` <button class="btn sm" data-act="sendnow" data-b="${esc(b.id)}" ${busy ? "disabled" : ""}>${upcoming ? "Send now instead" : "Send now"}</button>`
           + ` <button class="btn ghost sm" data-act="editno" data-b="${esc(b.id)}">Cancel</button>`;
-      } else acts = `<button class="btn sm" data-act="edit" data-b="${esc(b.id)}">Change time</button>`;
+      } else acts = upcoming ? `<button class="btn sm" data-act="edit" data-b="${esc(b.id)}">Change time</button>`
+        : `<button class="btn sm" data-act="edit" data-b="${esc(b.id)}">Send again</button>`;
     }
     if (done) acts = `<button class="btn sm" data-act="archive" data-b="${esc(b.id)}">Archive</button>`;
     const stale = (b.stale || []).length ? `<div class="warn">In Slack, delete the old scheduled message${b.stale.length > 1 ? "s" : ""} for ${esc(b.stale.map(fmtWhen).join(" and "))}: open the DM with Yuliia Koreniuk, or go to Drafts &amp; sent → Scheduled. Otherwise she gets the message twice. <button class="btn sm" data-act="staleok" data-b="${esc(b.id)}">I deleted it</button></div>` : "";
