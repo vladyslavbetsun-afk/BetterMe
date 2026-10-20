@@ -339,11 +339,6 @@ function avgArticle(w){
 }
 function earnedOf(id){ return (S.earned || {})[id] || { n:0, lo:0, hi:0, unpriced:0, fees:0 }; }
 const MONTH = new Date().toLocaleDateString("en-US", { month:"long" });
-function fits(w, t){
-  if (!t || !t.cat) return true;
-  if (w.niche === "any" || w.niche === "both") return true;
-  return (t.cat === "fitness" && w.niche === "exercise") || (t.cat === "nutrition" && w.niche === "nutrition");
-}
 function loadOf(id){ const l = S.load[id] || {}; return { text:l.Text||0, review:l.Review||0, proof:l.Proofreading||0, total:l.Text||0 }; }
 
 /* ---------- Jira reads ---------- */
@@ -482,8 +477,9 @@ function renderQueue(){
 }
 // Compact assign controls shown under the picked ticket while the writers panel is hidden.
 function sortedWriters(t){
-  return [...WRITERS].map(w => ({ w, fit:fits(w, t), ld:loadOf(w.id) }))
-    .sort((a,b) => (b.fit - a.fit) || (a.ld.text - b.ld.text) || (a.ld.total - b.ld.total));
+  // Writers whose drafts go to an expert come first, then the lightest Text load. Topic never blocks an assignment.
+  return [...WRITERS].map(w => ({ w, ld:loadOf(w.id) }))
+    .sort((a,b) => (!!a.w.noReview - !!b.w.noReview) || (a.ld.text - b.ld.text));
 }
 function confirmBody(t, w){
   const isAuthor = t.author && t.author.id === w.id;
@@ -494,7 +490,7 @@ function confirmBody(t, w){
 function quickRow(t){
   const conf = S.confirm && S.confirm.key === t.key && BY_ID[S.confirm.wid];
   if (conf) return `<div class="quick"><div class="confirm" style="flex:1 1 100%">${confirmBody(t, conf)}</div></div>`;
-  const opts = sortedWriters(t).map(({ w, fit, ld }) => `<option value="${esc(w.id)}">${esc(w.name)}${fit ? "" : " (outside niche)"} · ${ld.total} in Text${priceFor(w, t) ? " · " + priceFor(w, t) : ""}</option>`).join("");
+  const opts = sortedWriters(t).map(({ w, ld }) => `<option value="${esc(w.id)}">${esc(w.name)}${w.noReview ? " (no expert review)" : ""} · ${ld.total} in Text${priceFor(w, t) ? " · " + priceFor(w, t) : ""}</option>`).join("");
   return `<div class="quick"><label for="qw-${esc(t.key)}" class="wc">Writer</label><select id="qw-${esc(t.key)}">${opts}</select><button class="btn primary sm" data-act="quick" data-k="${esc(t.key)}">Assign</button></div>`;
 }
 function renderMonth(){
@@ -504,7 +500,7 @@ function renderMonth(){
   return `<span class="big">${money(lo, hi)}</span><span class="lbl">earned by these writers in ${MONTH} · ${n} article${n === 1 ? "" : "s"} handed in (left Text this month), priced as word count × rate (or flat fee) plus the expert's review fee: +$50 for Carter Lee, Garett Reid and Angelica Galvan, +$20 for Maria</span>`;
 }
 function renderPicked(t){
-  if (!t) return `<div class="picked none">Pick an Open ticket on the left. The writers below then show the price for it and an Assign button. Writers whose topic fits the ticket come first.</div>`;
+  if (!t) return `<div class="picked none">Pick an Open ticket on the left. The writers below then show the price for it and an Assign button. Any writer can take any ticket.</div>`;
   const others = t.parts.filter(p => !(t.author && p.id === t.author.id));
   return `<div class="picked"><span class="lbl">Assigning</span>
     <span class="ttl">${esc(t.title)}</span>
@@ -513,8 +509,7 @@ function renderPicked(t){
       <button class="btn ghost sm" data-act="unpick">Clear</button></div></div>`;
 }
 function renderCards(t){
-  const ws = t ? sortedWriters(t) : WRITERS.map(w => ({ w, fit:true, ld:loadOf(w.id) }));
-  return ws.map(({ w, fit, ld }) => {
+  return sortedWriters(t).map(({ w, ld }) => {
     const n = nicheTag(w);
     const busy = t && S.busy[t.key];
     const price = t ? priceFor(w, t) : null;
@@ -526,13 +521,12 @@ function renderCards(t){
       foot = conf
         ? `<div class="confirm">${confirmBody(t, w)}</div>`
         : `<div class="card-foot"><span class="price ${price ? "" : "none"}" title="${w.noReview ? "No expert review" : "Includes the expert review fee"}">${price ? esc(price) + (w.noReview ? "" : `<span class="wc"> incl. expert</span>`) : esc(rateLabel(w))}</span>
-             ${busy === w.id ? `<span class="working">Assigning…</span>` : `<button class="btn ${fit ? "primary" : ""} sm" data-act="ask" data-w="${esc(w.id)}" ${busy ? "disabled" : ""}>Assign ${esc(t.key)}</button>`}</div>`;
+             ${busy === w.id ? `<span class="working">Assigning…</span>` : `<button class="btn primary sm" data-act="ask" data-w="${esc(w.id)}" ${busy ? "disabled" : ""}>Assign ${esc(t.key)}</button>`}</div>`;
     }
-    return `<div class="card ${t && !fit ? "dim" : ""}">
+    return `<div class="card">
       <div class="card-top"><span class="name">${esc(w.name)}</span><span class="load">${S.at ? ld.total : "–"}<small>in Text</small></span></div>
       <div class="card-meta"><span class="pill ${n.cls}">${esc(n.label)}</span><span class="rate">${esc(rateLabel(w))}</span></div>
       ${w.noReview ? `<span class="noreview">✓ no expert review needed</span>` : ""}
-      ${t && !fit ? `<span class="pill">Topic outside their niche</span>` : ""}
       <div class="chips">${chips}</div>
       <div class="stats">
         <div class="stat"><span class="k">Per article</span><span class="v">${esc(avgArticle(w) || "—")}</span><span class="s">${w.noReview ? "" : "incl. expert · "}${w.rateType === "article" ? "flat fee" : "average"}</span></div>
