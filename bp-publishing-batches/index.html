@@ -159,6 +159,7 @@ section.panel.tray{border-color:var(--accent)}
       <section class="panel" id="sec-live"><div class="ph"><h2>Live, move to Published</h2><span class="cnt" id="c-live"></span></div><div class="pb" id="b-live"></div></section>
       <section class="panel tray" id="sec-tray"><div class="ph"><h2>New batch</h2><span class="cnt" id="c-tray"></span></div><div class="pb" id="b-tray"></div></section>
       <section class="panel" id="sec-batches"><div class="ph"><h2>Batches</h2><span class="cnt" id="c-batches"></span></div><div class="pb" id="b-batches"></div></section>
+      <section class="panel" id="sec-arch"><div class="ph"><h2><button class="fold" data-act="archfold" aria-controls="b-arch" id="f-arch"><span class="chev" aria-hidden="true"></span>Archive</button></h2><span class="cnt" id="c-arch"></span></div><div class="pb" id="b-arch"></div></section>
       <section class="panel" id="sec-log"><div class="ph"><h2>Action log</h2><span class="cnt" id="c-log"></span><span class="sp" id="logtools"></span></div><div class="pb" id="b-log"></div></section>
     </div>
   </div>
@@ -190,6 +191,7 @@ const S = {
   readyKeys: [],
   batches: {}, log: [],
   sel: [], q: "",
+  archOpen: lsGet("pb.arch") === "1", archLoading: false,
   show: lsGet("pb.show") || "both", folded: (() => { try { return JSON.parse(lsGet("pb.folded") || "{}") || {}; } catch { return {}; } })(),
   running: {}, ui: { preview:{}, confirmDel:null, confirmClear:false, clearing:false, mode:{}, when:{}, whenErr:{}, edit:{} }
 };
@@ -303,6 +305,7 @@ async function loadJira(){
   } catch (e) { S.jira.error = e; }
   S.jira.loading = false; render();
   await loadBatchTickets(true);
+  if (S.archOpen) await loadArchiveTickets();
 }
 // tickets in open batches are tracked even after they leave Ready (or fall outside "My tickets")
 async function loadBatchTickets(force){
@@ -315,6 +318,20 @@ async function loadBatchTickets(force){
     issues.forEach(i => { S.tickets[i.key] = analyze(i); });
   } catch {}
   loadBatchTickets.busy = false; render();
+}
+// archived batches load their tickets only when the Archive is opened
+async function loadArchiveTickets(){
+  if (!S.mcp || S.archLoading) return;
+  const keys = [...new Set(batchList().filter(b => b.archived).flatMap(b => b.keys))].filter(k => !S.tickets[k]);
+  if (!keys.length) return;
+  S.archLoading = true; render();
+  try {
+    for (let i = 0; i < keys.length; i += 50) {
+      const issues = await searchAll(`key in (${keys.slice(i, i+50).join(",")})`, 1);
+      issues.forEach(x => { S.tickets[x.key] = analyze(x); });
+    }
+  } catch {}
+  S.archLoading = false; render();
 }
 async function reloadKeys(keys){
   try { const issues = await searchAll(`key in (${keys.join(",")})`, 1); issues.forEach(i => { const t = analyze(i); S.tickets[t.key] = t; if (t.status !== "Ready") S.readyKeys = S.readyKeys.filter(k => k !== t.key); }); } catch {}
@@ -502,6 +519,25 @@ function batchTicket(b, k){
   const failed = (b.partsFailed || []).includes(k) ? `<span class="chip bad">Participant not added</span>` : "";
   return `<li>${keyLink(t)}<span class="t">${esc(t.title)}</span>${t.status !== "Ready" && t.status !== "Published" ? `<span class="chip">${esc(t.status)}</span>` : ""}${failed}${state}</li>`;
 }
+function renderArchive(list){
+  if (!list.length) return `<div class="empty">Archived batches are kept here. Archive a batch once all its tickets are published.</div>`;
+  return (S.archLoading ? `<div class="loading">Loading archived tickets from Jira…</div>` : "") + list.map(b => {
+    const pub = b.keys.filter(k => S.tickets[k] && S.tickets[k].status === "Published").length;
+    const dates = [b.sentAt && `sent ${new Date(b.postAt || b.sentAt).toLocaleDateString([], { day:"numeric", month:"short", year:"numeric" })}`, b.archivedAt && `archived ${new Date(b.archivedAt).toLocaleDateString([], { day:"numeric", month:"short", year:"numeric" })}`].filter(Boolean).join(" · ");
+    return `<div class="batch">
+      <div class="bh"><strong>Batch ${esc(b.n)}</strong><span class="chip ${pub === b.keys.length ? "ok" : ""}">${pub}/${b.keys.length} published</span><span class="sub">${esc(dates)}</span>
+        <button class="btn ghost sm" data-act="unarchive" data-b="${esc(b.id)}">Restore</button></div>
+      <ul class="bl">${b.keys.map(k => {
+        const t = S.tickets[k];
+        const title = t ? esc(t.title) : `<span class="sub">${S.archLoading ? "Loading…" : "Not loaded"}</span>`;
+        const state = !t ? "" : t.status === "Published"
+          ? (t.live ? `<a class="chip ok pub" href="${esc(t.live.url)}" target="_blank" rel="noopener" title="Open the live article: ${esc(t.live.url)}">Published ↗</a>` : `<span class="chip ok">Published</span>`)
+          : `<span class="chip">${esc(t.status)}</span>`;
+        return `<li><a class="key" href="${SITE}/browse/${esc(k)}" target="_blank" rel="noopener">${esc(k)}</a><span class="t">${title}</span>${state}</li>`;
+      }).join("")}</ul>
+    </div>`;
+  }).join("");
+}
 function renderBatches(){
   const list = batchList().filter(b => !b.archived);
   if (!list.length) return `<div class="empty">No batches yet. Tick up to ${BATCH} Ready tickets and click Create batch.</div>`;
@@ -608,6 +644,12 @@ function render(){
   $("b-img").innerHTML = renderList(withImg, S.q ? "No tickets match the filter." : "No Ready tickets have an image link from Oksana or Karina yet.");
   $("b-noimg").innerHTML = renderList(noImg, S.q ? "No tickets match the filter." : "Every Ready ticket has images.");
   $("b-tray").innerHTML = renderTray(); $("b-batches").innerHTML = renderBatches();
+  const arch = batchList().filter(b => b.archived).sort((a,b) => (b.archivedAt||0) - (a.archivedAt||0) || (b.n||0) - (a.n||0));
+  $("c-arch").textContent = arch.length;
+  $("f-arch").setAttribute("aria-expanded", S.archOpen);
+  $("b-arch").hidden = !S.archOpen;
+  $("sec-arch").querySelector(".ph").classList.toggle("closed", !S.archOpen);
+  if (S.archOpen) $("b-arch").innerHTML = renderArchive(arch);
   $("b-live").innerHTML = renderLive(live); $("b-log").innerHTML = renderLog(); $("logtools").innerHTML = renderLogTools();
 }
 
@@ -642,7 +684,9 @@ document.addEventListener("click", async ev => {
     case "del": S.ui.confirmDel = id; render(); break;
     case "delno": S.ui.confirmDel = null; render(); break;
     case "delyes": { const bt = S.batches[id]; S.ui.confirmDel = null; delete S.batches[id]; render(); await dbDel("batches/"+id); if (bt) await logIt("batch", `Batch ${bt.n} deleted`); break; }
-    case "archive": { const bt = S.batches[id]; if (bt) await saveBatch({ ...bt, archived: true }); break; }
+    case "archive": { const bt = S.batches[id]; if (bt) { await saveBatch({ ...bt, archived: true, archivedAt: Date.now() }); await logIt("batch", `Batch ${bt.n} archived`); } break; }
+    case "unarchive": { const bt = S.batches[id]; if (bt) { await saveBatch({ ...bt, archived: false }); await logIt("batch", `Batch ${bt.n} restored from the archive`); } break; }
+    case "archfold": S.archOpen = !S.archOpen; lsSet("pb.arch", S.archOpen ? "1" : "0"); render(); if (S.archOpen) loadArchiveTickets(); break;
     case "publish": await publish(key); break;
     case "clear": S.ui.confirmClear = true; render(); break;
     case "clearno": S.ui.confirmClear = false; render(); break;

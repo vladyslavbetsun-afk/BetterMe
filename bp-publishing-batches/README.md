@@ -10,6 +10,6 @@ What it does:
 - Tick up to 4 tickets and create a batch. "Add Yuliia & send Slack" adds Yuliia Koreniuk to Request participants on each ticket, then DMs her "Hi. Here are articles for publishing:" with a bullet list of the ticket links. Choose "Send now" or "Schedule" to have Slack deliver the DM at a set date and time (your local time, 3 minutes to 120 days ahead). "Change time" on a scheduled batch schedules a new message (or sends it now) and reminds you to delete the old scheduled one in Slack, since the Slack connector cannot edit or cancel scheduled messages.
 - When Yuliia posts the live article link (betterme.world) in a ticket's comments, the ticket gets a "Move to Published" button.
 
-Batches and the action log are kept in the artifact's database.
+Batches, the archive and the action log are kept in the artifact's database. Archived batches stay listed in the collapsible Archive panel (with live article links) and can be restored.
 
 To update the page, edit `index.html` and republish it to the same artifact URL.
