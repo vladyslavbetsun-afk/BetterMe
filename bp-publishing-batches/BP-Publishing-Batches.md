@@ -1,0 +1,856 @@
+# BP Publishing Batches — full instructions
+
+A dashboard for moving BetterMe Blog Project (BP) Jira tickets from **Ready** to **Published**: pick Ready tickets, group them into batches of 4, hand each batch to Yuliia Koreniuk (Jira + Slack), and move each ticket to Published once her live article link appears.
+
+- Live page: https://claude.ai/artifact/CKoawJVQ14TN4s9GyRu7qN (private to its owner, Vladyslav Betsun)
+- Source: `bp-publishing-batches/index.html` in the `vladyslavbetsun-afk/BetterMe` repo (full copy at the end of this file)
+- Sister dashboard: BP Review Flow (`bp-review-flow/`), same connectors and look
+
+---
+
+## 1. What the dashboard does
+
+### 1.1 Ready tickets, split by images
+- Loads every BP ticket in status **Ready** (JQL `project = BP AND status = "Ready" ORDER BY updated DESC`), paged 50 at a time, up to 200.
+- Scope switch in the header: **All BP** (default) or **My tickets** (adds `customfield_11709 = currentUser()`, the Managers field).
+- Two lists:
+  - **Ready · with images** — a ticket has images when **Oksana Pidlisna** or **Karina Sorvachova** posted a link in its comments (any link except Google Docs documents, Jira links and betterme.world links). In practice these are `drive.google.com/file/...` links.
+  - **Ready · no images yet** — everything else.
+- Each ticket row shows: key (links to Jira), title, **Doc** link (the latest `docs.google.com/document/...` link found in any comment; "latest of N" if there are several; a warning chip if none), image links ("Image 1", "Image 2"… with who added them on hover), and a chip when Yuliia is already a Request participant.
+- Tickets already in an open batch, or that already have a live link, are left out of these two lists.
+- List controls:
+  - Search box filters both lists by key or title.
+  - **Both / With images / No images** switch shows one list or both.
+  - Click a list title to collapse or expand it.
+  - The switch, the collapsed state and the scope are remembered in the browser (`localStorage` keys `pb.scope`, `pb.show`, `pb.folded`).
+
+### 1.2 Building a batch
+- Tick up to **4** tickets (checkboxes disable at 4). They appear in the **New batch** tray as numbered slots; × removes one, **Clear** empties the tray.
+- **Create batch** saves the batch (a batch of fewer than 4 is allowed, with a note that batches are usually 4). Batches are numbered 1, 2, 3… and saved in the page's database.
+
+### 1.3 Handing a batch to Yuliia
+Each unsent batch has:
+- **Send now / Schedule** switch. Schedule shows a date-time picker (your local time), defaulting to the next weekday at 09:00. Slack accepts 3 minutes to 120 days ahead; outside that the page shows an error and sends nothing.
+- **Add Yuliia & send Slack** (or **Add Yuliia & schedule Slack**):
+  1. For each ticket, re-reads the current Request participants (`customfield_11208`) and adds Yuliia Koreniuk, keeping everyone already there. Skips tickets where she's already a participant.
+  2. If any ticket fails, the Slack message is **not** sent; the batch shows which tickets failed, with **Retry** and **Send Slack anyway** (or **Schedule Slack anyway**).
+  3. Sends (or schedules) a Slack DM to Yuliia:
+     ```
+     Hi. Here are articles for publishing:
+     - [BP-962 somatic pilates benefits, 15k](https://newsiteam.atlassian.net/browse/BP-962)
+     - [BP-1077 standing hip flexor stretch, 10k](https://newsiteam.atlassian.net/browse/BP-1077)
+     - …
+     ```
+     One bullet per ticket: key + full Jira title, linked to the ticket. Sent from your own Slack account.
+- **Preview message** shows the exact Slack text first.
+- **Delete** (with an in-page confirm) removes an unsent batch.
+
+### 1.4 After sending
+- Scheduled batch chip: "Slack scheduled for Thu, Oct 15, 09:00 · 0/4 published". Sent batch chip: "Sent 2h ago · 1/4 published".
+- **Change time** (scheduled, not yet delivered): pick a new time → **Reschedule**, or **Send now instead**. The Slack connector cannot edit or cancel a scheduled message, so the page schedules a new one and shows a yellow reminder: *"In Slack, delete the old scheduled message for … (DM with Yuliia, or Drafts & sent → Scheduled)"* with an **I deleted it** button.
+- **Send again** (already delivered): for when a message was sent by mistake and deleted in Slack. Opens the same picker → **Schedule** or **Send now**. No delete reminder, and Yuliia is not re-added to participants.
+- Each ticket in a sent batch shows "Waiting for live link" until Yuliia posts one.
+
+### 1.5 Live link → Published
+- Live link = the latest `betterme.world` URL in a comment by **Yuliia Koreniuk** (if she posted no betterme.world link, her latest other non-Google link).
+- Any Ready or batched ticket with a live link appears in **Live, move to Published** (and inside its batch) with the link and a **Move to Published** button.
+- Move to Published reads the ticket's available transitions and uses the one whose target status is "Published" (transition id 51 from Ready).
+- Published tickets show **Published ↗**; clicking it opens the live article in a new tab. Without a live link the chip is plain text.
+
+### 1.6 Archive
+- When every ticket in a batch is Published, the batch gets an **Archive** button.
+- Archived batches move to the collapsible **Archive** panel (collapsed by default, remembered in `localStorage` key `pb.arch`). Their tickets load from Jira when you open it.
+- Each archived batch shows: number, published count, sent date, archive date, every ticket with Jira link and **Published ↗** live link, and a **Restore** button.
+
+### 1.7 Count tiles (top of page)
+Ready with images · Ready, no images · Batches not sent · Batches sent or scheduled · Live, to publish. Clicking a tile jumps to (and opens) its section.
+
+### 1.8 Action log
+- Every Jira change, Slack send/schedule/reschedule, batch create/delete/archive/restore and every failure (with the connector's reason) is logged with a timestamp.
+- **Clear** → in-page confirm "Clear all N entries?" → **Clear log**. Only log entries are removed.
+
+### 1.9 Refresh
+Loads on open, every 10 minutes while the tab is visible, and on **Refresh**.
+
+---
+
+## 2. Fixed IDs and rules
+
+| What | Value |
+|---|---|
+| Jira site | `https://newsiteam.atlassian.net`, cloudId `657e24cd-f643-4482-aba5-7e848607df28` |
+| Project | `BP` |
+| Request participants field | `customfield_11208` |
+| Managers field (My tickets) | `customfield_11709` |
+| Ready → Published transition | id `51` ("to published"), target status "Published" (id 11045). The page looks it up by name each time. |
+| Vladyslav Betsun (owner) | Jira `712020:0d312ff6-23a7-4fa4-b5a1-b57be36d9f75` |
+| Oksana Pidlisna (images) | Jira `712020:7cf474f8-6ae6-439f-8d54-f6a1e3143066` |
+| Karina Sorvachova (images) | Jira `712020:3584bb79-f831-407e-a40a-02e8084953d5` |
+| Yuliia Koreniuk (publisher) | Jira `712020:b345726f-fe25-4239-a7dc-7322d7dbc2ae`, Slack `U0AHVPJ0QKA` |
+| Batch size | 4 |
+| Doc link pattern | `^https://docs.google.com/document/` |
+| Live link pattern | `^https?://(www.)?betterme.world/` |
+
+---
+
+## 3. How it's built
+
+- A single HTML page published as a claude.ai **artifact** (no server). It calls your claude.ai connectors as you, so it only works when you open it in claude.ai while signed in.
+- **Capabilities declared at publish:**
+  ```json
+  {
+    "mcp": { "servers": [
+      { "server": "Atlassian", "tools": ["atlassianUserInfo","searchJiraIssuesUsingJql","getJiraIssue","editJiraIssue","getTransitionsForJiraIssue","transitionJiraIssue"] },
+      { "server": "Slack", "tools": ["slack_send_message","slack_schedule_message"] }
+    ]},
+    "db": {}
+  }
+  ```
+- **Database** (artifact `db`, kept across republishes):
+  - `batches/{id}` — `{ id, n, keys[], createdAt, partsFailed[], sentAt, postAt, stale[], archived, archivedAt }`
+    - `sentAt` is when you clicked send or schedule.
+    - `postAt` is the scheduled delivery time (null when sent immediately).
+    - `stale` lists old scheduled times still to delete in Slack.
+  - `log/{auto}` — `{ at, kind, text }`, where kind is `batch` / `jira` / `slack` / `fail`.
+- **Look:** Bricolage Grotesque (headings), Public Sans (body), JetBrains Mono (keys/counts); light and dark themes; works at phone width.
+
+---
+
+## 4. Setup and troubleshooting
+
+1. Connect **Atlassian** (choose the **newsiteam** site, approve Jira read+write) and **Slack** at https://claude.ai/customize/connectors.
+2. Open the page. If claude.ai asks, allow Atlassian and Slack for the page (or use the page's **Permissions** button).
+3. **Jira 403 "The app is not installed on this instance"**: the Atlassian authorization lost its Jira scopes. Disconnect and reconnect Atlassian, pick newsiteam, approve Jira. If it persists, a newsiteam Jira admin must allow/reinstall the Atlassian MCP app. The same error on adding Request participants means field edits are blocked: add Yuliia by hand in Jira, then **Retry** (already-added tickets are skipped).
+4. **Scheduled Slack messages** can't be edited or cancelled by the page. Manage them in Slack under **Drafts & sent → Scheduled**.
+
+---
+
+## 5. Updating the page
+
+Edit `bp-publishing-batches/index.html` and republish it to the same artifact URL, keeping the capabilities above, so batches and the log are kept. Or give this file to Claude and ask for a change.
+
+---
+
+## 6. Full source (`index.html`)
+
+````html
+<title>BP Publishing Batches</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: a publishing desk. Sticky control bar, count strip, Ready tickets split by images (left) beside the batch tray, sent batches and log (right). */
+:root{
+  --bg:#f3f5f7; --surface:#ffffff; --sunk:#e9edf1; --line:#d5dce3; --fg:#17212b; --muted:#5b6876;
+  --accent:#1d5c8f; --accent-fg:#ffffff; --accent-soft:#dfeaf4;
+  --ok:#1f7a4d; --ok-soft:#dcefe4; --warn:#9a5b00; --warn-soft:#fbecd2; --bad:#b3261e; --bad-soft:#f8dedb;
+  --violet:#5b3fa6; --violet-soft:#e8e2f6;
+  --f-display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body:"Public Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono:"JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --r:8px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#11161c; --surface:#19212a; --sunk:#141b22; --line:#2b3643; --fg:#e4e9ee; --muted:#93a1b0;
+  --accent:#6aa8dc; --accent-fg:#0b1620; --accent-soft:#1d3346;
+  --ok:#5cc58f; --ok-soft:#173527; --warn:#e5a54a; --warn-soft:#3a2a12; --bad:#ef7d74; --bad-soft:#3d1c1a;
+  --violet:#ab95ec; --violet-soft:#2b2343; color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --bg:#11161c; --surface:#19212a; --sunk:#141b22; --line:#2b3643; --fg:#e4e9ee; --muted:#93a1b0;
+  --accent:#6aa8dc; --accent-fg:#0b1620; --accent-soft:#1d3346;
+  --ok:#5cc58f; --ok-soft:#173527; --warn:#e5a54a; --warn-soft:#3a2a12; --bad:#ef7d74; --bad-soft:#3d1c1a;
+  --violet:#ab95ec; --violet-soft:#2b2343; color-scheme:dark;}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:14px;line-height:1.45}
+a{color:var(--accent)}
+button,select,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.wrap{max-width:1360px;margin:0 auto;padding-inline:16px;padding-block:0 48px}
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+.topin{max-width:1360px;margin:0 auto;padding:10px 16px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px}
+.brand{font-family:var(--f-display);font-weight:700;font-size:20px;letter-spacing:-.01em;margin-right:auto;display:flex;align-items:baseline;gap:8px}
+.brand small{font-family:var(--f-mono);font-size:11px;font-weight:500;color:var(--muted);letter-spacing:.04em}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--surface)}
+.seg button{border:0;background:none;padding:5px 12px;cursor:pointer;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-fg)}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:5px 10px;cursor:pointer;white-space:nowrap}
+.btn:hover:not(:disabled){border-color:var(--accent)}
+.btn:disabled{opacity:.5;cursor:default}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.btn.go{background:var(--ok);border-color:var(--ok);color:var(--surface)}
+.btn.sm{padding:2px 8px;font-size:12.5px}
+.btn.ghost{border-color:transparent;background:none;color:var(--muted)}
+.status{font-size:12.5px;color:var(--muted)}
+.status b{color:var(--fg);font-weight:600}
+.tiles{margin-top:14px;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:2px;min-width:0}
+.tile:hover{border-color:var(--accent)}
+.tile .n{font-family:var(--f-display);font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1}
+.tile .l{font-size:12px;color:var(--muted)}
+.tile.hot .n{color:var(--ok)}
+.tile.alarm .n{color:var(--warn)}
+.grid{margin-top:18px;display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:18px;align-items:start}
+.col{display:flex;flex-direction:column;gap:18px;min-width:0}
+section.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);min-width:0}
+section.panel.tray{border-color:var(--accent)}
+.ph{display:flex;align-items:baseline;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.ph h2{font-family:var(--f-display);font-size:16px;font-weight:700;margin:0;letter-spacing:-.005em;text-wrap:balance}
+.ph .cnt{font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.ph .sp{margin-left:auto;display:flex;gap:8px;align-items:center}
+.bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin-bottom:-6px}
+.bar input[type=search]{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:5px 10px;font-size:13px;width:240px;max-width:100%;flex:0 1 auto}
+.fold{display:inline-flex;align-items:center;gap:8px;border:0;background:none;padding:0;cursor:pointer;text-align:left;color:var(--fg);font:inherit;letter-spacing:inherit}
+.fold:hover{color:var(--accent)}
+.chev{width:8px;height:8px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg);margin:0 3px 3px 1px;transition:transform .15s}
+.fold[aria-expanded="false"] .chev{transform:rotate(-45deg);margin:0 3px 0 0}
+@media (prefers-reduced-motion:reduce){.chev{transition:none}}
+.ph.closed{border-bottom:0}
+.pb{padding:4px 14px 12px}
+.empty{color:var(--muted);padding:14px 0 6px;font-size:13px}
+.err{background:var(--bad-soft);color:var(--bad);border-radius:6px;padding:8px 10px;margin:10px 0;font-size:13px}
+.err .btn{margin-left:6px}
+.loading{color:var(--muted);padding:14px 0 6px;font-size:13px}
+.loading::before{content:"";display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:8px;background:var(--accent);animation:pulse 1s infinite alternate}
+@keyframes pulse{from{opacity:.25}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){.loading::before{animation:none}}
+.tk{border-top:1px solid var(--line);padding:10px 0;display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 10px;align-items:start}
+.tk:first-child{border-top:0}
+.tk input[type=checkbox]{margin:3px 0 0;width:16px;height:16px;cursor:pointer}
+.tk input[type=checkbox]:disabled{cursor:default}
+.tk.sel{background:var(--accent-soft);margin-inline:-14px;padding-inline:14px}
+.tk .main{display:flex;flex-direction:column;gap:5px;min-width:0}
+.row{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;min-width:0}
+.key{font-family:var(--f-mono);font-size:12.5px;font-weight:500;text-decoration:none;background:var(--accent-soft);color:var(--accent);padding:1px 6px;border-radius:4px;white-space:nowrap}
+.title{font-weight:600;min-width:0;overflow-wrap:anywhere}
+.links{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12.5px}
+.links a{white-space:nowrap}
+.links .lbl{color:var(--muted)}
+.chip{font-size:11.5px;padding:1px 7px;border-radius:999px;background:var(--sunk);color:var(--muted);white-space:nowrap;letter-spacing:.01em}
+.chip.ok{background:var(--ok-soft);color:var(--ok);font-weight:600}
+.chip.pub{text-decoration:none;cursor:pointer;border:1px solid transparent}
+.chip.pub:hover{border-color:var(--ok);text-decoration:underline}
+.chip.warn{background:var(--warn-soft);color:var(--warn)}
+.chip.bad{background:var(--bad-soft);color:var(--bad)}
+.chip.vi{background:var(--violet-soft);color:var(--violet)}
+.chip.ac{background:var(--accent-soft);color:var(--accent)}
+.sub{font-size:12px;color:var(--muted)}
+.slots{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.slots li{display:flex;align-items:center;gap:8px;min-width:0;font-size:13px;border:1px dashed var(--line);border-radius:6px;padding:6px 8px}
+.slots li.full{border-style:solid;background:var(--sunk)}
+.slots li .t{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.slots li .num{font-family:var(--f-mono);font-size:11px;color:var(--muted);width:14px}
+.x{border:0;background:none;color:var(--muted);cursor:pointer;font-size:15px;line-height:1;padding:0 4px}
+.x:hover{color:var(--bad)}
+.acts{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px}
+.batch{border-top:1px solid var(--line);padding:12px 0;display:flex;flex-direction:column;gap:8px}
+.batch:first-child{border-top:0}
+.bh{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}
+.bh strong{font-family:var(--f-display);font-size:15px}
+.bl{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.bl li{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;font-size:13px;min-width:0}
+.bl li .t{min-width:0;overflow-wrap:anywhere;flex:1 1 180px}
+.preview{background:var(--sunk);border:1px solid var(--line);border-radius:6px;padding:10px;font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere}
+.when{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}
+.when input{background:var(--sunk);border:1px solid var(--line);border-radius:6px;padding:3px 6px;font-size:13px;max-width:100%}
+.warn{font-size:12.5px;color:var(--warn);background:var(--warn-soft);padding:6px 8px;border-radius:6px;display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}
+.confirm{display:inline-flex;gap:6px;align-items:center;font-size:12.5px}
+.live{border-top:1px solid var(--line);padding:10px 0;display:flex;flex-direction:column;gap:5px}
+.live:first-child{border-top:0}
+.log{list-style:none;margin:0;padding:0;max-height:420px;overflow-y:auto}
+.log li{border-top:1px solid var(--line);padding:7px 0;font-size:12.5px;display:grid;grid-template-columns:auto 1fr;gap:2px 8px}
+.log li:first-child{border-top:0}
+.log time{font-family:var(--f-mono);font-size:11px;color:var(--muted);white-space:nowrap;padding-top:1px}
+.log li.fail{color:var(--bad)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:8px 14px;border-radius:6px;font-size:13px;z-index:10;max-width:calc(100% - 32px)}
+@media (max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}.tiles{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:520px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.brand{font-size:18px}.bar input[type=search]{width:100%}}
+</style>
+
+<header class="top"><div class="topin">
+  <div class="brand">BP Publishing Batches <small>NEWSITEAM · READY → PUBLISHED</small></div>
+  <div class="seg" role="group" aria-label="Ticket scope">
+    <button id="scope-all" data-act="scope" data-v="all">All BP</button>
+    <button id="scope-mine" data-act="scope" data-v="mine">My tickets</button>
+  </div>
+  <button class="btn" id="refresh" data-act="refresh">Refresh</button>
+  <span class="status" id="status">Starting…</span>
+</div></header>
+
+<div class="wrap">
+  <div class="tiles" id="tiles"></div>
+  <div id="pageerr"></div>
+  <div class="grid">
+    <div class="col">
+      <div class="bar">
+        <input type="search" id="q" placeholder="Filter by key or title" aria-label="Filter Ready tickets by key or title">
+        <div class="seg" role="group" aria-label="Which Ready lists to show">
+          <button data-act="show" data-v="both" id="show-both">Both</button>
+          <button data-act="show" data-v="img" id="show-img">With images</button>
+          <button data-act="show" data-v="noimg" id="show-noimg">No images</button>
+        </div>
+      </div>
+      <section class="panel" id="sec-img"><div class="ph"><h2><button class="fold" data-act="fold" data-v="img" aria-controls="b-img" id="f-img"><span class="chev" aria-hidden="true"></span>Ready · with images</button></h2><span class="cnt" id="c-img"></span></div><div class="pb" id="b-img"></div></section>
+      <section class="panel" id="sec-noimg"><div class="ph"><h2><button class="fold" data-act="fold" data-v="noimg" aria-controls="b-noimg" id="f-noimg"><span class="chev" aria-hidden="true"></span>Ready · no images yet</button></h2><span class="cnt" id="c-noimg"></span></div><div class="pb" id="b-noimg"></div></section>
+    </div>
+    <div class="col">
+      <section class="panel" id="sec-live"><div class="ph"><h2>Live, move to Published</h2><span class="cnt" id="c-live"></span></div><div class="pb" id="b-live"></div></section>
+      <section class="panel tray" id="sec-tray"><div class="ph"><h2>New batch</h2><span class="cnt" id="c-tray"></span></div><div class="pb" id="b-tray"></div></section>
+      <section class="panel" id="sec-batches"><div class="ph"><h2>Batches</h2><span class="cnt" id="c-batches"></span></div><div class="pb" id="b-batches"></div></section>
+      <section class="panel" id="sec-arch"><div class="ph"><h2><button class="fold" data-act="archfold" aria-controls="b-arch" id="f-arch"><span class="chev" aria-hidden="true"></span>Archive</button></h2><span class="cnt" id="c-arch"></span></div><div class="pb" id="b-arch"></div></section>
+      <section class="panel" id="sec-log"><div class="ph"><h2>Action log</h2><span class="cnt" id="c-log"></span><span class="sp" id="logtools"></span></div><div class="pb" id="b-log"></div></section>
+    </div>
+  </div>
+</div>
+<div id="toast" class="toast" hidden></div>
+
+<script>
+"use strict";
+/* ---------- constants ---------- */
+const CLOUD = "657e24cd-f643-4482-aba5-7e848607df28";
+const SITE = "https://newsiteam.atlassian.net";
+const JIRA = "Atlassian", SLACK = "Slack";
+const F = { parts:"customfield_11208", mgr:"customfield_11709" };
+// image links count only when Oksana Pidlisna or Karina Sorvachova posts them
+const IMAGE_BY = new Set(["712020:7cf474f8-6ae6-439f-8d54-f6a1e3143066","712020:3584bb79-f831-407e-a40a-02e8084953d5"]);
+const VLAD = "712020:0d312ff6-23a7-4fa4-b5a1-b57be36d9f75";
+const YULIIA = { id:"712020:b345726f-fe25-4239-a7dc-7322d7dbc2ae", name:"Yuliia Koreniuk", slack:"U0AHVPJ0QKA" };
+const BATCH = 4;
+const FIELDS = ["summary","status","comment","updated",F.parts,F.mgr];
+const DOC_RE = /^https:\/\/docs\.google\.com\/document\//i;
+const LIVE_RE = /^https?:\/\/(www\.)?betterme\.world\//i;
+
+/* ---------- state ---------- */
+const S = {
+  scope: lsGet("pb.scope") || "all",
+  me: VLAD, mcp: null, db: null,
+  jira: { loading:false, error:null, at:null },
+  tickets: {},           // key -> analyzed ticket (Ready list and batch tickets)
+  readyKeys: [],
+  batches: {}, log: [],
+  sel: [], q: "",
+  archOpen: lsGet("pb.arch") === "1", archLoading: false,
+  show: lsGet("pb.show") || "both", folded: (() => { try { return JSON.parse(lsGet("pb.folded") || "{}") || {}; } catch { return {}; } })(),
+  running: {}, ui: { preview:{}, confirmDel:null, confirmClear:false, clearing:false, mode:{}, when:{}, whenErr:{}, edit:{} }
+};
+
+/* ---------- utils ---------- */
+function lsGet(k){ try { return localStorage.getItem(k); } catch { return null; } }
+function lsSet(k,v){ try { localStorage.setItem(k,v); } catch {} }
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const $ = id => document.getElementById(id);
+const parseT = s => s ? Date.parse(String(s).replace(/([+-]\d\d)(\d\d)$/, "$1:$2")) : NaN;
+const DAY = 864e5;
+function ago(t){ if(!t) return "—"; const d = Date.now()-t; if(d<36e5) return Math.max(1,Math.round(d/6e4))+"m ago"; if(d<DAY) return Math.round(d/36e5)+"h ago"; return Math.floor(d/DAY)+"d ago"; }
+function toast(msg){ const t=$("toast"); t.textContent=msg; t.hidden=false; clearTimeout(toast._t); toast._t=setTimeout(()=>t.hidden=true,4000); }
+function payloadOf(res){ let p = res && res.payload; if (typeof p === "string") { try { p = JSON.parse(p); } catch {} } return p; }
+const last = a => a[a.length-1];
+// every URL in a comment body: smartlinks, markdown links and bare links
+function urlsIn(body){
+  const s = String(body||"").replace(/<custom[^>]*>([\s\S]*?)<\/custom>/g," $1 ");
+  const out = [];
+  for (const m of s.matchAll(/https?:\/\/[^\s<>"'\])|]+/g)) { const u = m[0].replace(/[.,;:!?)]+$/,""); if (!out.includes(u)) out.push(u); }
+  return out;
+}
+
+/* ---------- connector calls ---------- */
+async function call(server, tool, input, ms=80000){
+  if (!S.mcp) throw { code:"not_granted", server, message:"Connectors are not available on this view." };
+  const opt = { cache:false };
+  try { opt.signal = AbortSignal.timeout(ms); } catch {}
+  return payloadOf(await S.mcp.callTool(server, tool, input, opt));
+}
+function errText(e, server){
+  const s = (e && e.server) || server || "the connector";
+  const m = (e && e.message) || String(e);
+  switch (e && e.code) {
+    case "needs_reauth": return `Reconnect ${s} in claude.ai Settings → Connectors, then click Refresh.`;
+    case "server_not_connected": return `Add ${s} in claude.ai Settings → Connectors, then click Refresh.`;
+    case "selection_required": return `Choose which ${s} connector this page should use when claude.ai asks, then click Refresh.`;
+    case "not_in_manifest": return `${s} isn't allowed for this page. Allow it from the page's Permissions menu.`;
+    case "blocked_by_policy": return `Your organization blocks this ${s} action.`;
+    case "cancelled": return `${s} took too long and the request was stopped. Try again.`;
+    case "not_granted": case "capability_disabled": case "capability_removed": return `Connectors aren't available in this view. Open the dashboard in claude.ai while signed in.`;
+    case "tool_error":
+      if (/not installed on this instance/i.test(m) && s===JIRA) return `Jira refused to change Request participants (403: "The app is not installed on this instance"). Add Yuliia Koreniuk to Request participants in Jira by hand, then click Retry; tickets where she's already a participant are skipped.`;
+      return `${s} reported: ${m}`;
+    default: return `${s}: ${m}`;
+  }
+}
+
+/* ---------- db ---------- */
+async function dbSet(path, data){ if(!S.db){ return; } try { await S.db.doc(path).set(data); } catch(e){ toast("Couldn't save: "+(e.message||e.code)); } }
+async function dbDel(path){ if(!S.db) return; try { await S.db.doc(path).delete(); } catch(e){ toast("Couldn't save: "+(e.message||e.code)); } }
+async function logIt(kind, text){
+  const entry = { at: Date.now(), kind, text };
+  if (!S.db) { S.log.unshift(entry); render(); return; }
+  try { await S.db.collection("log").add(entry); } catch { S.log.unshift(entry); render(); }
+}
+// without db, batches live in memory for this page load only
+async function saveBatch(b){ S.batches[b.id] = b; render(); await dbSet("batches/"+b.id, b); }
+function subscribeDb(){
+  S.db.collection("batches").onSnapshot(snap => { const m = {}; snap.docs.forEach(d => m[d.id] = d.data()); S.batches = m; loadBatchTickets(); render(); }, () => {});
+  S.db.collection("log").orderBy("at","desc").limit(150).onSnapshot(snap => { S.log = snap.docs.map(d => ({ id:d.id, ...d.data() })); render(); }, () => {});
+}
+
+/* ---------- Jira load ---------- */
+async function searchAll(jql, pages=4){
+  let out = [], token;
+  for (let i=0;i<pages;i++){
+    const input = { cloudId:CLOUD, jql, fields:FIELDS, maxResults:50, responseContentFormat:"markdown" };
+    if (token) input.nextPageToken = token;
+    const p = await call(JIRA, "searchJiraIssuesUsingJql", input);
+    const nodes = (p && p.issues && p.issues.nodes) || (p && p.issues) || [];
+    out = out.concat(Array.isArray(nodes) ? nodes : []);
+    const pi = p && p.issues && p.issues.pageInfo;
+    if (pi && pi.hasNextPage && pi.endCursor) token = pi.endCursor; else if (p && p.nextPageToken) token = p.nextPageToken; else break;
+  }
+  return out;
+}
+function person(u){ return u && u.accountId ? { id:u.accountId, name:u.displayName || "Unknown" } : null; }
+function analyze(issue){
+  const f = issue.fields || {};
+  const parts = (Array.isArray(f[F.parts]) ? f[F.parts] : []).map(person).filter(Boolean);
+  const mgrRaw = f[F.mgr]; const mgrs = (Array.isArray(mgrRaw) ? mgrRaw : mgrRaw ? [mgrRaw] : []).map(person).filter(Boolean);
+  const cs = ((f.comment && f.comment.comments) || []).map(c => ({ aid:c.author && c.author.accountId, name:(c.author && c.author.displayName) || "?", at:parseT(c.created), urls:urlsIn(c.body) })).sort((a,b) => a.at - b.at);
+  const images = [], docs = [], lives = [];
+  for (const c of cs) for (const u of c.urls) {
+    if (DOC_RE.test(u)) { docs.push({ url:u, by:c.name, at:c.at }); continue; }
+    if (/atlassian\.net/i.test(u)) continue;
+    if (c.aid === YULIIA.id) { if (!/google\.com/i.test(u)) lives.push({ url:u, at:c.at }); continue; }
+    if (IMAGE_BY.has(c.aid) && !LIVE_RE.test(u)) images.push({ url:u, by:c.name, at:c.at });
+  }
+  // the live article is Yuliia's latest betterme.world link, or else the latest other link she posted
+  const live = last(lives.filter(l => LIVE_RE.test(l.url))) || last(lives) || null;
+  return {
+    key: issue.key, title: f.summary || "", status: (f.status && f.status.name) || "?", url: `${SITE}/browse/${issue.key}`,
+    parts, mine: mgrs.some(m => m.id === S.me), images, doc: last(docs) || null, docCount: new Set(docs.map(d => d.url)).size,
+    live, yuliia: parts.some(p => p.id === YULIIA.id), updated: parseT(f.updated)
+  };
+}
+async function loadJira(){
+  S.jira.loading = true; S.jira.error = null; render();
+  try {
+    const jql = `project = BP AND status = "Ready"` + (S.scope === "mine" ? ` AND ${F.mgr} = currentUser()` : "") + " ORDER BY updated DESC";
+    const issues = await searchAll(jql);
+    const map = {};
+    issues.forEach(i => { const t = analyze(i); map[t.key] = t; });
+    // keep batch tickets that already left Ready
+    Object.values(S.tickets).forEach(t => { if (!map[t.key] && batchOf(t.key)) map[t.key] = t; });
+    S.tickets = map; S.readyKeys = issues.map(i => i.key);
+    S.sel = S.sel.filter(k => S.readyKeys.includes(k));
+    S.jira.at = Date.now();
+  } catch (e) { S.jira.error = e; }
+  S.jira.loading = false; render();
+  await loadBatchTickets(true);
+  if (S.archOpen) await loadArchiveTickets();
+}
+// tickets in open batches are tracked even after they leave Ready (or fall outside "My tickets")
+async function loadBatchTickets(force){
+  if (!S.mcp) return;
+  const keys = openBatches().flatMap(b => b.keys).filter(k => force ? !S.readyKeys.includes(k) : !S.tickets[k]);
+  if (!keys.length || loadBatchTickets.busy) return;
+  loadBatchTickets.busy = true;
+  try {
+    const issues = await searchAll(`key in (${keys.join(",")})`, 2);
+    issues.forEach(i => { S.tickets[i.key] = analyze(i); });
+  } catch {}
+  loadBatchTickets.busy = false; render();
+}
+// archived batches load their tickets only when the Archive is opened
+async function loadArchiveTickets(){
+  if (!S.mcp || S.archLoading) return;
+  const keys = [...new Set(batchList().filter(b => b.archived).flatMap(b => b.keys))].filter(k => !S.tickets[k]);
+  if (!keys.length) return;
+  S.archLoading = true; render();
+  try {
+    for (let i = 0; i < keys.length; i += 50) {
+      const issues = await searchAll(`key in (${keys.slice(i, i+50).join(",")})`, 1);
+      issues.forEach(x => { S.tickets[x.key] = analyze(x); });
+    }
+  } catch {}
+  S.archLoading = false; render();
+}
+async function reloadKeys(keys){
+  try { const issues = await searchAll(`key in (${keys.join(",")})`, 1); issues.forEach(i => { const t = analyze(i); S.tickets[t.key] = t; if (t.status !== "Ready") S.readyKeys = S.readyKeys.filter(k => k !== t.key); }); } catch {}
+  render();
+}
+
+/* ---------- batches ---------- */
+const batchList = () => Object.values(S.batches).sort((a,b) => (b.n||0) - (a.n||0));
+const isDone = b => b.keys.every(k => { const t = S.tickets[k]; return t && t.status === "Published"; });
+const openBatches = () => batchList().filter(b => !b.archived);
+const batchOf = key => openBatches().find(b => b.keys.includes(key));
+function slackText(keys){
+  return "Hi. Here are articles for publishing:\n" + keys.map(k => { const t = S.tickets[k]; return `- [${k}${t ? " " + t.title : ""}](${SITE}/browse/${k})`; }).join("\n");
+}
+async function createBatch(){
+  if (!S.sel.length) return;
+  const n = Math.max(0, ...Object.values(S.batches).map(b => b.n || 0)) + 1;
+  const b = { id: "b" + Date.now(), n, keys: [...S.sel], createdAt: Date.now() };
+  S.sel = [];
+  await saveBatch(b);
+  await logIt("batch", `Batch ${n} created: ${b.keys.join(", ")}`);
+}
+// add Yuliia to Request participants on each ticket, reading the current list first so no one is dropped
+async function addYuliia(key){
+  const p = await call(JIRA, "getJiraIssue", { cloudId:CLOUD, issueIdOrKey:key, fields:[F.parts], responseContentFormat:"markdown" });
+  const nodes = p && p.issues && (Array.isArray(p.issues) ? p.issues : p.issues.nodes);
+  const issue = p && p.fields ? p : (nodes && nodes[0]) || p;
+  const cur = ((issue && issue.fields && issue.fields[F.parts]) || []).map(u => u && u.accountId).filter(Boolean);
+  if (cur.includes(YULIIA.id)) return false;
+  await call(JIRA, "editJiraIssue", { cloudId:CLOUD, issueIdOrKey:key, fields:{ [F.parts]: [...cur, YULIIA.id].map(id => ({ accountId:id })) } });
+  return true;
+}
+// default schedule time: next weekday at 09:00 local
+function defaultWhen(){
+  const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(9,0,0,0);
+  while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+  return toLocalInput(d);
+}
+function toLocalInput(d){ const p = n => String(n).padStart(2,"0"); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; }
+const fmtWhen = t => new Date(t).toLocaleString([], { weekday:"short", day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" });
+// Slack accepts scheduled messages 2 minutes to 120 days ahead
+function scheduleError(t){
+  if (!t || isNaN(t)) return "Pick a date and time to schedule the message.";
+  if (t < Date.now() + 3*6e4) return "Pick a time at least 3 minutes from now.";
+  if (t > Date.now() + 119*DAY) return "Slack can only schedule up to 120 days ahead.";
+  return "";
+}
+async function sendBatch(id, skipParts){
+  const b = S.batches[id]; if (!b) return;
+  const scheduled = S.ui.mode[id] === "later";
+  const postAt = scheduled ? new Date(S.ui.when[id] || defaultWhen()).getTime() : null;
+  if (scheduled) { const er = scheduleError(postAt); if (er) { S.ui.whenErr[id] = er; render(); return; } }
+  S.ui.whenErr[id] = "";
+  S.running[id] = true; render();
+  const failed = [];
+  if (!skipParts) {
+    for (const k of b.keys) {
+      try { const added = await addYuliia(k); await logIt("jira", added ? `${k}: added Yuliia Koreniuk to Request participants` : `${k}: Yuliia Koreniuk was already a Request participant`); }
+      catch (e) { failed.push(k); await logIt("fail", `${k}: couldn't add Yuliia to Request participants. ${errText(e, JIRA)}`); }
+    }
+  }
+  if (failed.length) {
+    await saveBatch({ ...b, partsFailed: failed });
+  } else {
+    try {
+      const n = `${b.keys.length} ticket${b.keys.length===1?"":"s"}: ${b.keys.join(", ")}`;
+      if (scheduled) {
+        await call(SLACK, "slack_schedule_message", { channel_id:YULIIA.slack, message:slackText(b.keys), post_at:Math.floor(postAt/1000) });
+        await saveBatch({ ...b, partsFailed: [], sentAt: Date.now(), postAt });
+        await logIt("slack", `Batch ${b.n}: scheduled a Slack DM to Yuliia Koreniuk for ${fmtWhen(postAt)} with ${n}`);
+        toast(`Batch ${b.n} scheduled for ${fmtWhen(postAt)}`);
+      } else {
+        await call(SLACK, "slack_send_message", { channel_id:YULIIA.slack, message:slackText(b.keys) });
+        await saveBatch({ ...b, partsFailed: [], sentAt: Date.now() });
+        await logIt("slack", `Batch ${b.n}: sent Yuliia Koreniuk a Slack DM with ${n}`);
+        toast(`Batch ${b.n} sent to Yuliia`);
+      }
+    } catch (e) {
+      await saveBatch({ ...b, partsFailed: [] });
+      await logIt("fail", `Batch ${b.n}: ${scheduled ? "scheduling the Slack DM" : "Slack DM"} to Yuliia failed. ${errText(e, SLACK)}`);
+    }
+  }
+  delete S.running[id];
+  await reloadKeys(b.keys);
+}
+// Slack's connector can't edit or cancel a scheduled message, so a new time means a new scheduled
+// message; the old one stays listed on the batch until you confirm you deleted it in Slack.
+async function reschedule(id, sendNow){
+  const b = S.batches[id]; if (!b) return;
+  // a batch already delivered can be sent again; only a still-pending scheduled message needs deleting in Slack
+  const upcoming = !!(b.postAt && b.postAt > Date.now());
+  const was = upcoming ? fmtWhen(b.postAt) : null;
+  const postAt = sendNow ? null : new Date(S.ui.when[id] || (upcoming ? toLocalInput(new Date(b.postAt)) : defaultWhen())).getTime();
+  if (!sendNow) { const er = scheduleError(postAt); if (er) { S.ui.whenErr[id] = er; render(); return; } }
+  S.ui.whenErr[id] = ""; S.running[id] = true; render();
+  const stale = [...(b.stale || []), upcoming ? b.postAt : null].filter(Boolean);
+  try {
+    if (sendNow) {
+      await call(SLACK, "slack_send_message", { channel_id:YULIIA.slack, message:slackText(b.keys) });
+      await saveBatch({ ...b, sentAt: Date.now(), postAt: null, stale });
+      await logIt("slack", was ? `Batch ${b.n}: sent the Slack DM to Yuliia now instead of ${was}` : `Batch ${b.n}: sent the Slack DM to Yuliia again`);
+      toast(`Batch ${b.n} sent to Yuliia`);
+    } else {
+      await call(SLACK, "slack_schedule_message", { channel_id:YULIIA.slack, message:slackText(b.keys), post_at:Math.floor(postAt/1000) });
+      await saveBatch({ ...b, sentAt: Date.now(), postAt, stale });
+      await logIt("slack", was ? `Batch ${b.n}: rescheduled the Slack DM to Yuliia from ${was} to ${fmtWhen(postAt)}` : `Batch ${b.n}: scheduled the Slack DM to Yuliia again for ${fmtWhen(postAt)}`);
+      toast(`Batch ${b.n} rescheduled for ${fmtWhen(postAt)}`);
+    }
+    S.ui.edit[id] = false;
+  } catch (e) { await logIt("fail", `Batch ${b.n}: ${sendNow ? "sending" : "rescheduling"} the Slack DM failed; ${was ? `the message for ${was} is unchanged.` : "nothing new was sent."} ${errText(e, SLACK)}`); }
+  delete S.running[id]; render();
+}
+async function publish(key){
+  S.running[key] = true; render();
+  try {
+    const p = await call(JIRA, "getTransitionsForJiraIssue", { cloudId:CLOUD, issueIdOrKey:key });
+    const tr = ((p && p.transitions) || []).find(x => x.to && /^published$/i.test(x.to.name));
+    if (!tr) throw { code:"tool_error", server:JIRA, message:`no transition to Published is available from ${S.tickets[key] ? S.tickets[key].status : "this status"}` };
+    await call(JIRA, "transitionJiraIssue", { cloudId:CLOUD, issueIdOrKey:key, transition:{ id:tr.id } });
+    await logIt("jira", `${key}: moved to Published`);
+    toast(`${key} moved to Published`);
+  } catch (e) { await logIt("fail", `${key}: couldn't move to Published. ${errText(e, JIRA)}`); }
+  delete S.running[key];
+  await reloadKeys([key]);
+  const b = batchOf(key);
+  if (b && isDone(b)) await logIt("batch", `Batch ${b.n}: all tickets published`);
+}
+
+/* ---------- render ---------- */
+function keyLink(t){ return `<a class="key" href="${esc(t.url)}" target="_blank" rel="noopener">${esc(t.key)}</a>`; }
+const short = u => { try { const x = new URL(u); return x.hostname.replace(/^www\./,""); } catch { return "link"; } };
+function docLink(t){
+  if (!t.doc) return `<span class="chip warn">No doc link in comments</span>`;
+  return `<a href="${esc(t.doc.url)}" target="_blank" rel="noopener">Doc</a>${t.docCount > 1 ? ` <span class="sub">(latest of ${t.docCount})</span>` : ""}`;
+}
+function imgLinks(t){
+  if (!t.images.length) return "";
+  return `<span class="lbl">Images:</span> ` + t.images.map((im, i) => `<a href="${esc(im.url)}" target="_blank" rel="noopener" title="Added by ${esc(im.by)}">${t.images.length > 1 ? "Image " + (i+1) : "Image"}</a>`).join(" ") + ` <span class="sub">by ${esc([...new Set(t.images.map(i => i.by.split(" ")[0]))].join(", "))}</span>`;
+}
+function liveLink(t){ return t.live ? `<a href="${esc(t.live.url)}" target="_blank" rel="noopener">Live article</a> <span class="sub">${esc(short(t.live.url))} · ${ago(t.live.at)}</span>` : ""; }
+function filtered(list){
+  const q = S.q.trim().toLowerCase();
+  return q ? list.filter(t => t.key.toLowerCase().includes(q) || t.title.toLowerCase().includes(q)) : list;
+}
+function readyList(){
+  return S.readyKeys.map(k => S.tickets[k]).filter(t => t && t.status === "Ready" && !batchOf(t.key) && !t.live);
+}
+function ticketRow(t){
+  const on = S.sel.includes(t.key), full = S.sel.length >= BATCH;
+  return `<div class="tk${on ? " sel" : ""}">
+    <input type="checkbox" id="cb-${esc(t.key)}" data-act="sel" data-k="${esc(t.key)}" ${on ? "checked" : ""} ${!on && full ? "disabled" : ""} aria-label="Add ${esc(t.key)} to batch">
+    <div class="main">
+      <div class="row">${keyLink(t)}<label class="title" for="cb-${esc(t.key)}">${esc(t.title)}</label></div>
+      <div class="links">${docLink(t)}${imgLinks(t) ? `<span>${imgLinks(t)}</span>` : ""}${t.yuliia ? `<span class="chip vi">Yuliia is a participant</span>` : ""}</div>
+    </div>
+  </div>`;
+}
+function renderList(list, emptyMsg){
+  if (S.jira.loading && !S.jira.at) return `<div class="loading">Loading Ready tickets from Jira…</div>`;
+  if (!list.length) return `<div class="empty">${emptyMsg}</div>`;
+  return list.map(ticketRow).join("");
+}
+function renderTray(){
+  const slots = [];
+  for (let i = 0; i < BATCH; i++) {
+    const k = S.sel[i], t = k && S.tickets[k];
+    slots.push(t ? `<li class="full"><span class="num">${i+1}</span>${keyLink(t)}<span class="t" title="${esc(t.title)}">${esc(t.title)}</span>${t.images.length ? "" : `<span class="chip warn">No images</span>`}<button class="x" data-act="unsel" data-k="${esc(k)}" aria-label="Remove ${esc(k)}">×</button></li>`
+      : `<li><span class="num">${i+1}</span><span class="sub">Tick a Ready ticket to add it</span></li>`);
+  }
+  const n = S.sel.length;
+  return `<ul class="slots">${slots.join("")}</ul>
+    <div class="acts"><button class="btn pri" data-act="create" ${n ? "" : "disabled"}>Create batch${n && n < BATCH ? ` with ${n}` : ""}</button>${n ? `<button class="btn ghost sm" data-act="clearsel">Clear</button>` : ""}
+    ${n && n < BATCH ? `<span class="sub">Batches are usually ${BATCH} tickets.</span>` : ""}</div>`;
+}
+function batchTicket(b, k){
+  const t = S.tickets[k];
+  if (!t) return `<li><a class="key" href="${SITE}/browse/${esc(k)}" target="_blank" rel="noopener">${esc(k)}</a><span class="t sub">Loading…</span></li>`;
+  let state;
+  if (t.status === "Published") state = t.live
+    ? `<a class="chip ok pub" href="${esc(t.live.url)}" target="_blank" rel="noopener" title="Open the live article: ${esc(t.live.url)}">Published ↗</a>`
+    : `<span class="chip ok" title="No live article link found in the ticket's comments">Published</span>`;
+  else if (t.live) state = `${liveLink(t)} <button class="btn go sm" data-act="publish" data-k="${esc(k)}" ${S.running[k] ? "disabled" : ""}>${S.running[k] ? "Moving…" : "Move to Published"}</button>`;
+  else if (b.sentAt) state = `<span class="chip">Waiting for live link</span>`;
+  else state = (t.yuliia ? `<span class="chip vi">Participant</span>` : "") + (t.doc ? ` <a href="${esc(t.doc.url)}" target="_blank" rel="noopener">Doc</a>` : "");
+  const failed = (b.partsFailed || []).includes(k) ? `<span class="chip bad">Participant not added</span>` : "";
+  return `<li>${keyLink(t)}<span class="t">${esc(t.title)}</span>${t.status !== "Ready" && t.status !== "Published" ? `<span class="chip">${esc(t.status)}</span>` : ""}${failed}${state}</li>`;
+}
+function renderArchive(list){
+  if (!list.length) return `<div class="empty">Archived batches are kept here. Archive a batch once all its tickets are published.</div>`;
+  return (S.archLoading ? `<div class="loading">Loading archived tickets from Jira…</div>` : "") + list.map(b => {
+    const pub = b.keys.filter(k => S.tickets[k] && S.tickets[k].status === "Published").length;
+    const dates = [b.sentAt && `sent ${new Date(b.postAt || b.sentAt).toLocaleDateString([], { day:"numeric", month:"short", year:"numeric" })}`, b.archivedAt && `archived ${new Date(b.archivedAt).toLocaleDateString([], { day:"numeric", month:"short", year:"numeric" })}`].filter(Boolean).join(" · ");
+    return `<div class="batch">
+      <div class="bh"><strong>Batch ${esc(b.n)}</strong><span class="chip ${pub === b.keys.length ? "ok" : ""}">${pub}/${b.keys.length} published</span><span class="sub">${esc(dates)}</span>
+        <button class="btn ghost sm" data-act="unarchive" data-b="${esc(b.id)}">Restore</button></div>
+      <ul class="bl">${b.keys.map(k => {
+        const t = S.tickets[k];
+        const title = t ? esc(t.title) : `<span class="sub">${S.archLoading ? "Loading…" : "Not loaded"}</span>`;
+        const state = !t ? "" : t.status === "Published"
+          ? (t.live ? `<a class="chip ok pub" href="${esc(t.live.url)}" target="_blank" rel="noopener" title="Open the live article: ${esc(t.live.url)}">Published ↗</a>` : `<span class="chip ok">Published</span>`)
+          : `<span class="chip">${esc(t.status)}</span>`;
+        return `<li><a class="key" href="${SITE}/browse/${esc(k)}" target="_blank" rel="noopener">${esc(k)}</a><span class="t">${title}</span>${state}</li>`;
+      }).join("")}</ul>
+    </div>`;
+  }).join("");
+}
+function renderBatches(){
+  const list = batchList().filter(b => !b.archived);
+  if (!list.length) return `<div class="empty">No batches yet. Tick up to ${BATCH} Ready tickets and click Create batch.</div>`;
+  return list.map(b => {
+    const done = isDone(b), busy = S.running[b.id];
+    const pub = b.keys.filter(k => S.tickets[k] && S.tickets[k].status === "Published").length;
+    const chip = done ? `<span class="chip ok">All published</span>` : b.postAt && b.postAt > Date.now() ? `<span class="chip vi">Slack scheduled for ${esc(fmtWhen(b.postAt))} · ${pub}/${b.keys.length} published</span>` : b.sentAt ? `<span class="chip ac">Sent ${ago(b.postAt || b.sentAt)} · ${pub}/${b.keys.length} published</span>` : (b.partsFailed || []).length ? `<span class="chip bad">Needs attention</span>` : `<span class="chip">Not sent</span>`;
+    let acts = "", when = "";
+    if (!b.sentAt) {
+      const failed = (b.partsFailed || []).length, later = S.ui.mode[b.id] === "later";
+      const verb = later ? "schedule" : "send";
+      when = `<div class="when"><div class="seg" role="group" aria-label="When to send the Slack message">
+          <button data-act="mode" data-v="now" data-b="${esc(b.id)}" aria-pressed="${!later}">Send now</button>
+          <button data-act="mode" data-v="later" data-b="${esc(b.id)}" aria-pressed="${later}">Schedule</button></div>
+        ${later ? `<input type="datetime-local" id="when-${esc(b.id)}" data-act="when" data-b="${esc(b.id)}" value="${esc(S.ui.when[b.id] || defaultWhen())}" min="${esc(toLocalInput(new Date()))}" aria-label="Date and time to send the Slack message"><span class="sub">your local time</span>` : ""}
+        ${S.ui.whenErr[b.id] ? `<span class="chip bad">${esc(S.ui.whenErr[b.id])}</span>` : ""}</div>`;
+      acts = `<button class="btn pri sm" data-act="send" data-b="${esc(b.id)}" ${busy ? "disabled" : ""}>${busy ? (later ? "Scheduling…" : "Sending…") : failed ? "Retry" : `Add Yuliia & ${verb} Slack`}</button>`
+        + (failed ? ` <button class="btn sm" data-act="sendslack" data-b="${esc(b.id)}" ${busy ? "disabled" : ""}>${later ? "Schedule" : "Send"} Slack anyway</button>` : "")
+        + ` <button class="btn ghost sm" data-act="preview" data-b="${esc(b.id)}">${S.ui.preview[b.id] ? "Hide message" : "Preview message"}</button>`
+        + (S.ui.confirmDel === b.id ? ` <span class="confirm">Delete batch ${b.n}? <button class="btn sm" data-act="delyes" data-b="${esc(b.id)}">Delete</button><button class="btn ghost sm" data-act="delno">Keep</button></span>` : ` <button class="btn ghost sm" data-act="del" data-b="${esc(b.id)}">Delete</button>`);
+    } else if (!done) {
+      const upcoming = !!(b.postAt && b.postAt > Date.now());
+      if (S.ui.edit[b.id]) {
+        when = `<div class="when"><input type="datetime-local" id="when-${esc(b.id)}" data-act="when" data-b="${esc(b.id)}" value="${esc(S.ui.when[b.id] || (upcoming ? toLocalInput(new Date(b.postAt)) : defaultWhen()))}" min="${esc(toLocalInput(new Date()))}" aria-label="New date and time for the Slack message"><span class="sub">your local time</span>
+          ${S.ui.whenErr[b.id] ? `<span class="chip bad">${esc(S.ui.whenErr[b.id])}</span>` : ""}</div>
+          <div class="sub">${upcoming ? "Slack doesn't let the dashboard change a scheduled message, so it schedules a new one. You'll then delete the old one in Slack." : "The message to Yuliia was already sent. If you deleted it in Slack, schedule it again or send it now."}</div>`;
+        acts = `<button class="btn pri sm" data-act="resched" data-b="${esc(b.id)}" ${busy ? "disabled" : ""}>${busy ? "Saving…" : upcoming ? "Reschedule" : "Schedule"}</button>`
+          + ` <button class="btn sm" data-act="sendnow" data-b="${esc(b.id)}" ${busy ? "disabled" : ""}>${upcoming ? "Send now instead" : "Send now"}</button>`
+          + ` <button class="btn ghost sm" data-act="editno" data-b="${esc(b.id)}">Cancel</button>`;
+      } else acts = upcoming ? `<button class="btn sm" data-act="edit" data-b="${esc(b.id)}">Change time</button>`
+        : `<button class="btn sm" data-act="edit" data-b="${esc(b.id)}">Send again</button>`;
+    }
+    if (done) acts = `<button class="btn sm" data-act="archive" data-b="${esc(b.id)}">Archive</button>`;
+    const stale = (b.stale || []).length ? `<div class="warn">In Slack, delete the old scheduled message${b.stale.length > 1 ? "s" : ""} for ${esc(b.stale.map(fmtWhen).join(" and "))}: open the DM with Yuliia Koreniuk, or go to Drafts &amp; sent → Scheduled. Otherwise she gets the message twice. <button class="btn sm" data-act="staleok" data-b="${esc(b.id)}">I deleted it</button></div>` : "";
+    const err = (b.partsFailed || []).length ? `<div class="err">Yuliia wasn't added to Request participants on ${esc(b.partsFailed.join(", "))}. The Slack message hasn't been sent. See the action log for Jira's reason.</div>` : "";
+    return `<div class="batch">
+      <div class="bh"><strong>Batch ${esc(b.n)}</strong>${chip}<span class="sub">created ${ago(b.createdAt)}</span></div>
+      <ul class="bl">${b.keys.map(k => batchTicket(b, k)).join("")}</ul>
+      ${err}
+      ${S.ui.preview[b.id] && !b.sentAt ? `<div class="preview">${esc(slackText(b.keys))}</div><div class="sub">${S.ui.mode[b.id] === "later" ? "Scheduled" : "Sent"} as a DM to Yuliia Koreniuk on Slack.</div>` : ""}
+      ${stale}
+      ${when}
+      ${acts ? `<div class="acts">${acts}</div>` : ""}
+    </div>`;
+  }).join("");
+}
+function liveList(){
+  return Object.values(S.tickets).filter(t => t.live && t.status !== "Published" && (S.readyKeys.includes(t.key) || batchOf(t.key)));
+}
+function renderLive(list){
+  if (!list.length) return `<div class="empty">When Yuliia posts the live article link in a ticket's comments, the ticket shows up here.</div>`;
+  return list.map(t => { const b = batchOf(t.key); return `<div class="live">
+    <div class="row">${keyLink(t)}<span class="title">${esc(t.title)}</span>${b ? `<span class="chip ac">Batch ${esc(b.n)}</span>` : ""}</div>
+    <div class="row links">${liveLink(t)}<button class="btn go sm" data-act="publish" data-k="${esc(t.key)}" ${S.running[t.key] ? "disabled" : ""}>${S.running[t.key] ? "Moving…" : "Move to Published"}</button></div>
+  </div>`; }).join("");
+}
+function renderLogTools(){
+  if (!S.log.length) return "";
+  if (S.ui.clearing) return `<span class="sub">Clearing…</span>`;
+  if (S.ui.confirmClear) return `<span class="confirm">Clear all ${S.log.length} entries? <button class="btn sm" data-act="clearyes">Clear log</button><button class="btn ghost sm" data-act="clearno">Keep</button></span>`;
+  return `<button class="btn ghost sm" data-act="clear">Clear</button>`;
+}
+// deletes every log entry; batches and Jira are untouched
+async function clearLog(){
+  S.ui.confirmClear = false; S.ui.clearing = true; render();
+  if (S.db) {
+    try { const snap = await S.db.collection("log").get(); for (const d of snap.docs) await S.db.collection("log").doc(d.id).delete(); }
+    catch (e) { toast("Couldn't clear the log: " + (e.message || e.code)); }
+  } else S.log = [];
+  S.ui.clearing = false; render();
+}
+function renderLog(){
+  if (!S.log.length) return `<div class="empty">Batches, Slack messages and status changes are listed here.</div>`;
+  return `<ul class="log">${S.log.map(l => `<li class="${l.kind === "fail" ? "fail" : ""}"><time>${new Date(l.at).toLocaleString([], { month:"short", day:"numeric", hour:"2-digit", minute:"2-digit" })}</time><span>${esc(l.text)}</span></li>`).join("")}</ul>`;
+}
+function render(){
+  $("scope-mine").setAttribute("aria-pressed", S.scope === "mine"); $("scope-all").setAttribute("aria-pressed", S.scope === "all");
+  $("status").innerHTML = S.jira.loading ? "Loading Jira…" : S.jira.at ? `Updated <b>${new Date(S.jira.at).toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" })}</b>` : "";
+  $("refresh").disabled = S.jira.loading;
+  const ready = readyList();
+  const withImg = filtered(ready.filter(t => t.images.length)), noImg = filtered(ready.filter(t => !t.images.length));
+  const live = liveList();
+  const open = openBatches();
+  const waiting = open.filter(b => b.sentAt && !isDone(b)).length;
+  const tiles = [
+    { n: ready.filter(t => t.images.length).length, l: "Ready with images", sec: "sec-img" },
+    { n: ready.filter(t => !t.images.length).length, l: "Ready, no images", sec: "sec-noimg", cls: "alarm" },
+    { n: open.filter(b => !b.sentAt).length, l: "Batches not sent", sec: "sec-batches" },
+    { n: waiting, l: "Batches sent or scheduled", sec: "sec-batches" },
+    { n: live.length, l: "Live, to publish", sec: "sec-live", cls: live.length ? "hot" : "" }
+  ];
+  $("tiles").innerHTML = tiles.map(t => `<button class="tile ${t.cls || ""}" data-act="jump" data-sec="${t.sec}"><span class="n">${S.jira.at ? t.n : "–"}</span><span class="l">${t.l}</span></button>`).join("");
+  $("pageerr").innerHTML = S.jira.error ? `<div class="err">${esc(errText(S.jira.error, JIRA))}${S.jira.error.code === "not_in_manifest" ? ` <button class="btn sm" data-act="perms">Permissions</button>` : ""} <button class="btn sm" data-act="refresh">Refresh</button></div>` : "";
+  $("c-img").textContent = withImg.length; $("c-noimg").textContent = noImg.length; $("c-live").textContent = live.length;
+  $("c-tray").textContent = `${S.sel.length}/${BATCH}`; $("c-batches").textContent = open.length; $("c-log").textContent = S.log.length || "";
+  for (const v of ["both","img","noimg"]) $("show-"+v).setAttribute("aria-pressed", S.show === v);
+  for (const v of ["img","noimg"]) {
+    const visible = S.show === "both" || S.show === v, open = !S.folded[v];
+    $("sec-"+v).hidden = !visible;
+    $("f-"+v).setAttribute("aria-expanded", open);
+    $("b-"+v).hidden = !open;
+    $("sec-"+v).querySelector(".ph").classList.toggle("closed", !open);
+  }
+  $("b-img").innerHTML = renderList(withImg, S.q ? "No tickets match the filter." : "No Ready tickets have an image link from Oksana or Karina yet.");
+  $("b-noimg").innerHTML = renderList(noImg, S.q ? "No tickets match the filter." : "Every Ready ticket has images.");
+  $("b-tray").innerHTML = renderTray(); $("b-batches").innerHTML = renderBatches();
+  const arch = batchList().filter(b => b.archived).sort((a,b) => (b.archivedAt||0) - (a.archivedAt||0) || (b.n||0) - (a.n||0));
+  $("c-arch").textContent = arch.length;
+  $("f-arch").setAttribute("aria-expanded", S.archOpen);
+  $("b-arch").hidden = !S.archOpen;
+  $("sec-arch").querySelector(".ph").classList.toggle("closed", !S.archOpen);
+  if (S.archOpen) $("b-arch").innerHTML = renderArchive(arch);
+  $("b-live").innerHTML = renderLive(live); $("b-log").innerHTML = renderLog(); $("logtools").innerHTML = renderLogTools();
+}
+
+/* ---------- events ---------- */
+document.addEventListener("click", async ev => {
+  const b = ev.target.closest("[data-act]"); if (!b || b.tagName === "INPUT") return;
+  const act = b.dataset.act, key = b.dataset.k, id = b.dataset.b;
+  switch (act) {
+    case "scope": if (S.scope !== b.dataset.v) { S.scope = b.dataset.v; lsSet("pb.scope", S.scope); loadJira(); } break;
+    case "refresh": loadJira(); break;
+    case "show": S.show = b.dataset.v; lsSet("pb.show", S.show); render(); break;
+    case "fold": S.folded[b.dataset.v] = !S.folded[b.dataset.v]; lsSet("pb.folded", JSON.stringify(S.folded)); render(); break;
+    case "jump": {
+      // a tile opens its list if it was hidden or collapsed
+      const v = b.dataset.sec.replace("sec-","");
+      if (v === "img" || v === "noimg") { if (S.show !== "both" && S.show !== v) { S.show = "both"; lsSet("pb.show", S.show); } if (S.folded[v]) { S.folded[v] = false; lsSet("pb.folded", JSON.stringify(S.folded)); } render(); }
+    }
+    $(b.dataset.sec).scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block:"start" }); break;
+    case "perms": try { const p = await claude.use("permissions"); await p.manage(); loadJira(); } catch { toast("Open the page's Permissions menu to allow Atlassian and Slack."); } break;
+    case "unsel": S.sel = S.sel.filter(k => k !== key); render(); break;
+    case "clearsel": S.sel = []; render(); break;
+    case "create": await createBatch(); break;
+    case "send": await sendBatch(id, false); break;
+    case "sendslack": await sendBatch(id, true); break;
+    case "edit": S.ui.edit[id] = true; S.ui.when[id] = ""; S.ui.whenErr[id] = ""; render(); break;
+    case "editno": S.ui.edit[id] = false; S.ui.whenErr[id] = ""; render(); break;
+    case "resched": await reschedule(id, false); break;
+    case "sendnow": await reschedule(id, true); break;
+    case "staleok": { const bt = S.batches[id]; if (bt) { await saveBatch({ ...bt, stale: [] }); await logIt("slack", `Batch ${bt.n}: old scheduled Slack message marked as deleted`); } break; }
+    case "mode": S.ui.mode[id] = b.dataset.v; S.ui.whenErr[id] = ""; render(); break;
+    case "preview": S.ui.preview[id] = !S.ui.preview[id]; render(); break;
+    case "del": S.ui.confirmDel = id; render(); break;
+    case "delno": S.ui.confirmDel = null; render(); break;
+    case "delyes": { const bt = S.batches[id]; S.ui.confirmDel = null; delete S.batches[id]; render(); await dbDel("batches/"+id); if (bt) await logIt("batch", `Batch ${bt.n} deleted`); break; }
+    case "archive": { const bt = S.batches[id]; if (bt) { await saveBatch({ ...bt, archived: true, archivedAt: Date.now() }); await logIt("batch", `Batch ${bt.n} archived`); } break; }
+    case "unarchive": { const bt = S.batches[id]; if (bt) { await saveBatch({ ...bt, archived: false }); await logIt("batch", `Batch ${bt.n} restored from the archive`); } break; }
+    case "archfold": S.archOpen = !S.archOpen; lsSet("pb.arch", S.archOpen ? "1" : "0"); render(); if (S.archOpen) loadArchiveTickets(); break;
+    case "publish": await publish(key); break;
+    case "clear": S.ui.confirmClear = true; render(); break;
+    case "clearno": S.ui.confirmClear = false; render(); break;
+    case "clearyes": await clearLog(); break;
+  }
+});
+document.addEventListener("change", ev => {
+  const el = ev.target;
+  if (el.dataset.act === "when") { S.ui.when[el.dataset.b] = el.value; S.ui.whenErr[el.dataset.b] = ""; return; }
+  if (el.dataset.act !== "sel") return;
+  const k = el.dataset.k;
+  if (el.checked) { if (S.sel.length < BATCH && !S.sel.includes(k)) S.sel.push(k); }
+  else S.sel = S.sel.filter(x => x !== k);
+  render();
+});
+$("q").addEventListener("input", ev => { S.q = ev.target.value; render(); });
+
+/* ---------- boot ---------- */
+render();
+(async () => {
+  const [mcp, db] = await Promise.all([claude.use("mcp"), claude.use("db")].map(p => p.catch(() => null)));
+  S.mcp = mcp; S.db = db;
+  if (db) subscribeDb();
+  if (!mcp) { S.jira.error = { code:"not_granted", server:JIRA }; render(); return; }
+  try { const u = await call(JIRA, "atlassianUserInfo", {}); if (u && u.account_id) S.me = u.account_id; }
+  catch (e) { if (e.code === "not_in_manifest" || e.code === "needs_reauth" || e.code === "server_not_connected") { S.jira.error = e; render(); return; } }
+  await loadJira();
+  setInterval(() => { if (!document.hidden && !S.jira.loading) loadJira(); }, 10*60*1000);
+})();
+</script>
+````
