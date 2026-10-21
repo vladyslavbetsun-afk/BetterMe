@@ -482,13 +482,15 @@ function analyze(issue){
   T.autoSlack = (S.overrides[T.key] || {}).autoSlack !== false;
   // once the writer has posted the document, any active ticket can be sent straight to Ready
   T.canReady = !!linkC && ACTIVE.includes(status);
+  // Open tickets holding only your "Keyword plan for this update" comment are not waiting on anyone yet
+  T.keywordPlanOnly = status === "Open" && cs.length === 1 && cs[0].role === "me" && /keyword plan for this update/i.test(cs[0].text);
   return T;
 }
 
 /* ---------- derived views ---------- */
 function derive(){
   const ex = S.excluded;
-  const ts = S.jira.tickets.filter(t => !ex[t.key]);
+  const ts = S.jira.tickets.filter(t => !ex[t.key] && !t.keywordPlanOnly);
   const move = ts.filter(t => t.actions.length);
   const wait = ts.filter(t => !t.actions.length && ACTIVE.includes(t.status)).sort((a,b) => (a.since||0) - (b.since||0));
   // 1st message unanswered for 3+ business days
