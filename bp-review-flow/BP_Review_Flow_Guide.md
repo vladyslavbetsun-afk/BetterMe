@@ -14,7 +14,9 @@ A live dashboard for the Jira **Blog Project (BP)** that tracks every article ti
 2. When asked, **allow Atlassian and Slack** for the page. You can change this later from the page's **Permissions** menu.
 3. The Atlassian connector must have access to the **newsiteam** Jira site. If Jira shows an access error, see [Troubleshooting](#14-troubleshooting).
 
-The page refreshes itself every 10 minutes while it's open. Each section fills in as soon as its data arrives, so a slow connector doesn't block the rest.
+The dashboard **only loads data from Jira and Slack when you click Refresh** (or **Run automation now**, which refreshes first). Opening the page or switching between **My tickets** and **All BP** loads nothing. Instead, it shows your last refresh, saved in this browser, with its date and time ("Showing last refresh Oct 22, 10:15 · click Refresh to update"). If there is no saved refresh yet, click **Refresh** to load your tickets. When you refresh, each section fills in as soon as its data arrives, so a slow connector doesn't block the rest.
+
+Buttons still check Jira before acting: every step re-reads the ticket first, so an older saved view can't cause a wrong change.
 
 ---
 
@@ -192,7 +194,7 @@ Tickets where the writer hasn't replied **3 business days after your 2nd or late
 Every ticket in the follow-up lists has an **Auto-Slack writer on 2nd & 3rd note** checkbox. It's **on by default** and you can untick it per ticket.
 
 - **Posted from the dashboard:** when you post a 2nd or 3rd note, the Slack message goes out right away.
-- **Posted by hand in Jira:** the dashboard sends the Slack message at its next refresh, while the page is open. If several of the writer's tickets need it, they go in one message.
+- **Posted by hand in Jira:** the dashboard sends the Slack message the next time you click **Refresh**. If several of the writer's tickets need it, they go in one message.
 - **Older notes:** notes posted before this feature was switched on (Oct 11) never trigger a Slack message.
 - **4th and later notes:** never send Slack automatically. The buttons still work.
 - Automatic messages appear in the Action log marked "automatic".
@@ -302,7 +304,8 @@ For a new writer, click **Find on Slack**. It searches by surname and shows the 
 
 - Jira **emoji reactions** can't be read, so only reply comments count as answers.
 - Comments can't be deleted in Jira from the dashboard; **Delete** in the Slack feed only hides the notification on the dashboard.
-- Automatic Slack messages after a note posted by hand in Jira are only sent **while the dashboard is open**.
+- Automatic Slack messages after a note posted by hand in Jira are only sent when you click **Refresh**.
+- The saved last refresh lives in this browser only. On another computer or browser, click **Refresh** once to load your tickets.
 - Business days are counted in your computer's local time zone.
 - The dashboard reads up to 600 tickets per scope.
 - The dashboard is private to you. Others can't open it until you share it from the page's Share menu, and they would need their own Atlassian and Slack connectors.

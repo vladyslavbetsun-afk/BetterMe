@@ -353,7 +353,7 @@ async function loadAssignments(){
     }
   };
   await Promise.all([worker(), worker(), worker(), worker()]);
-  if (todo.length) reanalyze();
+  if (todo.length) { reanalyze(); saveSnapshot(); }
 }
 
 /* ---------- analysis ---------- */
@@ -637,7 +637,7 @@ async function runSteps(key, kinds, mode){
   } catch (e) { ok = false; await logIt("fail", `${key}: couldn't re-read the ticket. ${errText(e, JIRA)}`, { key }); }
   delete S.running[key];
   try { const fresh = await freshTicket(key); S.jira.tickets = S.jira.tickets.map(t => t.key === key ? fresh : t); } catch {}
-  render();
+  saveSnapshot(); render();
   return ok;
 }
 async function runAutomation(){
@@ -701,6 +701,7 @@ function readyBtn(t, small){
   if (S.ui.confirmReady[t.key]) return `<span class="confirm">Send ${esc(t.key)} to Ready? <button class="btn${sm} pri" ${busy?"disabled":""} data-act="readyyes" data-k="${esc(t.key)}">Yes, to Ready</button><button class="btn${sm} ghost" data-act="readyno" data-k="${esc(t.key)}">Cancel</button></span>`;
   return `<button class="btn${sm}" ${busy?"disabled":""} data-act="ready" data-k="${esc(t.key)}">${busy && S.running["ready:"+t.key] ? "Moving to Ready…" : "Straight to Ready"}</button>`;
 }
+const NOT_LOADED = `<div class="empty">Click <b>Refresh</b> to load your tickets from Jira.</div>`;
 const STATUS_MSG = "Hi. What's the status on this one?";
 function statusSlackText(writer, tickets){
   const name = firstName((S.links[writer.id] || {}).slackName || writer.name);
@@ -725,7 +726,7 @@ async function askStatus(writer, tickets){
 }
 async function reloadKeys(keys){
   for (const k of keys) { try { const f = await freshTicket(k); S.jira.tickets = S.jira.tickets.map(t => t.key === k ? f : t); } catch {} }
-  render();
+  saveSnapshot(); render();
 }
 
 /* ---------- Slack feed ---------- */
@@ -773,8 +774,45 @@ async function findOnSlack(wid, name){
 
 /* ---------- refresh ---------- */
 async function refresh(){
+  if (!S.mcp) { S.jira.error = { code:"not_granted", server:JIRA }; render(); return; }
+  if (!S.me) {
+    try { const u = await read(JIRA, "atlassianUserInfo", {}); S.me = u && u.account_id || null; }
+    catch (e) { if (needsPerm(e) || e.code === "needs_reauth" || e.code === "server_not_connected") { S.jira.error = e; render(); return; } }
+  }
   await Promise.all([loadJira(), loadSlack()]);
+  S.fromCache = false;
+  saveSnapshot();
   await runAutoSlack();
+}
+
+/* ---------- last refresh, kept in this browser so opening the page loads nothing ---------- */
+const slim = u => u && u.accountId ? { accountId:u.accountId, displayName:u.displayName } : null;
+function snapKey(){ return "bp.snap." + S.scope; }
+function saveSnapshot(){
+  if (!S.jira.at) return;
+  const issues = S.jira.tickets.map(t => rawCache.get(t.key)).filter(Boolean).map(i => {
+    const f = i.fields || {};
+    return { key:i.key, fields:{ summary:f.summary, created:f.created, status:{ name:(f.status||{}).name },
+      [F.author]:slim(f[F.author]), [F.expert]:slim(f[F.expert]), [F.proof]:slim(f[F.proof]),
+      [F.parts]:(Array.isArray(f[F.parts]) ? f[F.parts] : []).map(slim).filter(Boolean),
+      [F.mgr]:Array.isArray(f[F.mgr]) ? f[F.mgr].map(slim).filter(Boolean) : slim(f[F.mgr]),
+      comment:{ comments:((f.comment||{}).comments||[]).map(c => ({ id:c.id, created:c.created, body:String(c.body||"").slice(0, 1500), author:slim(c.author) })) } } };
+  });
+  const snap = { v:1, me:S.me, jiraAt:S.jira.at, slackAt:S.slack.at, issues, reviewCounts:S.reviewCounts, assigned:S.assigned, slackItems:S.slack.items };
+  try { localStorage.setItem(snapKey(), JSON.stringify(snap)); } catch {
+    try { snap.issues.forEach(i => i.fields.comment.comments.forEach(c => c.body = c.body.slice(0, 300))); localStorage.setItem(snapKey(), JSON.stringify(snap)); } catch {}
+  }
+}
+function loadSnapshot(){
+  let snap = null;
+  try { snap = JSON.parse(localStorage.getItem(snapKey()) || "null"); } catch {}
+  S.jira.tickets = []; S.jira.at = null; S.slack.items = []; S.slack.at = null; S.fromCache = false;
+  if (!snap || snap.v !== 1) { render(); return; }
+  S.me = snap.me || S.me; S.reviewCounts = snap.reviewCounts || {}; S.assigned = snap.assigned || {};
+  S.jira.tickets = (snap.issues || []).map(analyze); S.jira.at = snap.jiraAt; S.fromCache = true;
+  const mid = new Date(); mid.setHours(0,0,0,0);
+  S.slack.items = (snap.slackItems || []).filter(i => i.at >= mid.getTime()); S.slack.at = snap.slackAt;
+  render();
 }
 
 /* ---------- render ---------- */
@@ -797,7 +835,7 @@ function excludeBtn(key, small){ return small ? `<button class="x" title="Exclud
 
 function renderMove(D){
   $("c-move").textContent = D.move.length || "";
-  if (S.jira.loading && !S.jira.at) return `<div class="loading">Loading Jira…</div>`;
+  if (!S.jira.at) return S.jira.loading ? `<div class="loading">Loading Jira…</div>` : NOT_LOADED;
   if (!D.move.length) return S.jira.error ? "" : `<div class="empty">Nothing waits on you right now. New steps appear here when writers, experts or Tim comment.</div>`;
   return D.move.map(t => {
     const busy = !!S.running[t.key];
@@ -830,7 +868,7 @@ function autoSlackBox(t){
 function bdLabel(n){ n = Math.max(0, n); return `${n} business day${n===1?"":"s"}`; }
 function renderNoReply(D){
   $("c-noreply").textContent = D.noReply.length || "";
-  if (S.jira.loading && !S.jira.at) return `<div class="loading">Loading Jira…</div>`;
+  if (!S.jira.at) return S.jira.loading ? `<div class="loading">Loading Jira…</div>` : NOT_LOADED;
   if (!D.noReply.length) return `<div class="empty">No ticket has your comment sitting unanswered for 3 or more business days.</div>`;
   return D.noReply.sort((a,b) => a.myLast.at - b.myLast.at).map(t => {
     const tg = t.target; const sent = t.writer && S.sent[t.writer.id];
@@ -851,7 +889,7 @@ function followRow(a){
 }
 function renderFollow(D){
   $("c-follow").textContent = D.follow.length || "";
-  if (S.jira.loading && !S.jira.at) return `<div class="loading">Loading Jira…</div>`;
+  if (!S.jira.at) return S.jira.loading ? `<div class="loading">Loading Jira…</div>` : NOT_LOADED;
   if (!D.follow.length) return `<div class="empty">No 2nd or 3rd notes are counting down. After you post one, the ticket waits here for 3 business days, then moves to Flagged follow-ups.</div>`;
   const g = groupBy(D.follow, a => a.wid);
   return [...g.entries()].map(([wid, list]) => {
@@ -864,7 +902,7 @@ function renderFollow(D){
 function renderSlackW(D){
   const g = groupBy(D.flagged, a => a.wid);
   $("c-slackw").textContent = D.flagged.length || "";
-  if (S.jira.loading && !S.jira.at) return `<div class="loading">Loading Jira…</div>`;
+  if (!S.jira.at) return S.jira.loading ? `<div class="loading">Loading Jira…</div>` : NOT_LOADED;
   if (!g.size) return `<div class="empty">Nothing flagged. A ticket lands here when the writer hasn't replied 3 business days after your 2nd or later note.</div>`;
   return [...g.entries()].map(([wid, list]) => {
     const w = list[0].t.writer;
@@ -884,7 +922,7 @@ function renderSlackW(D){
 }
 function renderLate(D){
   $("c-late").textContent = D.writingLate.length || "";
-  if (S.jira.loading && !S.jira.at) return `<div class="loading">Loading Jira…</div>`;
+  if (!S.jira.at) return S.jira.loading ? `<div class="loading">Loading Jira…</div>` : NOT_LOADED;
   if (!D.writingLate.length) return `<div class="empty">Every writer you assigned has posted their document within 5 business days, or you've already asked them.</div>`;
   const g = groupBy(D.writingLate, t => t.writer.id);
   return [...g.entries()].map(([wid, list]) => {
@@ -899,7 +937,7 @@ function renderLate(D){
 }
 function renderExpert(D){
   $("c-expert").textContent = D.expertSilent.length || "";
-  if (S.jira.loading && !S.jira.at) return `<div class="loading">Loading Jira…</div>`;
+  if (!S.jira.at) return S.jira.loading ? `<div class="loading">Loading Jira…</div>` : NOT_LOADED;
   if (!D.expertSilent.length) return `<div class="empty">Every ticket in Review has heard from its expert, or you followed up within the last 7 days.</div>`;
   return `<div class="scroll"><table class="tbl"><tbody>${D.expertSilent.sort((a,b)=>a.linkC.at-b.linkC.at).map(t => {
     const busy = !!S.running["exp:"+t.key];
@@ -909,7 +947,7 @@ function renderExpert(D){
 }
 function renderWait(D){
   $("c-wait").textContent = D.wait.length || "";
-  if (S.jira.loading && !S.jira.at) return `<div class="loading">Loading Jira…</div>`;
+  if (!S.jira.at) return S.jira.loading ? `<div class="loading">Loading Jira…</div>` : NOT_LOADED;
   if (!D.wait.length) return `<div class="empty">No tickets are waiting on writers, experts or the proofreader.</div>`;
   return `<div class="scroll"><table class="tbl"><tbody>${D.wait.map(t => `<tr><td>${keyLink(t)}</td><td>${esc(shortTitle(t.title))}<div class="sub">${esc(t.stage)} · waiting on ${esc(t.waitingOn || "—")}</div></td><td>${stChip(t.status)}</td><td class="num">${ago(t.since)}</td><td style="white-space:nowrap">${readyBtn(t, true)} ${excludeBtn(t.key, true)}</td></tr>`).join("")}</tbody></table></div>`;
 }
@@ -919,7 +957,7 @@ function renderFeed(){
   $("c-feed").textContent = S.slack.at ? `${items.length} today${removed ? ` · ${removed} removed` : ""}` : "";
   let h = "";
   if (S.slack.error) h += `<div class="err">${esc(errText(S.slack.error, SLACK))}${needsPerm(S.slack.error) ? ` <button class="btn sm" data-act="perms">Permissions</button>` : ""}</div>`;
-  if (S.slack.loading && !S.slack.at) return h + `<div class="loading">Loading Slack…</div>`;
+  if (!S.slack.at) return h + (S.slack.loading ? `<div class="loading">Loading Slack…</div>` : `<div class="empty">Click <b>Refresh</b> to load today's Jira notifications from Slack.</div>`);
   if (!shown.length) return h + (S.slack.at ? `<div class="empty">No Jira notifications in your Slack DMs since midnight.</div>` : "");
   return h + shown.map(i => { const t = i.key && findT(i.key); return `<div class="it">
     <div class="h"><time>${new Date(i.at).toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" })}</time>${i.key ? `<a class="key" href="${esc(i.url || SITE+"/browse/"+i.key)}" target="_blank" rel="noopener">${esc(i.key)}</a>` : ""}${t ? `<span class="chip st-${esc(t.status)}">${esc(t.stage)}</span>` : ""}<button class="btn ghost sm" style="margin-left:auto" data-act="hide" data-ts="${esc(i.ts)}">Delete</button></div>
@@ -967,7 +1005,7 @@ function renderTiles(D){
 function render(){
   $("scope-mine").setAttribute("aria-pressed", S.scope === "mine"); $("scope-all").setAttribute("aria-pressed", S.scope === "all");
   const pend = [S.jira.loading && "Jira", S.slack.loading && "Slack"].filter(Boolean);
-  $("status").innerHTML = pend.length ? `Loading ${pend.join(" and ")}…` : S.jira.at ? `Updated <b>${new Date(S.jira.at).toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" })}</b>` : "";
+  $("status").innerHTML = pend.length ? `Loading ${pend.join(" and ")}…` : S.jira.at ? `${S.fromCache ? "Showing last refresh" : "Updated"} <b>${new Date(S.jira.at).toLocaleString([], { month:"short", day:"numeric", hour:"2-digit", minute:"2-digit" })}</b>${S.fromCache ? " · click Refresh to update" : ""}` : "Not loaded yet · click Refresh";
   $("refresh").disabled = !!pend.length;
   const D = derive();
   renderAuto(); renderTiles(D);
@@ -983,7 +1021,7 @@ document.addEventListener("click", async ev => {
   const act = b.dataset.act, key = b.dataset.k, wid = b.dataset.w;
   const D = derive();
   switch (act) {
-    case "scope": if (S.scope !== b.dataset.v) { S.scope = b.dataset.v; lsSet("bp.scope", S.scope); S.jira.tickets = []; S.jira.at = null; loadJira(); } break;
+    case "scope": if (S.scope !== b.dataset.v) { S.scope = b.dataset.v; lsSet("bp.scope", S.scope); loadSnapshot(); } break;
     case "refresh": refresh(); break;
     case "jump": $(b.dataset.sec).scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block:"start" }); break;
     case "perms": try { const p = await claude.use("permissions"); await p.manage(); refresh(); } catch { toast("Open the page's Permissions menu to allow Atlassian and Slack."); } break;
@@ -1074,16 +1112,15 @@ document.addEventListener("change", async ev => {
 function reanalyze(){ S.jira.tickets = S.jira.tickets.map(t => rawCache.has(t.key) ? analyze(rawCache.get(t.key)) : t); render(); }
 
 /* ---------- boot ---------- */
-render();
+loadSnapshot();
 (async () => {
   const [mcp, db, user] = await Promise.all([claude.use("mcp"), claude.use("db"), claude.use("user")].map(p => p.catch(() => null)));
   S.mcp = mcp; S.db = db;
   if (db) {
     subscribeDb();
   } else S.dbReady = true;
-  if (!mcp) { S.jira.error = { code:"not_granted", server:JIRA }; render(); return; }
-  try { const u = await read(JIRA, "atlassianUserInfo", {}); S.me = u && u.account_id || null; } catch (e) { if (needsPerm(e) || e.code === "needs_reauth" || e.code === "server_not_connected") { S.jira.error = e; render(); } }
-  await refresh();
-  setInterval(() => { if (!document.hidden) refresh(); }, 10*60*1000);
+  // Nothing is fetched on open: show the last refresh saved in this browser. Data loads only when you click Refresh.
+  if (!mcp) { S.jira.error = { code:"not_granted", server:JIRA }; }
+  render();
 })();
 </script>
