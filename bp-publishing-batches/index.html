@@ -293,7 +293,7 @@ function analyze(issue){
 async function loadJira(){
   S.jira.loading = true; S.jira.error = null; render();
   try {
-    const jql = `project = BP AND status = "Ready"` + (S.scope === "mine" ? ` AND ${F.mgr} = currentUser()` : "") + " ORDER BY updated DESC";
+    const jql = `project = BP AND status = "Ready" ORDER BY updated DESC`;
     const issues = await searchAll(jql);
     const map = {};
     issues.forEach(i => { const t = analyze(i); map[t.key] = t; });
@@ -301,23 +301,36 @@ async function loadJira(){
     Object.values(S.tickets).forEach(t => { if (!map[t.key] && batchOf(t.key)) map[t.key] = t; });
     S.tickets = map; S.readyKeys = issues.map(i => i.key);
     S.sel = S.sel.filter(k => S.readyKeys.includes(k));
-    S.jira.at = Date.now();
+    S.jira.at = Date.now(); S.jira.cached = false; S.jira.live = true;
   } catch (e) { S.jira.error = e; }
   S.jira.loading = false; render();
   await loadBatchTickets(true);
   if (S.archOpen) await loadArchiveTickets();
+  saveCache();
+}
+// Jira is read only on Refresh (and when an action changes a ticket); on open the page shows
+// the last refresh from this browser
+function saveCache(){
+  if (!S.jira.at) return;
+  try { localStorage.setItem("pb.cache", JSON.stringify({ at:S.jira.at, readyKeys:S.readyKeys, tickets:S.tickets })); } catch {}
+}
+function loadCache(){
+  try {
+    const c = JSON.parse(localStorage.getItem("pb.cache") || "null");
+    if (c && c.at && c.tickets) { S.tickets = c.tickets; S.readyKeys = c.readyKeys || []; S.jira.at = c.at; S.jira.cached = true; }
+  } catch {}
 }
 // tickets in open batches are tracked even after they leave Ready (or fall outside "My tickets")
 async function loadBatchTickets(force){
   if (!S.mcp) return;
   const keys = openBatches().flatMap(b => b.keys).filter(k => force ? !S.readyKeys.includes(k) : !S.tickets[k]);
-  if (!keys.length || loadBatchTickets.busy) return;
+  if (!keys.length || loadBatchTickets.busy || (!force && !S.jira.live)) return;
   loadBatchTickets.busy = true;
   try {
     const issues = await searchAll(`key in (${keys.join(",")})`, 2);
     issues.forEach(i => { S.tickets[i.key] = analyze(i); });
   } catch {}
-  loadBatchTickets.busy = false; render();
+  loadBatchTickets.busy = false; saveCache(); render();
 }
 // archived batches load their tickets only when the Archive is opened
 async function loadArchiveTickets(){
@@ -331,11 +344,11 @@ async function loadArchiveTickets(){
       issues.forEach(x => { S.tickets[x.key] = analyze(x); });
     }
   } catch {}
-  S.archLoading = false; render();
+  S.archLoading = false; saveCache(); render();
 }
 async function reloadKeys(keys){
   try { const issues = await searchAll(`key in (${keys.join(",")})`, 1); issues.forEach(i => { const t = analyze(i); S.tickets[t.key] = t; if (t.status !== "Ready") S.readyKeys = S.readyKeys.filter(k => k !== t.key); }); } catch {}
-  render();
+  saveCache(); render();
 }
 
 /* ---------- batches ---------- */
@@ -476,8 +489,9 @@ function filtered(list){
   const q = S.q.trim().toLowerCase();
   return q ? list.filter(t => t.key.toLowerCase().includes(q) || t.title.toLowerCase().includes(q)) : list;
 }
+const inScope = t => S.scope !== "mine" || t.mine;
 function readyList(){
-  return S.readyKeys.map(k => S.tickets[k]).filter(t => t && t.status === "Ready" && !batchOf(t.key) && !t.live);
+  return S.readyKeys.map(k => S.tickets[k]).filter(t => t && t.status === "Ready" && inScope(t) && !batchOf(t.key) && !t.live);
 }
 function ticketRow(t){
   const on = S.sel.includes(t.key), full = S.sel.length >= BATCH;
@@ -491,6 +505,7 @@ function ticketRow(t){
 }
 function renderList(list, emptyMsg){
   if (S.jira.loading && !S.jira.at) return `<div class="loading">Loading Ready tickets from Jira…</div>`;
+  if (!S.jira.at) return `<div class="empty">Nothing loaded yet. Click <b>Refresh</b> at the top to load Ready tickets from Jira.</div>`;
   if (!list.length) return `<div class="empty">${emptyMsg}</div>`;
   return list.map(ticketRow).join("");
 }
@@ -585,7 +600,7 @@ function renderBatches(){
   }).join("");
 }
 function liveList(){
-  return Object.values(S.tickets).filter(t => t.live && t.status !== "Published" && (S.readyKeys.includes(t.key) || batchOf(t.key)));
+  return Object.values(S.tickets).filter(t => t.live && t.status !== "Published" && ((S.readyKeys.includes(t.key) && inScope(t)) || batchOf(t.key)));
 }
 function renderLive(list){
   if (!list.length) return `<div class="empty">When Yuliia posts the live article link in a ticket's comments, the ticket shows up here.</div>`;
@@ -615,7 +630,7 @@ function renderLog(){
 }
 function render(){
   $("scope-mine").setAttribute("aria-pressed", S.scope === "mine"); $("scope-all").setAttribute("aria-pressed", S.scope === "all");
-  $("status").innerHTML = S.jira.loading ? "Loading Jira…" : S.jira.at ? `Updated <b>${new Date(S.jira.at).toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" })}</b>` : "";
+  $("status").innerHTML = S.jira.loading ? "Loading Jira…" : S.jira.at ? `Last refreshed <b>${new Date(S.jira.at).toLocaleString([], { day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" })}</b>` : "Click Refresh to load tickets from Jira";
   $("refresh").disabled = S.jira.loading;
   const ready = readyList();
   const withImg = filtered(ready.filter(t => t.images.length)), noImg = filtered(ready.filter(t => !t.images.length));
@@ -658,7 +673,7 @@ document.addEventListener("click", async ev => {
   const b = ev.target.closest("[data-act]"); if (!b || b.tagName === "INPUT") return;
   const act = b.dataset.act, key = b.dataset.k, id = b.dataset.b;
   switch (act) {
-    case "scope": if (S.scope !== b.dataset.v) { S.scope = b.dataset.v; lsSet("pb.scope", S.scope); loadJira(); } break;
+    case "scope": if (S.scope !== b.dataset.v) { S.scope = b.dataset.v; lsSet("pb.scope", S.scope); render(); } break;
     case "refresh": loadJira(); break;
     case "show": S.show = b.dataset.v; lsSet("pb.show", S.show); render(); break;
     case "fold": S.folded[b.dataset.v] = !S.folded[b.dataset.v]; lsSet("pb.folded", JSON.stringify(S.folded)); render(); break;
@@ -705,15 +720,13 @@ document.addEventListener("change", ev => {
 $("q").addEventListener("input", ev => { S.q = ev.target.value; render(); });
 
 /* ---------- boot ---------- */
+loadCache();
 render();
 (async () => {
   const [mcp, db] = await Promise.all([claude.use("mcp"), claude.use("db")].map(p => p.catch(() => null)));
   S.mcp = mcp; S.db = db;
   if (db) subscribeDb();
   if (!mcp) { S.jira.error = { code:"not_granted", server:JIRA }; render(); return; }
-  try { const u = await call(JIRA, "atlassianUserInfo", {}); if (u && u.account_id) S.me = u.account_id; }
-  catch (e) { if (e.code === "not_in_manifest" || e.code === "needs_reauth" || e.code === "server_not_connected") { S.jira.error = e; render(); return; } }
-  await loadJira();
-  setInterval(() => { if (!document.hidden && !S.jira.loading) loadJira(); }, 10*60*1000);
+  render();
 })();
 </script>
