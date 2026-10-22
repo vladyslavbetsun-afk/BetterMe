@@ -41,7 +41,7 @@ Connector tools the page needs (declared as the artifact's `mcp` capability):
 | Writer workload + tickets for price averages | `project = BP AND status in ("Text","Review","Proofreading") AND cf[11710] is not EMPTY` |
 | Articles handed in this month | `project = BP AND cf[11710] is not EMPTY AND status CHANGED FROM "Text" DURING (startOfMonth(), now())` |
 
-Results are paged (100 per page). Data refreshes every 5 minutes while the tab is visible, and on **Refresh**.
+Results are paged (100 per page). Jira is read **only when you click Refresh**. Opening the page shows the data from the last Refresh, kept in your browser; the header says when that was. (The only other Jira calls are the ones an assignment makes on the ticket you assign.)
 
 ---
 
@@ -359,7 +359,7 @@ h1{margin:0 0 4px;font-family:var(--f-display);font-weight:600;font-size:34px;le
       <p class="sub">Pick an Open ticket, then a writer. Assigning sets the writer as Author, adds them to Request participants and moves the ticket to Text.</p>
     </div>
     <div class="sync">
-      <span class="sync-info"><span class="dot wait" id="dot"></span><span id="syncText">Connecting to Jira…</span></span>
+      <span class="sync-info"><span class="dot wait" id="dot"></span><span id="syncText">Not loaded yet</span></span>
       <button class="btn" id="togglePanel" aria-pressed="true" aria-controls="writersPanel">Hide writers &amp; pricing</button>
       <button class="btn primary" id="refresh" disabled>Refresh</button>
     </div>
@@ -574,6 +574,7 @@ async function load(){
     S.load = ld; S.earned = earned; S.titles = titles;
     if (S.selected && !S.open.some(t => t.key === S.selected)) { S.selected = null; S.confirm = null; }
     S.at = Date.now();
+    saveSnap();
   } catch (e) { S.error = e; }
   S.loading = false; render();
 }
@@ -627,6 +628,7 @@ async function assign(key, wid){
     done.push("moved to Text");
     S.open = S.open.filter(t => t.key !== key);
     S.load[wid] = { ...(S.load[wid]||{}), Text: ((S.load[wid]||{}).Text || 0) + 1 };
+    saveSnap();
     if (S.selected === key) S.selected = null;
     logIt("ok", `${key} → ${w.name}: ${done.join(", ")}.`);
     toast(`${key} assigned to ${w.name}`);
@@ -648,7 +650,7 @@ function filtered(){
 function renderQueue(){
   const list = filtered();
   $("openCount").textContent = S.at ? (list.length === S.open.length ? `${S.open.length} waiting` : `${list.length} of ${S.open.length}`) : "";
-  if (!S.at) return S.error ? `<div class="msg">No tickets loaded.</div>` : `<div class="skel"></div><div class="skel"></div><div class="skel"></div><div class="skel"></div>`;
+  if (!S.at) return S.loading ? `<div class="skel"></div><div class="skel"></div><div class="skel"></div><div class="skel"></div>` : `<div class="msg">Nothing loaded yet. Click <b>Refresh</b> to load Open tickets from Jira.</div>`;
   if (!S.open.length) return `<div class="msg">No Open tickets in BP. New ones show up here after a refresh.</div>`;
   if (!list.length) return `<div class="msg">No Open tickets match this filter.</div>`;
   return list.map(t => {
@@ -693,7 +695,7 @@ function renderModal(){
 function renderMonth(){
   const vals = Object.values(S.earned || {});
   const n = vals.reduce((s,e) => s + e.n, 0), lo = vals.reduce((s,e) => s + e.lo, 0), hi = vals.reduce((s,e) => s + e.hi, 0);
-  if (!S.at) return `<span class="lbl">Loading ${MONTH} earnings…</span>`;
+  if (!S.at) return `<span class="lbl">${S.loading ? `Loading ${MONTH} earnings…` : `Click Refresh to load ${MONTH} earnings.`}</span>`;
   return `<span class="big">${money(lo, hi)}</span><span class="lbl">earned by these writers in ${MONTH} · ${n} article${n === 1 ? "" : "s"} handed in (left Text this month), priced as word count × rate (or flat fee) plus the expert's review fee: +$50 for Carter Lee, Garett Reid and Angelica Galvan, +$20 for Maria</span>`;
 }
 function renderPicked(t){
@@ -739,7 +741,7 @@ function renderLog(){
 }
 function render(){
   $("dot").className = "dot " + (S.loading ? "wait" : S.error ? "bad" : S.at ? "ok" : "wait");
-  $("syncText").textContent = S.loading ? "Syncing with Jira…" : S.error ? "Jira unavailable" : S.at ? `Synced ${new Date(S.at).toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" })}` : "Connecting to Jira…";
+  $("syncText").textContent = S.loading ? "Syncing with Jira…" : S.error ? "Jira unavailable" : S.at ? `Last refreshed ${new Date(S.at).toLocaleString([], { month:"short", day:"numeric", hour:"2-digit", minute:"2-digit" })}` : S.mcp ? "Not loaded yet" : "Connecting to Jira…";
   $("refresh").disabled = S.loading || !S.mcp;
   $("pageErr").innerHTML = S.error ? `<div class="err" style="margin-bottom:18px">${esc(errText(S.error))}${S.error.code === "not_in_manifest" ? ` <button class="btn sm" data-act="perms">Permissions</button>` : ""}</div>` : "";
   $("queue").innerHTML = renderQueue();
@@ -787,13 +789,25 @@ $("togglePanel").addEventListener("click", () => { S.panel = !S.panel; S.confirm
 $("q").addEventListener("input", e => { S.q = e.target.value; $("queue").innerHTML = renderQueue(); });
 
 /* ---------- boot ---------- */
+// The last refreshed data is kept in this browser so opening the page doesn't call Jira.
+const SNAP = "desk.snapshot.v1";
+function saveSnap(){
+  try { localStorage.setItem(SNAP, JSON.stringify({ at:S.at, open:S.open, load:S.load, earned:S.earned, titles:S.titles, month:MONTH })); } catch {}
+}
+(function restoreSnap(){
+  try {
+    const d = JSON.parse(localStorage.getItem(SNAP) || "null");
+    if (!d || !d.at) return;
+    S.at = d.at; S.open = d.open || []; S.load = d.load || {}; S.titles = d.titles || {};
+    S.earned = d.month === MONTH ? (d.earned || {}) : {};
+  } catch {}
+})();
 render();
 (async () => {
   S.mcp = await claude.use("mcp").catch(() => null);
   if (!S.mcp) { S.error = { code:"not_granted" }; render(); return; }
   render();
-  await load();
-  setInterval(() => { if (!document.hidden && !Object.keys(S.busy).length) load(); }, 5*60*1000);
+  // Jira is read only when Refresh is clicked; opening the page shows the last refreshed data.
 })();
 </script>
 ```
