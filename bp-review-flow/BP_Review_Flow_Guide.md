@@ -22,7 +22,7 @@ Buttons still check Jira before acting: every step re-reads the ticket first, so
 
 ## 2. The workflow the dashboard follows
 
-The ticket statuses go in this order: **Open → Text → Review → Proofreading → Ready**. The dashboard tracks tickets from **Text** onwards; tickets in Open are not shown.
+The ticket statuses go in this order: **Open → Text → Review → Proofreading → Ready**. The dashboard tracks only tickets in **Text, Review and Proofreading**. Tickets in Open (not started) and Ready (done) are not shown.
 
 The dashboard reads the comments to work out where every ticket is:
 
@@ -63,7 +63,7 @@ If you've already set the Expert or Proofreader in Jira by hand, the dashboard s
 ## 4. Whose comments are ignored, and which tickets are hidden
 
 - Comments and Slack notifications from **Oksana Pidlisna** and **Yuliia Koreniuk** are ignored everywhere: they don't count as activity, replies or triggers.
-- Tickets in **Open** are not shown anywhere on the dashboard (no lists, counts or flags), whatever their comments. A ticket appears as soon as it moves to **Text**.
+- Tickets in **Open** or **Ready** are not shown anywhere on the dashboard (no lists, counts or flags), whatever their comments. A ticket appears when it moves to **Text** and drops off as soon as it reaches **Ready**, including right after you click **Move to Ready** or **Straight to Ready**.
 - **Excluded** tickets are hidden everywhere (see [section 12](#12-excluding-tickets)).
 
 ---
@@ -297,7 +297,7 @@ For a new writer, click **Find on Slack**. It searches by surname and shows the 
 | "Ticket changed since the last refresh (…), nothing was done" | Not an error: the ticket changed in Jira (for example someone already moved it). Review it and click again if needed. |
 | Stuck on "Loading Slack…" or "Loading Jira…" | Wait up to 60–90 seconds; the request then stops with a message. Click **Refresh**. If it keeps happening, open the page's **Permissions** menu and allow Atlassian and Slack. |
 | A writer didn't get a Slack message | Check the writer is linked (**Find on Slack**) and that **Auto-Slack** is ticked on that ticket. |
-| A ticket you expected isn't shown | Check the scope (**My tickets** vs **All BP**), the **Excluded tickets** panel, whether the latest comment is from Oksana or Yuliia (ignored), and whether the ticket is still in **Open** (not shown). |
+| A ticket you expected isn't shown | Check the scope (**My tickets** vs **All BP**), the **Excluded tickets** panel, whether the latest comment is from Oksana or Yuliia (ignored), and whether the ticket is in **Open** or **Ready** (not shown). |
 | The internal note isn't visible to the writer | Switch **Note to writer** to **Standard comment**. The connector can't tick Jira's own "Internal note" box; "Internal" restricts the comment to the Service Desk Team role. |
 
 ### Known limits

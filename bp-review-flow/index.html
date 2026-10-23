@@ -185,8 +185,8 @@ const IGNORED = new Set(["712020:7cf474f8-6ae6-439f-8d54-f6a1e3143066","712020:b
 const IGNORED_NAMES = ["Oksana Pidlisna","Yuliia Koreniuk"];
 const JIRA_DM = "D0BU742R27L";
 const ACTIVE = ["Text","Review","Proofreading"];
-// Open tickets are not loaded at all: the dashboard starts tracking at Text
-const ALL_ST = ["Text","Review","Proofreading","Ready"];
+// Only tickets in work are tracked: Open (not started) and Ready (done) are not loaded at all
+const ALL_ST = ["Text","Review","Proofreading"];
 const DAY = 864e5;
 const FIT_KW = ["workout","exercise","exercises","yoga","squat","squats","pilates","push up","push-up","pushup","pull up","pull-up","pullup","plank","cardio","abs","stretch","stretches","stretching","walking","walk","running","run","hiit","calisthenics","strength","muscle","muscles","glute","glutes","lunge","lunges","burpee","deadlift","gym","fitness","training","core","dumbbell","kettlebell","jump","steps","posture","mobility","flexibility","somatic","barre","tai chi","treadmill","cycling","swimming","body composition","toning","tone","arm","arms","leg","legs","belly fat","reps","sets","warm up","cool down"];
 const NUT_KW = ["diet","diets","meal","meals","snack","snacks","drink","drinks","food","foods","recipe","recipes","calorie","calories","protein","carb","carbs","keto","fasting","eat","eating","nutrition","nutrient","vitamin","vitamins","fruit","fruits","vegetable","vegetables","smoothie","smoothies","juice","tea","coffee","sugar","breakfast","lunch","dinner","good for you","healthy fats","fiber","cheese","bread","rice","pasta","pepperoni","egg","eggs","oatmeal","yogurt","supplement","supplements","hydration","water","alcohol","wine","beer","sauce","salad","soup","nuts","chocolate","milk","grocery","menu","dessert","bars","shake","shakes"];
@@ -489,7 +489,7 @@ function analyze(issue){
 /* ---------- derived views ---------- */
 function derive(){
   const ex = S.excluded;
-  const ts = S.jira.tickets.filter(t => !ex[t.key] && t.status !== "Open");
+  const ts = S.jira.tickets.filter(t => !ex[t.key] && ACTIVE.includes(t.status));
   const move = ts.filter(t => t.actions.length);
   const wait = ts.filter(t => !t.actions.length && ACTIVE.includes(t.status)).sort((a,b) => (a.since||0) - (b.since||0));
   // 1st message unanswered for 3+ business days
