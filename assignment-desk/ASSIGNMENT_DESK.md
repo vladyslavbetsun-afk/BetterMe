@@ -115,7 +115,7 @@ The ticket title is matched against exercise keywords (workout, yoga, squat, run
 
 - **Header:** title, sync status, **Hide/Show writers & pricing** toggle (remembered in the browser), **Refresh**.
 - **Left — Open tickets:** search box (key or title), topic filter (All / Exercise / Nutrition / Other). Each row shows key, title, age, topic, word count and current Author if any.
-- **Weekly target:** each writer card shows **This week n/3** with a 3-segment bar; it counts tickets moved from Open to Text since Monday 00:00 and resets every Monday. The pop-up shows the same "n/3 this week" next to each name, and the bar above the cards shows the week total and the top writers' total out of 12.
+- **Weekly target:** each writer card shows **This week n/3** with a 3-segment bar; it counts tickets moved from Open to Text since Monday 00:00 and resets every Monday. `WEEK_INCLUDE` lists extra tickets to count in a given week (week of Oct 26: BP-1721 for Eve, assigned Oct 21). The pop-up shows the same "n/3 this week" next to each name, and the bar above the cards shows the week total and the top writers' total out of 12.
 - **Right — Writers & pricing:**
   - month total bar,
   - the picked ticket (title, key link, topic, word count, participants),
@@ -583,8 +583,10 @@ async function load(){
       const p = articleCost(BY_ID[wid], i.fields.summary, (i.fields[F.expert] || {}).accountId);
       e.n++; if (p) { e.lo += p.lo; e.hi += p.hi; e.fees += p.fee; } else e.unpriced++;
     });
-    const wc = {};
-    week.forEach(i => { const a = i.fields && i.fields[F.author]; if (a && BY_ID[a.accountId]) wc[a.accountId] = (wc[a.accountId] || 0) + 1; });
+    const wc = {}, seen = new Set();
+    const count = i => { const a = i.fields && i.fields[F.author]; if (a && BY_ID[a.accountId] && !seen.has(i.key)) { seen.add(i.key); wc[a.accountId] = (wc[a.accountId] || 0) + 1; } };
+    week.forEach(count);
+    (WEEK_INCLUDE[wk] || []).forEach(k => { const i = active.find(x => x.key === k); if (i) count(i); });
     S.load = ld; S.earned = earned; S.titles = titles; S.week = wc; S.weekOf = wk;
     if (S.selected && !S.open.some(t => t.key === S.selected)) { S.selected = null; S.confirm = null; }
     S.at = Date.now();
@@ -713,6 +715,8 @@ function weekStart(){
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 }
 const WEEK_TARGET = 3;
+// Tickets to count in a given week even though they moved to Text before that Monday.
+const WEEK_INCLUDE = { "2026-10-26": ["BP-1721"] };
 function weekOf(id){ return S.weekOf === weekStart() ? ((S.week || {})[id] || 0) : 0; }
 function weekBar(id){
   const n = weekOf(id);
