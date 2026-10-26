@@ -122,6 +122,13 @@ h1{margin:0 0 4px;font-family:var(--f-display);font-weight:600;font-size:34px;le
 .card .load{font-size:17px}
 .card .stats{grid-template-columns:1fr;gap:4px;padding:6px 8px}
 .card .card-foot .btn{flex:1 1 auto;justify-content:center}
+.wk{display:flex;align-items:center;gap:7px;font-size:11.5px}
+.wk-l{color:var(--ink-soft)}
+.wk-bar{display:flex;gap:3px;flex:1}
+.wk-bar span{flex:1;height:6px;border-radius:3px;background:var(--line)}
+.wk-bar span.on{background:var(--accent)}
+.wk-n{font-family:var(--f-mono);font-weight:600}
+.wk-n.full{color:var(--ok-fg)}
 .pill.top{background:var(--text-bg);color:var(--text-fg)}
 .modal-bg{position:fixed;inset:0;z-index:20;background:rgba(10,18,14,.45);display:flex;align-items:flex-start;justify-content:center;padding:calc(40px + env(safe-area-inset-top,0px)) 16px calc(16px + env(safe-area-inset-bottom,0px));overflow-y:auto}
 .modal{background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);width:100%;max-width:480px;display:flex;flex-direction:column;gap:12px;padding:16px}
@@ -266,7 +273,7 @@ const NUT_KW = ["diet","diets","dieta","meal","meals","snack","snacks","drink","
 const S = {
   mcp:null, loading:false, error:null, at:null,
   open:[], load:{}, selected:null, confirm:null, busy:{}, log:[],
-  q:"", cat:"all", earned:{}, titles:{}, modal:null, lastFocus:null,
+  q:"", cat:"all", earned:{}, titles:{}, week:{}, weekOf:null, modal:null, lastFocus:null,
   panel: (() => { try { return localStorage.getItem("desk.panel") !== "off"; } catch { return true; } })()
 };
 
@@ -383,11 +390,14 @@ async function load(){
   if (S.loading) return;
   S.loading = true; S.error = null; render();
   try {
-    const [open, active, month] = await Promise.all([
+    const wk = weekStart();
+    const [open, active, month, week] = await Promise.all([
       searchAll(`project = BP AND status = "Open" ORDER BY created ASC`, ["summary","status","created",F.author,F.parts]),
       searchAll(`project = BP AND status in ("Text","Review","Proofreading") AND cf[11710] is not EMPTY`, ["summary","status",F.author,F.expert], 8),
       // An article counts as earned in the month the writer handed it in, i.e. it left Text.
-      searchAll(`project = BP AND cf[11710] is not EMPTY AND status CHANGED FROM "Text" DURING (startOfMonth(), now())`, ["summary","status",F.author,F.expert], 4)
+      searchAll(`project = BP AND cf[11710] is not EMPTY AND status CHANGED FROM "Text" DURING (startOfMonth(), now())`, ["summary","status",F.author,F.expert], 4),
+      // Assigned this week = moved from Open to Text since Monday; counted for the ticket's current Author.
+      searchAll(`project = BP AND status CHANGED FROM "Open" TO "Text" DURING ("${wk}", now())`, [F.author], 3)
     ]);
     S.open = open.map(toTicket);
     const ld = {}, titles = {};
@@ -400,7 +410,9 @@ async function load(){
       const p = articleCost(BY_ID[wid], i.fields.summary, (i.fields[F.expert] || {}).accountId);
       e.n++; if (p) { e.lo += p.lo; e.hi += p.hi; e.fees += p.fee; } else e.unpriced++;
     });
-    S.load = ld; S.earned = earned; S.titles = titles;
+    const wc = {};
+    week.forEach(i => { const a = i.fields && i.fields[F.author]; if (a && BY_ID[a.accountId]) wc[a.accountId] = (wc[a.accountId] || 0) + 1; });
+    S.load = ld; S.earned = earned; S.titles = titles; S.week = wc; S.weekOf = wk;
     if (S.selected && !S.open.some(t => t.key === S.selected)) { S.selected = null; S.confirm = null; }
     S.at = Date.now();
     saveSnap();
@@ -457,6 +469,7 @@ async function assign(key, wid){
     done.push("moved to Text");
     S.open = S.open.filter(t => t.key !== key);
     S.load[wid] = { ...(S.load[wid]||{}), Text: ((S.load[wid]||{}).Text || 0) + 1 };
+    if (S.weekOf === weekStart()) S.week[wid] = (S.week[wid] || 0) + 1;
     saveSnap();
     if (S.selected === key) S.selected = null;
     logIt("ok", `${key} → ${w.name}: ${done.join(", ")}.`);
@@ -512,7 +525,7 @@ function renderModal(){
   const conf = S.confirm && S.confirm.key === t.key && BY_ID[S.confirm.wid];
   const row = ({ w, ld }) => { const pr = priceFor(w, t); return `<button class="wpick" data-act="pickw" data-w="${esc(w.id)}">
       <span class="nm">${esc(w.name)}</span><span class="pr">${pr ? esc(pr) : esc(rateLabel(w))}</span>
-      <span class="sub"><span>${ld.text} in Text</span><span>${esc(nicheTag(w).label)}</span><span>${w.noReview ? "no expert review" : "goes to expert"}</span></span></button>`; };
+      <span class="sub"><span><b>${weekOf(w.id)}/${WEEK_TARGET} this week</b></span><span>${ld.text} in Text</span><span>${esc(nicheTag(w).label)}</span><span>${w.noReview ? "no expert review" : "goes to expert"}</span></span></button>`; };
   const ws = sortedWriters(t);
   const body = conf ? `<div class="confirm">${confirmBody(t, conf)}</div>`
     : `<span class="grp">Top writers</span><div class="wlist">${ws.filter(x => x.w.top).map(row).join("")}</div>
@@ -521,11 +534,26 @@ function renderModal(){
     <div class="modal-head"><div><span class="wc"><a href="${esc(t.url)}" target="_blank" rel="noopener">${esc(t.key)} ↗</a> · ${t.wc ? (t.wc.min === t.wc.max ? t.wc.min : t.wc.min+"–"+t.wc.max) + " words" : "no word count"}</span><h3 id="mTitle">${esc(t.title)}</h3></div>
       <button class="btn ghost sm" data-act="closem" aria-label="Close">✕</button></div>${body}</div>`;
 }
+// Monday of the current week, local time, as YYYY-MM-DD.
+function weekStart(){
+  const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+const WEEK_TARGET = 3;
+function weekOf(id){ return S.weekOf === weekStart() ? ((S.week || {})[id] || 0) : 0; }
+function weekBar(id){
+  const n = weekOf(id);
+  const segs = Array.from({ length:WEEK_TARGET }, (_, i) => `<span class="${i < n ? "on" : ""}"></span>`).join("");
+  return `<div class="wk" title="Assigned since Monday"><span class="wk-l">This week</span><span class="wk-bar">${segs}</span><span class="wk-n ${n >= WEEK_TARGET ? "full" : ""}">${S.at ? `${n}/${WEEK_TARGET}` : "–"}</span></div>`;
+}
 function renderMonth(){
   const vals = Object.values(S.earned || {});
   const n = vals.reduce((s,e) => s + e.n, 0), lo = vals.reduce((s,e) => s + e.lo, 0), hi = vals.reduce((s,e) => s + e.hi, 0);
   if (!S.at) return `<span class="lbl">${S.loading ? `Loading ${MONTH} earnings…` : `Click Refresh to load ${MONTH} earnings.`}</span>`;
-  return `<span class="big">${money(lo, hi)}</span><span class="lbl">earned by these writers in ${MONTH} · ${n} article${n === 1 ? "" : "s"} handed in (left Text this month), priced as word count × rate (or flat fee) plus the expert's review fee: +$50 for Carter Lee, Garett Reid and Angelica Galvan, +$20 for Maria</span>`;
+  const wd = new Date(weekStart() + "T00:00:00").toLocaleDateString("en-US", { month:"short", day:"numeric" });
+  const wn = WRITERS.reduce((s,w) => s + weekOf(w.id), 0);
+  return `<span class="lbl" style="flex-basis:100%"><b>Week of ${wd}:</b> ${wn} article${wn === 1 ? "" : "s"} assigned so far · top writers ${WRITERS.filter(w => w.top).reduce((s,w) => s + Math.min(weekOf(w.id), WEEK_TARGET), 0)}/${WRITERS.filter(w => w.top).length * WEEK_TARGET}</span>
+    <span class="big">${money(lo, hi)}</span><span class="lbl">earned by these writers in ${MONTH} · ${n} article${n === 1 ? "" : "s"} handed in (left Text this month), priced as word count × rate (or flat fee) plus the expert's review fee: +$50 for Carter Lee, Garett Reid and Angelica Galvan, +$20 for Maria</span>`;
 }
 function renderPicked(t){
   if (!t) return `<div class="picked none">Click an Open ticket on the left to choose its writer in a pop-up. The cards below then also show the price for that ticket. Any writer can take any ticket.</div>`;
@@ -556,6 +584,7 @@ function renderCards(t){
       <div class="card-top"><span class="name">${esc(w.name)}</span><span class="load">${S.at ? ld.total : "–"}<small>in Text</small></span></div>
       <div class="card-meta"><span class="pill ${n.cls}">${esc(n.label)}</span><span class="rate">${esc(rateLabel(w))}</span></div>
       ${w.noReview ? `<span class="noreview">✓ no expert review needed</span>` : ""}
+      ${weekBar(w.id)}
       <div class="chips">${chips}</div>
       <div class="stats">
         <div class="stat"><span class="k">Per article</span><span class="v">${esc(avgArticle(w) || "—")}</span><span class="s">${w.noReview ? "" : "incl. expert · "}${w.rateType === "article" ? "flat fee" : "average"}</span></div>
@@ -621,7 +650,7 @@ $("q").addEventListener("input", e => { S.q = e.target.value; $("queue").innerHT
 // The last refreshed data is kept in this browser so opening the page doesn't call Jira.
 const SNAP = "desk.snapshot.v1";
 function saveSnap(){
-  try { localStorage.setItem(SNAP, JSON.stringify({ at:S.at, open:S.open, load:S.load, earned:S.earned, titles:S.titles, month:MONTH })); } catch {}
+  try { localStorage.setItem(SNAP, JSON.stringify({ at:S.at, open:S.open, load:S.load, earned:S.earned, titles:S.titles, month:MONTH, week:S.week, weekOf:S.weekOf })); } catch {}
 }
 (function restoreSnap(){
   try {
@@ -629,6 +658,7 @@ function saveSnap(){
     if (!d || !d.at) return;
     S.at = d.at; S.open = d.open || []; S.load = d.load || {}; S.titles = d.titles || {};
     S.earned = d.month === MONTH ? (d.earned || {}) : {};
+    S.week = d.week || {}; S.weekOf = d.weekOf || null;
   } catch {}
 })();
 render();
