@@ -28,14 +28,14 @@ A dashboard for moving BetterMe Blog Project (BP) Jira tickets from **Ready** to
 - Tick up to **4** tickets (checkboxes disable at 4). They appear in the **New batch** tray as numbered slots; × removes one, **Clear** empties the tray.
 - **Create batch** saves the batch (a batch of fewer than 4 is allowed, with a note that batches are usually 4). Batches are numbered 1, 2, 3… and saved in the page's database.
 
-### 1.2a Marking batches in progress
-- Every open batch has a **Mark in progress** button. Clicking it flags the batch **In progress**:
-  - a bold orange chip,
-  - an orange highlight,
-  - the batch moves to the top of the Batches list.
-- Click **Stop working** to clear the flag.
-- The **Batches in progress** tile counts flagged batches.
-- The flag is saved with the batch (`inProgress`, `inProgressAt`) and logged. Archiving a batch clears it.
+### 1.2a Labelling batches: In progress / Ready
+- Every open batch has an **In progress | Ready** switch.
+- **In progress** (you're working on it) gives the batch an orange label and highlight.
+- **Ready** (done, ready to go) gives it a green label and highlight.
+- Clicking the active option again removes the label.
+- Order of the Batches list: In progress first, then Ready, then the rest.
+- Tiles **Batches in progress** and **Batches ready** count them.
+- The label is saved with the batch (`work`: `progress` / `ready`, `workAt`) and logged. Archiving clears it.
 
 ### 1.3 Handing a batch to Yuliia
 Each unsent batch has:
@@ -72,7 +72,7 @@ Each unsent batch has:
 - Each archived batch shows: number, published count, sent date, archive date, every ticket with Jira link and **Published ↗** live link, and a **Restore** button.
 
 ### 1.7 Count tiles (top of page)
-Ready with images · Ready, no images · Batches in progress · Batches not sent · Batches sent or scheduled · Live, to publish. Clicking a tile jumps to (and opens) its section.
+Ready with images · Ready, no images · Batches in progress · Batches ready · Batches not sent · Batches sent or scheduled · Live, to publish. Clicking a tile jumps to (and opens) its section.
 
 ### 1.8 Action log
 - Every Jira change, Slack send/schedule/reschedule, batch create/delete/archive/restore and every failure (with the connector's reason) is logged with a timestamp.
@@ -124,7 +124,7 @@ Ready with images · Ready, no images · Batches in progress · Batches not sent
   }
   ```
 - **Database** (artifact `db`, kept across republishes):
-  - `batches/{id}` — `{ id, n, keys[], createdAt, partsFailed[], sentAt, postAt, stale[], inProgress, inProgressAt, archived, archivedAt }`
+  - `batches/{id}` — `{ id, n, keys[], createdAt, partsFailed[], sentAt, postAt, stale[], work, workAt, archived, archivedAt }`
     - `sentAt` is when you clicked send or schedule.
     - `postAt` is the scheduled delivery time (null when sent immediately).
     - `stale` lists old scheduled times still to delete in Slack.
@@ -198,7 +198,7 @@ header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background
 .btn.ghost{border-color:transparent;background:none;color:var(--muted)}
 .status{font-size:12.5px;color:var(--muted)}
 .status b{color:var(--fg);font-weight:600}
-.tiles{margin-top:14px;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
+.tiles{margin-top:14px;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}
 .tile{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:2px;min-width:0}
 .tile:hover{border-color:var(--accent)}
 .tile .n{font-family:var(--f-display);font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1}
@@ -261,9 +261,15 @@ section.panel.tray{border-color:var(--accent)}
 .batch{border-top:1px solid var(--line);padding:12px 0;display:flex;flex-direction:column;gap:8px}
 .batch:first-child{border-top:0}
 .bh{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}
-.bh .prog-btn{margin-left:auto}
+.bh .work{margin-left:auto}
+.seg.work button{padding:2px 10px;font-size:12.5px}
+.seg.work button[data-v="progress"][aria-pressed="true"]{background:var(--warn);color:var(--surface)}
+.seg.work button[data-v="ready"][aria-pressed="true"]{background:var(--ok);color:var(--surface)}
 .chip.prog{background:var(--warn);color:var(--surface);font-weight:700;letter-spacing:.02em}
-.batch.inprog{background:var(--warn-soft);margin-inline:-14px;padding-inline:11px;border-left:3px solid var(--warn)}
+.chip.rdy{background:var(--ok);color:var(--surface);font-weight:700;letter-spacing:.02em}
+.batch.w-progress,.batch.w-ready{margin-inline:-14px;padding-inline:11px}
+.batch.w-progress{background:var(--warn-soft);border-left:3px solid var(--warn)}
+.batch.w-ready{background:var(--ok-soft);border-left:3px solid var(--ok)}
 .bh strong{font-family:var(--f-display);font-size:15px}
 .bl{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
 .bl li{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;font-size:13px;min-width:0}
@@ -709,9 +715,13 @@ function renderArchive(list){
     </div>`;
   }).join("");
 }
+// your own working label on a batch: "progress" (In progress), "ready" (Ready) or none
+const workOf = b => b.work || (b.inProgress ? "progress" : null);
+const WORK_LABEL = { progress:"In progress", ready:"Ready" };
 function renderBatches(){
   // batches you're working on now come first
-  const list = batchList().filter(b => !b.archived).sort((a,b) => (b.inProgress ? 1 : 0) - (a.inProgress ? 1 : 0) || (b.n||0) - (a.n||0));
+  const rank = b => ({ progress:2, ready:1 })[workOf(b)] || 0;
+  const list = batchList().filter(b => !b.archived).sort((a,b) => rank(b) - rank(a) || (b.n||0) - (a.n||0));
   if (!list.length) return `<div class="empty">No batches yet. Tick up to ${BATCH} Ready tickets and click Create batch.</div>`;
   return list.map(b => {
     const done = isDone(b), busy = S.running[b.id];
@@ -745,9 +755,10 @@ function renderBatches(){
     if (done) acts = `<button class="btn sm" data-act="archive" data-b="${esc(b.id)}">Archive</button>`;
     const stale = (b.stale || []).length ? `<div class="warn">In Slack, delete the old scheduled message${b.stale.length > 1 ? "s" : ""} for ${esc(b.stale.map(fmtWhen).join(" and "))}: open the DM with Yuliia Koreniuk, or go to Drafts &amp; sent → Scheduled. Otherwise she gets the message twice. <button class="btn sm" data-act="staleok" data-b="${esc(b.id)}">I deleted it</button></div>` : "";
     const err = (b.partsFailed || []).length ? `<div class="err">Yuliia wasn't added to Request participants on ${esc(b.partsFailed.join(", "))}. The Slack message hasn't been sent. See the action log for Jira's reason.</div>` : "";
-    return `<div class="batch${b.inProgress ? " inprog" : ""}">
-      <div class="bh"><strong>Batch ${esc(b.n)}</strong>${b.inProgress ? `<span class="chip prog">In progress</span>` : ""}${chip}<span class="sub">created ${ago(b.createdAt)}</span>
-        <button class="btn sm prog-btn" data-act="prog" data-b="${esc(b.id)}" aria-pressed="${!!b.inProgress}">${b.inProgress ? "Stop working" : "Mark in progress"}</button></div>
+    const w = workOf(b);
+    return `<div class="batch${w ? " w-" + w : ""}">
+      <div class="bh"><strong>Batch ${esc(b.n)}</strong>${w ? `<span class="chip ${w === "ready" ? "rdy" : "prog"}">${WORK_LABEL[w]}</span>` : ""}${chip}<span class="sub">created ${ago(b.createdAt)}</span>
+        <span class="seg work" role="group" aria-label="Label for batch ${esc(b.n)}">${["progress","ready"].map(v => `<button data-act="work" data-v="${v}" data-b="${esc(b.id)}" aria-pressed="${w === v}" title="${w === v ? "Click again to remove the label" : ""}">${WORK_LABEL[v]}</button>`).join("")}</span></div>
       <ul class="bl">${b.keys.map(k => batchTicket(b, k)).join("")}</ul>
       ${err}
       ${S.ui.preview[b.id] && !b.sentAt ? `<div class="preview">${esc(slackText(b.keys))}</div><div class="sub">${S.ui.mode[b.id] === "later" ? "Scheduled" : "Sent"} as a DM to Yuliia Koreniuk on Slack.</div>` : ""}
@@ -798,7 +809,8 @@ function render(){
   const tiles = [
     { n: ready.filter(t => t.images.length).length, l: "Ready with images", sec: "sec-img" },
     { n: ready.filter(t => !t.images.length).length, l: "Ready, no images", sec: "sec-noimg", cls: "alarm" },
-    { n: open.filter(b => b.inProgress).length, l: "Batches in progress", sec: "sec-batches", cls: open.some(b => b.inProgress) ? "alarm" : "" },
+    { n: open.filter(b => workOf(b) === "progress").length, l: "Batches in progress", sec: "sec-batches", cls: open.some(b => workOf(b) === "progress") ? "alarm" : "" },
+    { n: open.filter(b => workOf(b) === "ready").length, l: "Batches ready", sec: "sec-batches", cls: open.some(b => workOf(b) === "ready") ? "hot" : "" },
     { n: open.filter(b => !b.sentAt).length, l: "Batches not sent", sec: "sec-batches" },
     { n: waiting, l: "Batches sent or scheduled", sec: "sec-batches" },
     { n: live.length, l: "Live, to publish", sec: "sec-live", cls: live.length ? "hot" : "" }
@@ -858,8 +870,13 @@ document.addEventListener("click", async ev => {
     case "del": S.ui.confirmDel = id; render(); break;
     case "delno": S.ui.confirmDel = null; render(); break;
     case "delyes": { const bt = S.batches[id]; S.ui.confirmDel = null; delete S.batches[id]; render(); await dbDel("batches/"+id); if (bt) await logIt("batch", `Batch ${bt.n} deleted`); break; }
-    case "prog": { const bt = S.batches[id]; if (bt) { const on = !bt.inProgress; await saveBatch({ ...bt, inProgress: on, inProgressAt: on ? Date.now() : null }); await logIt("batch", `Batch ${bt.n} ${on ? "marked in progress" : "no longer in progress"}`); } break; }
-    case "archive": { const bt = S.batches[id]; if (bt) { await saveBatch({ ...bt, archived: true, archivedAt: Date.now(), inProgress: false }); await logIt("batch", `Batch ${bt.n} archived`); } break; }
+    case "work": {
+      const bt = S.batches[id]; if (!bt) break;
+      const v = workOf(bt) === b.dataset.v ? null : b.dataset.v;
+      await saveBatch({ ...bt, work: v, workAt: v ? Date.now() : null, inProgress: false });
+      await logIt("batch", v ? `Batch ${bt.n} marked ${WORK_LABEL[v]}` : `Batch ${bt.n}: label removed`); break;
+    }
+    case "archive": { const bt = S.batches[id]; if (bt) { await saveBatch({ ...bt, archived: true, archivedAt: Date.now(), inProgress: false, work: null }); await logIt("batch", `Batch ${bt.n} archived`); } break; }
     case "unarchive": { const bt = S.batches[id]; if (bt) { await saveBatch({ ...bt, archived: false }); await logIt("batch", `Batch ${bt.n} restored from the archive`); } break; }
     case "archfold": S.archOpen = !S.archOpen; lsSet("pb.arch", S.archOpen ? "1" : "0"); render(); if (S.archOpen) loadArchiveTickets(); break;
     case "publish": await publish(key); break;
