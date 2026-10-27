@@ -720,17 +720,23 @@ function docIdOf(t){
   return null;
 }
 // Counts the article itself: stops at the closing disclaimer, the Sources list or the meta lines; skips link addresses and citation numbers.
-function countArticleWords(md){
-  let s = String(md || "");
-  for (const re of [/^[\s*#]*(sources|references)[\s*:]*$/im, /this article is intended for general informational purposes only/i, /^[\s*]*meta title/im, /^[\s*]*meta description/im]) {
-    const i = s.search(re); if (i > 0) s = s.slice(0, i);
-  }
-  s = s.replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+function wordsIn(s){
+  s = String(s || "").replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
        .replace(/\(\s*\d+(\s*,\s*\d+)*\s*\)/g, " ")
        .replace(/https?:\/\/\S+/g, " ")
        .replace(/^\s*\|?(\s*:?-+:?\s*\|)+\s*$/gm, " ")
        .replace(/[*_#>|\\`]/g, " ");
   return (s.match(/[A-Za-z0-9À-ɏ]+(?:['’\-][A-Za-z0-9À-ɏ]+)*/g) || []).length;
+}
+// whole document, roughly what Google Docs' own word count shows
+function countDocWords(md){ return wordsIn(md); }
+// the article itself: no meta title/description lines (wherever they are), and nothing from the Sources list or closing disclaimer on
+function countArticleWords(md){
+  let s = String(md || "").replace(/^[\s*_]*meta (title|description)\b.*$/gim, " ");
+  for (const re of [/^[\s*#]*(sources|references)[\s*:]*$/im, /this article is intended for general informational purposes only/i]) {
+    const i = s.search(re); if (i > 0) s = s.slice(0, i);
+  }
+  return wordsIn(s);
 }
 function lengthLevel(words, target){
   const d = (words - target) / target;
@@ -745,12 +751,12 @@ async function checkLength(key){
     const p = await read(GDRIVE, "read_file_content", { fileId:docId });
     const text = typeof p === "string" ? p : (p && (p.fileContent || p.content || p.text)) || "";
     if (!text) throw { code:"tool_error", server:GDRIVE, message:"the document came back empty" };
-    const words = countArticleWords(text);
+    const words = countArticleWords(text), total = countDocWords(text);
     const prev = S.lengths[key] || {};
-    const res = { at:Date.now(), words, target, docId, level:lengthLevel(words, target), askedAt: prev.docId === docId ? prev.askedAt || null : null };
+    const res = { at:Date.now(), words, total, target, docId, level:lengthLevel(words, target), askedAt: prev.docId === docId ? prev.askedAt || null : null };
     S.lengths[key] = res; await dbSet("lengthChecks/"+key, res);
     const pct = Math.round((words - target) / target * 100);
-    await logIt(res.level === "over" || res.level === "slightly" ? "fail" : "manual", `${key}: article is ${words.toLocaleString()} words vs ${target.toLocaleString()} in the task (${pct > 0 ? "+" : ""}${pct}%)`, { key });
+    await logIt(res.level === "over" || res.level === "slightly" ? "fail" : "manual", `${key}: article is ${words.toLocaleString()} words vs ${target.toLocaleString()} in the task (${pct > 0 ? "+" : ""}${pct}%); whole doc ${total.toLocaleString()} words`, { key });
   } catch (e) {
     await logIt("fail", `${key}: couldn't read the writer's document. ${errText(e, GDRIVE)}`, { key });
   }
@@ -775,7 +781,7 @@ function lengthUI(t, small){
   if (fresh) {
     const pct = Math.round((r.words - r.target) / r.target * 100);
     const cls = r.level === "over" ? "flag" : r.level === "slightly" ? "soon" : r.level === "under" ? "" : "auto-y";
-    h += `<span class="chip ${cls}" title="Checked ${ago(r.at)} ago">${r.words.toLocaleString()} / ${r.target.toLocaleString()} words (${pct > 0 ? "+" : ""}${pct}%)</span>`;
+    h += `<span class="chip ${cls}" title="Article text only, checked ${ago(r.at)} ago">${r.words.toLocaleString()} / ${r.target.toLocaleString()} words (${pct > 0 ? "+" : ""}${pct}%)</span>${r.total ? `<span class="sub" title="Everything in the doc, incl. Sources and disclaimer">whole doc ${r.total.toLocaleString()}</span>` : ""}`;
     if ((r.level === "over" || r.level === "slightly") && t.writer) {
       h += r.askedAt ? `<span class="sub">Asked to cut ${ago(r.askedAt)} ago</span>`
         : `<button class="btn${sm} pri" ${busy?"disabled":""} data-act="lenask" data-k="${esc(t.key)}">Ask ${esc(firstName(t.writer.name))} to follow the word count</button>`;

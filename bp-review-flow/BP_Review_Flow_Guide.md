@@ -167,7 +167,9 @@ Every ticket in Text, Review or Proofreading with the writer's document link has
 
 - It reads the writer's latest Google Doc (through the Google Drive connector) and counts the article's words.
 - It compares the count with the word count in the ticket title, for example "best breakfast for weight loss, **1800 words**, update".
-- **What counts:** everything from the title to the closing paragraph. The legal disclaimer at the end, the **Sources** list, the **Meta title / Meta description** lines, link addresses and citation numbers like "(1, 2)" are left out.
+- **Which document:** the latest Google Doc link the writer posted as a comment on the ticket. Drive files from Oksana (images) are ignored.
+- **What counts:** the article text, from the title to the closing paragraph. The **Meta title / Meta description** lines (wherever they are in the doc), the **Sources** list, the legal disclaimer at the end, link addresses and citation numbers like "(1, 2)" are left out. This article count decides the colour and the note button.
+- **Whole doc:** next to the result, the dashboard also shows the word count of the whole document, including Sources and the disclaimer. That's roughly what Google Docs' own word count (and the writer) will see.
 - **The result** shows next to the button, for example "1,980 / 1,800 words (+10%)":
   - green: within ±10% of the target
   - amber: 10–15% over
