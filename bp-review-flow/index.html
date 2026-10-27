@@ -201,7 +201,7 @@ const S = {
   reviewCounts: {},
   slack: { loading:false, error:null, items:[], at:null },
   settings: { automation:false, windowDays:14, noteMode:"internal" },
-  excluded: {}, links: {}, sent: {}, hidden: {}, overrides: {}, expertAsks: {}, log: [],
+  excluded: {}, links: {}, sent: {}, hidden: {}, overrides: {}, expertAsks: {}, lengths: {}, log: [],
   dbReady:false, running:{}, autoBusy:false, lastAuto:null, autoSlackBusy:false, autoSlackTried:{}, assigned:{},
   ui: { preview:{}, find:{}, confirmClear:false, linkOpen:{}, confirmReady:{} }
 };
@@ -285,6 +285,7 @@ function subscribeDb(){
   coll("hiddenSlack", m => S.hidden = m);
   coll("overrides", m => { S.overrides = m; reanalyze(); });
   coll("expertAsks", m => { S.expertAsks = m; reanalyze(); });
+  coll("lengthChecks", m => S.lengths = m);
   db.collection("log").orderBy("at","desc").limit(200).onSnapshot(snap => { S.log = snap.docs.map(d => ({ id:d.id, ...d.data() })); render(); }, () => {});
 }
 async function saveSettings(patch){ S.settings = { ...S.settings, ...patch }; render(); await dbSet("settings/main", S.settings); }
@@ -701,6 +702,87 @@ function readyBtn(t, small){
   if (S.ui.confirmReady[t.key]) return `<span class="confirm">Send ${esc(t.key)} to Ready? <button class="btn${sm} pri" ${busy?"disabled":""} data-act="readyyes" data-k="${esc(t.key)}">Yes, to Ready</button><button class="btn${sm} ghost" data-act="readyno" data-k="${esc(t.key)}">Cancel</button></span>`;
   return `<button class="btn${sm}" ${busy?"disabled":""} data-act="ready" data-k="${esc(t.key)}">${busy && S.running["ready:"+t.key] ? "Moving to Ready…" : "Straight to Ready"}</button>`;
 }
+/* ---------- article length vs the word count in the ticket title ---------- */
+const GDRIVE = "Google Drive";
+const WORD_MSG = "Please follow the wordcount indicated in the task. The article must not exceed the required wordcount +- 10-15%. Thanks.";
+// "best breakfast for weight loss, 1800 words, update" -> 1800
+function targetWords(title){
+  const m = String(title || "").match(/(\d[\d,.]*)\s*(k)?\s*words?\b/i); if (!m) return null;
+  let n = parseFloat(m[1].replace(/,/g, "")); if (m[2]) n *= 1000; return n > 0 ? Math.round(n) : null;
+}
+// the latest Google Doc / Drive file the writer posted
+function docIdOf(t){
+  for (const c of [...t.cs].reverse()) {
+    if (c.role !== "writer" && !(t.writer == null && c.role === "other")) continue;
+    const m = c.text.match(/docs\.google\.com\/document\/(?:u\/\d+\/)?d\/([A-Za-z0-9_-]{20,})/) || c.text.match(/drive\.google\.com\/file\/d\/([A-Za-z0-9_-]{20,})/);
+    if (m) return m[1];
+  }
+  return null;
+}
+// Counts the article itself: stops at the closing disclaimer, the Sources list or the meta lines; skips link addresses and citation numbers.
+function countArticleWords(md){
+  let s = String(md || "");
+  for (const re of [/^[\s*#]*(sources|references)[\s*:]*$/im, /this article is intended for general informational purposes only/i, /^[\s*]*meta title/im, /^[\s*]*meta description/im]) {
+    const i = s.search(re); if (i > 0) s = s.slice(0, i);
+  }
+  s = s.replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+       .replace(/\(\s*\d+(\s*,\s*\d+)*\s*\)/g, " ")
+       .replace(/https?:\/\/\S+/g, " ")
+       .replace(/^\s*\|?(\s*:?-+:?\s*\|)+\s*$/gm, " ")
+       .replace(/[*_#>|\\`]/g, " ");
+  return (s.match(/[A-Za-z0-9À-ɏ]+(?:['’\-][A-Za-z0-9À-ɏ]+)*/g) || []).length;
+}
+function lengthLevel(words, target){
+  const d = (words - target) / target;
+  return d > 0.15 ? "over" : d > 0.10 ? "slightly" : d < -0.15 ? "under" : "ok";
+}
+async function checkLength(key){
+  const t = findT(key); if (!t) return;
+  const docId = docIdOf(t), target = targetWords(t.title);
+  if (!docId || !target) return;
+  S.running["len:"+key] = true; render();
+  try {
+    const p = await read(GDRIVE, "read_file_content", { fileId:docId });
+    const text = typeof p === "string" ? p : (p && (p.fileContent || p.content || p.text)) || "";
+    if (!text) throw { code:"tool_error", server:GDRIVE, message:"the document came back empty" };
+    const words = countArticleWords(text);
+    const prev = S.lengths[key] || {};
+    const res = { at:Date.now(), words, target, docId, level:lengthLevel(words, target), askedAt: prev.docId === docId ? prev.askedAt || null : null };
+    S.lengths[key] = res; await dbSet("lengthChecks/"+key, res);
+    const pct = Math.round((words - target) / target * 100);
+    await logIt(res.level === "over" || res.level === "slightly" ? "fail" : "manual", `${key}: article is ${words.toLocaleString()} words vs ${target.toLocaleString()} in the task (${pct > 0 ? "+" : ""}${pct}%)`, { key });
+  } catch (e) {
+    await logIt("fail", `${key}: couldn't read the writer's document. ${errText(e, GDRIVE)}`, { key });
+  }
+  delete S.running["len:"+key]; render();
+}
+async function askWordcount(key){
+  const t = findT(key); if (!t || !t.writer) return;
+  S.running["len:"+key] = true; render();
+  try {
+    await write(JIRA, "addCommentToJiraIssue", noteInput(key, t.writer, WORD_MSG));
+    const res = { ...(S.lengths[key] || {}), askedAt: Date.now() }; S.lengths[key] = res; await dbSet("lengthChecks/"+key, res);
+    await logIt("jira", `${key}: posted "@${t.writer.name} ${WORD_MSG}"`, { key, writerId:t.writer.id });
+  } catch (e) { await logIt("fail", `${key}: word count note to ${t.writer.name} failed. ${errText(e, JIRA)}`, { key }); }
+  delete S.running["len:"+key]; await reloadKeys([key]);
+}
+function lengthUI(t, small){
+  const docId = docIdOf(t); if (!docId || !ACTIVE.includes(t.status)) return "";
+  const target = targetWords(t.title); const sm = small ? " sm" : "";
+  if (!target) return `<span class="chip" title="Add e.g. '1800 words' to the ticket title">No word count in title</span>`;
+  const busy = !!S.running["len:"+t.key]; const r = S.lengths[t.key]; const fresh = r && r.docId === docId;
+  let h = `<button class="btn${sm}" ${busy?"disabled":""} data-act="len" data-k="${esc(t.key)}">${busy ? "Checking…" : fresh ? "Re-check length" : "Check length"}</button>`;
+  if (fresh) {
+    const pct = Math.round((r.words - r.target) / r.target * 100);
+    const cls = r.level === "over" ? "flag" : r.level === "slightly" ? "soon" : r.level === "under" ? "" : "auto-y";
+    h += `<span class="chip ${cls}" title="Checked ${ago(r.at)} ago">${r.words.toLocaleString()} / ${r.target.toLocaleString()} words (${pct > 0 ? "+" : ""}${pct}%)</span>`;
+    if ((r.level === "over" || r.level === "slightly") && t.writer) {
+      h += r.askedAt ? `<span class="sub">Asked to cut ${ago(r.askedAt)} ago</span>`
+        : `<button class="btn${sm} pri" ${busy?"disabled":""} data-act="lenask" data-k="${esc(t.key)}">Ask ${esc(firstName(t.writer.name))} to follow the word count</button>`;
+    }
+  }
+  return h;
+}
 const NOT_LOADED = `<div class="empty">Click <b>Refresh</b> to load your tickets from Jira.</div>`;
 const STATUS_MSG = "Hi. What's the status on this one?";
 function statusSlackText(writer, tickets){
@@ -857,7 +939,7 @@ function renderMove(D){
       <div class="acts">
         ${t.actions.map(a => `<button class="btn" ${busy||a.disabled?"disabled":""} data-act="step" data-k="${esc(t.key)}" data-s="${a.kind}">${esc(a.label)}</button>`).join("")}
         ${t.actions.length > 1 ? `<button class="btn pri" ${busy||t.actions.some(a=>a.disabled)?"disabled":""} data-act="all" data-k="${esc(t.key)}">Do all steps</button>` : ""}
-        ${catSel}${readyBtn(t)}${excludeBtn(t.key)}${busy ? `<span class="sub">Working…</span>` : ""}
+        ${catSel}${readyBtn(t)}${lengthUI(t)}${excludeBtn(t.key)}${busy ? `<span class="sub">Working…</span>` : ""}
       </div></div>`;
   }).join("");
 }
@@ -877,7 +959,7 @@ function renderNoReply(D){
     return `<div class="card"><div class="row">${keyLink(t)}<span class="title">${esc(t.title)}</span>${stChip(t.status)}<span class="chip flag">${bdLabel(Math.floor(t.bd))} no reply</span></div>
       <div class="quote"><span class="who">You · ${ago(t.myLast.at)} ago</span>${esc(t.myLast.text.slice(0,200))}</div>
       <div class="acts"><button class="btn" ${!tg||busy?"disabled":""} data-act="ask" data-k="${esc(t.key)}">${label}</button>
-      ${autoSlackBox(t)}${readyBtn(t)}${sent && sent.at ? `<span class="sub">Slacked ${ago(sent.at)} ago</span>` : ""}${excludeBtn(t.key)}${busy?`<span class="sub">Working…</span>`:""}</div></div>`;
+      ${autoSlackBox(t)}${readyBtn(t)}${lengthUI(t)}${sent && sent.at ? `<span class="sub">Slacked ${ago(sent.at)} ago</span>` : ""}${excludeBtn(t.key)}${busy?`<span class="sub">Working…</span>`:""}</div></div>`;
   }).join("");
 }
 function followRow(a){
@@ -885,7 +967,7 @@ function followRow(a){
     : a.returned ? `<span class="chip flag">no reply 3 business days after Slack</span>`
     : a.bd >= 3 ? `<span class="chip flag">flagged · ${bdLabel(Math.floor(a.bd))}</span>`
     : `<span class="chip soon">flags in ${bdLabel(Math.max(1, Math.ceil(3 - a.bd)))}</span>`;
-  return `<li>${keyLink(a.t)}<span class="t">${esc(shortTitle(a.t.title))}</span><span class="chip">${ORD(a.t.msgNo)} note · ${ago(a.t.myLast.at)} ago</span>${chip}${autoSlackBox(a.t)}${readyBtn(a.t, true)}${excludeBtn(a.t.key, true)}</li>`;
+  return `<li>${keyLink(a.t)}<span class="t">${esc(shortTitle(a.t.title))}</span><span class="chip">${ORD(a.t.msgNo)} note · ${ago(a.t.myLast.at)} ago</span>${chip}${autoSlackBox(a.t)}${readyBtn(a.t, true)}${lengthUI(a.t, true)}${excludeBtn(a.t.key, true)}</li>`;
 }
 function renderFollow(D){
   $("c-follow").textContent = D.follow.length || "";
@@ -949,7 +1031,7 @@ function renderWait(D){
   $("c-wait").textContent = D.wait.length || "";
   if (!S.jira.at) return S.jira.loading ? `<div class="loading">Loading Jira…</div>` : NOT_LOADED;
   if (!D.wait.length) return `<div class="empty">No tickets are waiting on writers, experts or the proofreader.</div>`;
-  return `<div class="scroll"><table class="tbl"><tbody>${D.wait.map(t => `<tr><td>${keyLink(t)}</td><td>${esc(shortTitle(t.title))}<div class="sub">${esc(t.stage)} · waiting on ${esc(t.waitingOn || "—")}</div></td><td>${stChip(t.status)}</td><td class="num">${ago(t.since)}</td><td style="white-space:nowrap">${readyBtn(t, true)} ${excludeBtn(t.key, true)}</td></tr>`).join("")}</tbody></table></div>`;
+  return `<div class="scroll"><table class="tbl"><tbody>${D.wait.map(t => `<tr><td>${keyLink(t)}</td><td>${esc(shortTitle(t.title))}<div class="sub">${esc(t.stage)} · waiting on ${esc(t.waitingOn || "—")}</div></td><td>${stChip(t.status)}</td><td class="num">${ago(t.since)}</td><td style="white-space:nowrap">${readyBtn(t, true)} ${lengthUI(t, true)} ${excludeBtn(t.key, true)}</td></tr>`).join("")}</tbody></table></div>`;
 }
 function renderFeed(){
   const items = S.slack.items.filter(i => !IGNORED_NAMES.some(n => i.head.startsWith(n)) && !(i.key && S.excluded[i.key]));
@@ -1078,6 +1160,8 @@ document.addEventListener("click", async ev => {
       delete S.running["bulk:"+wid]; await reloadKeys(items.map(a => a.t.key)); break;
     }
     case "ready": S.ui.confirmReady[key] = true; render(); break;
+    case "len": await checkLength(key); break;
+    case "lenask": await askWordcount(key); break;
     case "readyno": delete S.ui.confirmReady[key]; render(); break;
     case "readyyes": await straightToReady(key); break;
     case "late": {

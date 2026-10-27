@@ -3,7 +3,7 @@
 A live dashboard for the Jira **Blog Project (BP)** that tracks every article ticket by its **comments** (not by status changes), tells you what needs your attention, runs the routine Jira steps for you with one click, and handles follow-ups with writers and experts in Jira and Slack.
 
 - **Dashboard:** https://claude.ai/artifact/DhWgTXa9SMjqE5w82KkzdK (private to you until you share it)
-- **Data sources:** Jira (Atlassian connector, site **newsiteam**) and your Slack DMs from the Jira Cloud app
+- **Data sources:** Jira (Atlassian connector, site **newsiteam**), your Slack DMs from the Jira Cloud app, and the writers' Google Docs (Google Drive connector, for the length check)
 - **Source code:** `bp-review-flow/index.html` in the BetterMe repository
 
 ---
@@ -11,7 +11,7 @@ A live dashboard for the Jira **Blog Project (BP)** that tracks every article ti
 ## 1. Before you start
 
 1. Open the dashboard in claude.ai while signed in.
-2. When asked, **allow Atlassian and Slack** for the page. You can change this later from the page's **Permissions** menu.
+2. When asked, **allow Atlassian, Slack and Google Drive** for the page. You can change this later from the page's **Permissions** menu.
 3. The Atlassian connector must have access to the **newsiteam** Jira site. If Jira shows an access error, see [Troubleshooting](#14-troubleshooting).
 
 The dashboard **only loads data from Jira and Slack when you click Refresh** (or **Run automation now**, which refreshes first). Opening the page or switching between **My tickets** and **All BP** loads nothing. Instead, it shows your last refresh, saved in this browser, with its date and time ("Showing last refresh Oct 22, 10:15 · click Refresh to update"). If there is no saved refresh yet, click **Refresh** to load your tickets. When you refresh, each section fills in as soon as its data arrives, so a slow connector doesn't block the rest.
@@ -160,6 +160,23 @@ An extra, **manual-only** button for skipping the review steps.
 - **Automation:** **Run automation now** never presses it.
 
 ---
+
+### Article length check
+
+Every ticket in Text, Review or Proofreading with the writer's document link has a **Check length** button.
+
+- It reads the writer's latest Google Doc (through the Google Drive connector) and counts the article's words.
+- It compares the count with the word count in the ticket title, for example "best breakfast for weight loss, **1800 words**, update".
+- **What counts:** everything from the title to the closing paragraph. The legal disclaimer at the end, the **Sources** list, the **Meta title / Meta description** lines, link addresses and citation numbers like "(1, 2)" are left out.
+- **The result** shows next to the button, for example "1,980 / 1,800 words (+10%)":
+  - green: within ±10% of the target
+  - amber: 10–15% over
+  - red: more than 15% over
+  - grey: more than 15% under
+- **When the article is more than 10% over**, a button **Ask [writer] to follow the word count** appears. It posts the internal note: "@Writer Please follow the wordcount indicated in the task. The article must not exceed the required wordcount +- 10-15%. Thanks." After you send it, the card shows "Asked to cut X ago".
+- **Re-check length** reads the document again, for example after the writer has edited it.
+- Every check and note is recorded in the Action log.
+- If the title has no word count, the card shows "No word count in title" instead.
 
 ## 9. Follow-ups with writers
 
