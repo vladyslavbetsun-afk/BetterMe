@@ -105,6 +105,9 @@ section.panel{background:var(--surface);border:1px solid var(--line);border-radi
 .tl li{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;font-size:13px;min-width:0}
 .tl li .t{min-width:0;overflow-wrap:anywhere}
 .cb{display:inline-flex;align-items:center;gap:5px;cursor:pointer}
+.lenres{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;font-size:12.5px;min-width:0}
+.tl li .lenres{flex-basis:100%;padding-left:2px}
+.tbl tr.lenrow td{border-top:0;padding-top:0}
 .cb input{margin:0}
 .x{border:0;background:none;color:var(--muted);cursor:pointer;font-size:15px;line-height:1;padding:0 4px}
 .x:hover{color:var(--bad)}
@@ -777,17 +780,24 @@ function lengthUI(t, small){
   const target = targetWords(t.title); const sm = small ? " sm" : "";
   if (!target) return `<span class="chip" title="Add e.g. '1800 words' to the ticket title">No word count in title</span>`;
   const busy = !!S.running["len:"+t.key]; const r = S.lengths[t.key]; const fresh = r && r.docId === docId;
-  let h = `<button class="btn${sm}" ${busy?"disabled":""} data-act="len" data-k="${esc(t.key)}">${busy ? "Checking…" : fresh ? "Re-check length" : "Check length"}</button>`;
-  if (fresh) {
-    const pct = Math.round((r.words - r.target) / r.target * 100);
-    const cls = r.level === "over" ? "flag" : r.level === "slightly" ? "soon" : r.level === "under" ? "" : "auto-y";
-    h += `<span class="chip ${cls}" title="Article text only, checked ${ago(r.at)} ago">${r.words.toLocaleString()} / ${r.target.toLocaleString()} words (${pct > 0 ? "+" : ""}${pct}%)</span>${r.total ? `<span class="sub" title="Everything in the doc, incl. Sources and disclaimer">whole doc ${r.total.toLocaleString()}</span>` : ""}`;
-    if ((r.level === "over" || r.level === "slightly") && t.writer) {
-      h += r.askedAt ? `<span class="sub">Asked to cut ${ago(r.askedAt)} ago</span>`
-        : `<button class="btn${sm} pri" ${busy?"disabled":""} data-act="lenask" data-k="${esc(t.key)}">Ask ${esc(firstName(t.writer.name))} to follow the word count</button>`;
-    }
+  return `<button class="btn${sm}" ${busy?"disabled":""} data-act="len" data-k="${esc(t.key)}">${busy ? "Checking…" : fresh ? "Re-check length" : "Check length"}</button>`;
+}
+// the result of the last length check, shown on its own line under the ticket
+function lengthResult(t){
+  const docId = docIdOf(t); const r = S.lengths[t.key];
+  if (!docId || !r || r.docId !== docId || !ACTIVE.includes(t.status) || !targetWords(t.title)) return "";
+  const busy = !!S.running["len:"+t.key];
+  const pct = Math.round((r.words - r.target) / r.target * 100);
+  const cls = r.level === "over" ? "flag" : r.level === "slightly" ? "soon" : r.level === "under" ? "" : "auto-y";
+  const verdict = r.level === "over" ? "too long" : r.level === "slightly" ? "a bit long" : r.level === "under" ? "short" : "within range";
+  let h = `<span class="sub">Word count:</span><span class="chip ${cls}" title="Article text only">${r.words.toLocaleString()} / ${r.target.toLocaleString()} words (${pct > 0 ? "+" : ""}${pct}%) · ${verdict}</span>`;
+  if (r.total) h += `<span class="sub" title="Everything in the doc, incl. Sources and disclaimer">whole doc ${r.total.toLocaleString()}</span>`;
+  h += `<span class="sub">checked ${ago(r.at)} ago</span>`;
+  if ((r.level === "over" || r.level === "slightly") && t.writer) {
+    h += r.askedAt ? `<span class="sub">· asked to cut ${ago(r.askedAt)} ago</span>`
+      : `<button class="btn sm pri" ${busy?"disabled":""} data-act="lenask" data-k="${esc(t.key)}">Ask ${esc(firstName(t.writer.name))} to follow the word count</button>`;
   }
-  return h;
+  return `<div class="lenres">${h}</div>`;
 }
 const NOT_LOADED = `<div class="empty">Click <b>Refresh</b> to load your tickets from Jira.</div>`;
 const STATUS_MSG = "Hi. What's the status on this one?";
@@ -946,7 +956,7 @@ function renderMove(D){
         ${t.actions.map(a => `<button class="btn" ${busy||a.disabled?"disabled":""} data-act="step" data-k="${esc(t.key)}" data-s="${a.kind}">${esc(a.label)}</button>`).join("")}
         ${t.actions.length > 1 ? `<button class="btn pri" ${busy||t.actions.some(a=>a.disabled)?"disabled":""} data-act="all" data-k="${esc(t.key)}">Do all steps</button>` : ""}
         ${catSel}${readyBtn(t)}${lengthUI(t)}${excludeBtn(t.key)}${busy ? `<span class="sub">Working…</span>` : ""}
-      </div></div>`;
+      </div>${lengthResult(t)}</div>`;
   }).join("");
 }
 function autoSlackBox(t){
@@ -965,7 +975,7 @@ function renderNoReply(D){
     return `<div class="card"><div class="row">${keyLink(t)}<span class="title">${esc(t.title)}</span>${stChip(t.status)}<span class="chip flag">${bdLabel(Math.floor(t.bd))} no reply</span></div>
       <div class="quote"><span class="who">You · ${ago(t.myLast.at)} ago</span>${esc(t.myLast.text.slice(0,200))}</div>
       <div class="acts"><button class="btn" ${!tg||busy?"disabled":""} data-act="ask" data-k="${esc(t.key)}">${label}</button>
-      ${autoSlackBox(t)}${readyBtn(t)}${lengthUI(t)}${sent && sent.at ? `<span class="sub">Slacked ${ago(sent.at)} ago</span>` : ""}${excludeBtn(t.key)}${busy?`<span class="sub">Working…</span>`:""}</div></div>`;
+      ${autoSlackBox(t)}${readyBtn(t)}${lengthUI(t)}${sent && sent.at ? `<span class="sub">Slacked ${ago(sent.at)} ago</span>` : ""}${excludeBtn(t.key)}${busy?`<span class="sub">Working…</span>`:""}</div>${lengthResult(t)}</div>`;
   }).join("");
 }
 function followRow(a){
@@ -973,7 +983,7 @@ function followRow(a){
     : a.returned ? `<span class="chip flag">no reply 3 business days after Slack</span>`
     : a.bd >= 3 ? `<span class="chip flag">flagged · ${bdLabel(Math.floor(a.bd))}</span>`
     : `<span class="chip soon">flags in ${bdLabel(Math.max(1, Math.ceil(3 - a.bd)))}</span>`;
-  return `<li>${keyLink(a.t)}<span class="t">${esc(shortTitle(a.t.title))}</span><span class="chip">${ORD(a.t.msgNo)} note · ${ago(a.t.myLast.at)} ago</span>${chip}${autoSlackBox(a.t)}${readyBtn(a.t, true)}${lengthUI(a.t, true)}${excludeBtn(a.t.key, true)}</li>`;
+  return `<li>${keyLink(a.t)}<span class="t">${esc(shortTitle(a.t.title))}</span><span class="chip">${ORD(a.t.msgNo)} note · ${ago(a.t.myLast.at)} ago</span>${chip}${autoSlackBox(a.t)}${readyBtn(a.t, true)}${lengthUI(a.t, true)}${excludeBtn(a.t.key, true)}${lengthResult(a.t)}</li>`;
 }
 function renderFollow(D){
   $("c-follow").textContent = D.follow.length || "";
@@ -1037,7 +1047,7 @@ function renderWait(D){
   $("c-wait").textContent = D.wait.length || "";
   if (!S.jira.at) return S.jira.loading ? `<div class="loading">Loading Jira…</div>` : NOT_LOADED;
   if (!D.wait.length) return `<div class="empty">No tickets are waiting on writers, experts or the proofreader.</div>`;
-  return `<div class="scroll"><table class="tbl"><tbody>${D.wait.map(t => `<tr><td>${keyLink(t)}</td><td>${esc(shortTitle(t.title))}<div class="sub">${esc(t.stage)} · waiting on ${esc(t.waitingOn || "—")}</div></td><td>${stChip(t.status)}</td><td class="num">${ago(t.since)}</td><td style="white-space:nowrap">${readyBtn(t, true)} ${lengthUI(t, true)} ${excludeBtn(t.key, true)}</td></tr>`).join("")}</tbody></table></div>`;
+  return `<div class="scroll"><table class="tbl"><tbody>${D.wait.map(t => `<tr><td>${keyLink(t)}</td><td>${esc(shortTitle(t.title))}<div class="sub">${esc(t.stage)} · waiting on ${esc(t.waitingOn || "—")}</div></td><td>${stChip(t.status)}</td><td class="num">${ago(t.since)}</td><td style="white-space:nowrap">${readyBtn(t, true)} ${lengthUI(t, true)} ${excludeBtn(t.key, true)}</td></tr>${(r => r ? `<tr class="lenrow"><td></td><td colspan="4">${r}</td></tr>` : "")(lengthResult(t))}`).join("")}</tbody></table></div>`;
 }
 function renderFeed(){
   const items = S.slack.items.filter(i => !IGNORED_NAMES.some(n => i.head.startsWith(n)) && !(i.key && S.excluded[i.key]));
