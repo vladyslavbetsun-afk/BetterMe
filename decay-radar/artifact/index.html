@@ -228,7 +228,7 @@ ul.excl{padding-left:18px;margin:0}ul.excl li{margin:4px 0;font-size:13px}
       <p style="margin-top:10px" id="suggCount"></p>
     </section>
   </div>
-  <footer>Decay Radar (spec 06). Rankings from Ahrefs organic keywords (US); page audits from the Ahrefs Site Audit crawl of betterme.world; Notion is read-only (open-card check); Jira is only written to after you confirm tickets. Source: decay-radar/ in the BetterMe repo.</footer>
+  <footer>Decay Radar (spec 06). Rankings from Ahrefs organic keywords (US); page audits from the Ahrefs Site Audit crawl of betterme.world; Jira is only written to after you confirm tickets. Source: decay-radar/ in the BetterMe repo.</footer>
 </main>
 
 <dialog id="dlgSettings"><form class="dlg" method="dialog" id="fSettings">
@@ -273,9 +273,8 @@ ul.excl{padding-left:18px;margin:0}ul.excl li{margin:4px 0;font-size:13px}
 <script>
 "use strict";
 /* ---------- constants ---------- */
-const AHREFS = "Ahrefs", JIRA = "Atlassian", NOTION = "Notion";
+const AHREFS = "Ahrefs", JIRA = "Atlassian";
 const CLOUD = "657e24cd-f643-4482-aba5-7e848607df28", JIRA_BROWSE_URL = "https://newsiteam.atlassian.net/browse/";
-const DS = "1e997cc2-2a80-8086-a8ea-000bcc1073a4", DS_URL = "collection://" + DS;
 const SITE_AUDIT_PROJECT = 3897375;
 const LEVELS = ["L0","L1","L2","L3","NOSEO"];
 const STATE_LABEL = { carded:"ticket created", in_progress:"in progress", not_recovered:"not recovered" };
@@ -604,22 +603,6 @@ async function jiraCheck(pages, cfg, today, note){
   return map;
 }
 
-/* ---------- Notion ---------- */
-async function notionCards(urls){
-  const map={};
-  for (let i=0;i<urls.length;i+=15){
-    const batch=urls.slice(i,i+15); const params=batch.flatMap(urlVariants).slice(0,100);
-    const res=await call(NOTION,"notion-query-data-sources",{ data:{ data_source_urls:[DS_URL],
-      query:`SELECT url, "Name", "Status", "URL 1", "New/Upd", "date:Date:start", createdTime FROM "${DS_URL}" WHERE "URL 1" IN (${params.map(()=>"?").join(",")}) ORDER BY createdTime DESC`, params } });
-    const p=payloadOf(res)||{};
-    for (const r of p.results||[]){ const u=normalizeUrl(r["URL 1"]); if (!u) continue; (map[u] ||= []).push(r); }
-  }
-  return map;
-}
-const openCardOf = rows => (rows||[]).find(r => !/^done$/i.test(r.Status||""));
-function notionPageId(url){ const m=String(url||"").replace(/-/g,"").match(/([0-9a-f]{32})(?:[?#]|$)/i); return m?m[1]:null; }
-// Notion's SQL `url` column omits the /p/ path segment and does not open; this is the canonical page link.
-function notionHref(url){ const id=notionPageId(url); return id ? `https://app.notion.com/p/${id}` : (url||""); }
 
 /* ---------- screen, level, priority (§6–§8) ---------- */
 function screenText(...texts){
@@ -680,8 +663,8 @@ function assignLevel(cfg, c){
     return { level:"NOSEO", rule:1, tag:"merged", why:`Page ${a.redirect?"redirects to "+target+" (merged)":"returns "+target} — rejection category n/a. Check the redirect. Touch only for a Legal compliance fix.`,
       checklist:[LEVEL_SCOPE.NOSEO, `Check redirect (${target})`] };
   }
-  if (c.openTicket || c.openCard){
-    const ref=[c.openTicket&&`${c.openTicket.key}${c.openTicket.via==="keyword"?` (same keyword '${p.mainKeyword}')`:""}`, c.openCard&&"Notion card"].filter(Boolean).join(" / ");
+  if (c.openTicket){
+    const ref=[c.openTicket&&`${c.openTicket.key}${c.openTicket.via==="keyword"?` (same keyword '${p.mainKeyword}')`:""}`].filter(Boolean).join(" / ");
     return { level:"L0", rule:2, tag:"in_pipeline", why:`Already in the pipeline: ${ref}. Recheck after it's published.`, checklist:[LEVEL_SCOPE.L0, `Recheck after ${ref} is published.`] };
   }
   if (ok && a.ageDays!=null && a.ageDays<cfg.hold_recent_days)
@@ -780,12 +763,9 @@ async function runRadar(){
 
     st.add(`Jira: open or recent update tickets for ${pages.length} pages`);
     const jira=pages.length ? await jiraCheck(pages, c, today, t=>notes.push(t)) : {};
-    st.add("Notion: open cards in Articles");
-    let notion={};
-    try { notion=pages.length ? await notionCards(pages.map(p=>p.url)) : {}; } catch(e){ notes.push("Notion check failed: "+errText(e,NOTION)); notion=null; }
 
     // Audit: Site Audit lookup for every page, page text for pages not already in the pipeline.
-    const auditTargets=[...pages.filter(p=>!(jira&&jira[p.url]&&jira[p.url].open) && !(notion&&openCardOf(notion[p.url]))).map(p=>p.url), ...watched.map(w=>w.url)].slice(0, c.audit_max_pages);
+    const auditTargets=[...pages.filter(p=>!(jira&&jira[p.url]&&jira[p.url].open)).map(p=>p.url), ...watched.map(w=>w.url)].slice(0, c.audit_max_pages);
     st.add(`Ahrefs Site Audit: auditing ${auditTargets.length} pages`);
     const explorer={};
     const allUrls=[...new Set([...pages.map(p=>p.url), ...watched.map(w=>w.url)])];
@@ -828,9 +808,9 @@ async function runRadar(){
       const audit=audits[p.url] || (explorer[p.url] ? {status:"skipped", httpCode:explorer[p.url].http_code, title:Array.isArray(explorer[p.url].title)?explorer[p.url].title[0]:explorer[p.url].title} : {status:"not_crawled"});
       p.cluster=inferCategory(p.mainKeyword,p.slug)||p.coreTopic;
       const screen=screenText(audit.title, audit.h1, p.mainKeyword, p.slug.replace(/-/g," "));
-      const j=jira?jira[p.url]||{}:{}; const nc=notion?openCardOf(notion[p.url]):null;
+      const j=jira?jira[p.url]||{}:{};
       const ownTicket=!j.open && prev.jiraKey && ["carded","in_progress"].includes(prev.state) ? { key:prev.jiraKey, url:prev.jiraUrl, status:"created here", via:"created here" } : null;
-      const ctx={ page:p, audit, screen, today, confirmed, openTicket:j.open||ownTicket, openCard:nc, recentTicket:j.recent };
+      const ctx={ page:p, audit, screen, today, confirmed, openTicket:j.open||ownTicket, recentTicket:j.recent };
       let res=assignLevel(c, ctx);
       const itemNotes=[...notes];
       if (audit.status==="not_crawled") itemNotes.push("Audit unavailable: page not in the latest Site Audit crawl. Age, structure and claim checks were skipped.");
@@ -859,9 +839,8 @@ async function runRadar(){
       if (res.tag==="claims") flags.push("claims"); if (!confirmed) flags.push("watch"); if (["not_crawled","error"].includes(audit.status)) flags.push("no audit");
       results.push({ slug:p.slug, doc:{ url:p.url, slug:p.slug, firstRun:prev.firstRun||runId, lastRun:runId, weeks:seenWeeks, confirmations:conf, confirmed,
         state, level:res.level, rule:res.rule, tag:res.tag, why:res.why, checklist:res.checklist, priority:prio, intent, page:p,
-        audit:{...audit, qMissing:(audit.qMissing||[]).slice(0,8)}, screen, jira:j, notionOpen:nc?{url:nc.url, status:nc.Status, name:nc.Name}:null,
-        flags, notes:itemNotes, override:prev.override||null, excluded:prev.excluded||null, removed:prev.removed||null, jiraKey:prev.jiraKey||null, jiraUrl:prev.jiraUrl||null, notionUrl:prev.notionUrl||(nc&&nc.url)||null,
-        cardLevel:prev.cardLevel||null, cardWeek:prev.cardWeek||null, updatedOnNew, followups, followupOutcome:prev.followupOutcome||null,
+        audit:{...audit, qMissing:(audit.qMissing||[]).slice(0,8)}, screen, jira:j,
+        flags, notes:itemNotes, override:prev.override||null, excluded:prev.excluded||null, removed:prev.removed||null, jiraKey:prev.jiraKey||null, jiraUrl:prev.jiraUrl||null, cardLevel:prev.cardLevel||null, cardWeek:prev.cardWeek||null, updatedOnNew, followups, followupOutcome:prev.followupOutcome||null,
         history:[...(prev.history||[]).filter(h=>h.date!==date), {date, now:p.mainNow}].slice(-12) } });
     }
     // Watched pages that dropped out of the signals: only update detection.
@@ -954,10 +933,12 @@ async function loadQuizzes(){
   return S.quizzes;
 }
 const quizUrl = (base, kw) => base.replace(/utm_campaign=[^&]*/, "utm_campaign="+titleUnderscore(kw));
-async function jiraAccount(){
-  if (S.jiraAccount!==undefined) return S.jiraAccount;
-  try { S.jiraAccount=(payloadOf(await call(JIRA,"atlassianUserInfo",{}))||{}).account_id||null; } catch { S.jiraAccount=null; }
-  return S.jiraAccount;
+// The signed-in Jira user: Managers on every ticket, and Author when "Set me as Author" is ticked.
+async function jiraUser(){
+  if (S.jiraUser!==undefined) return S.jiraUser;
+  try { const p=payloadOf(await call(JIRA,"atlassianUserInfo",{}))||{}; S.jiraUser=p.account_id ? { id:p.account_id, name:p.name||p.nickname||"me" } : null; }
+  catch { S.jiraUser=null; }
+  return S.jiraUser;
 }
 async function typicalWords(){
   if (S.typicalWords) return S.typicalWords;
@@ -1098,7 +1079,7 @@ async function prepareDrafts(){
   $("cardsFoot").innerHTML=`<button class="btn" type="button" data-close="dlgCards">Cancel</button><button class="btn primary" type="button" disabled>Preparing…</button>`;
   const prog=[]; const say=t=>{ prog.push(t); $("cardsBody").innerHTML=`<ol class="prep">${prog.map(x=>`<li>${esc(x)}</li>`).join("")}</ol>`; };
   say("Loading quiz topics and recent BP word counts");
-  const [quizzes, words]=await Promise.all([loadQuizzes(), typicalWords()]);
+  const [quizzes, words]=await Promise.all([loadQuizzes(), typicalWords(), jiraUser()]);
   const drafts=[];
   for (const it of items){ say(`Drafting ${it.slug}`); drafts.push(await draftFor(c, it, tally, quizzes, words)); }
   S.drafts={ drafts, units:tally.units };
@@ -1121,7 +1102,8 @@ function draftForm(d, i){
     ${d.jira===null?`<div class="notice bad">The Jira check failed, so no ticket will be created for this page. ${esc(d.notes.find(n=>n.startsWith("Jira"))||"")}</div>`
       : matches?`<div class="notice ${existing?"bad":""}"><b>${existing?"A BP ticket already exists for this article; no new ticket will be created.":"Earlier BP tickets for this article (published more than "+cfg().recent_ticket_days+" days ago):"}</b><ul>${matches}</ul></div>`
       : `<p class="muted">No BP ticket found for this link or keyword.</p>`}
-    <div class="opts"><label><input type="checkbox" data-f="mkJira" ${blocked?"disabled":"checked"}> Create Jira ticket</label></div>
+    <div class="opts"><label><input type="checkbox" data-f="mkJira" ${blocked?"disabled":"checked"}> Create Jira ticket</label>
+      <label><input type="checkbox" data-f="meAuthor" ${blocked?"disabled":""}> Set me${S.jiraUser?` (${esc(S.jiraUser.name)})`:""} as Author</label></div>
     <div class="form">
       ${inp("summary","Summary",`${d.kw}, ${d.words} words, update`,true)}
       ${inp("title","Title",d.title,true)}
@@ -1141,7 +1123,8 @@ function draftForm(d, i){
 }
 function renderDrafts(){
   const { drafts, units }=S.drafts;
-  $("cardsBody").innerHTML=`<p class="muted">Drafting used ${fmt(units)} Ahrefs units${S.quizError?` · quiz topics unavailable: ${esc(S.quizError)}`:""}. Edit anything below. Subheadings, Linked Articles, Additional Keywords and FAQs go into their own Jira fields; everything else goes into the description.</p>`
+  $("cardsBody").innerHTML=`<p class="muted">Drafting used ${fmt(units)} Ahrefs units${S.quizError?` · quiz topics unavailable: ${esc(S.quizError)}`:""}. Edit anything below. Subheadings, Linked Articles, Additional Keywords and FAQs go into their own Jira fields; everything else goes into the description.</p>
+    <div class="opts"><label><input type="checkbox" id="allAuthor"> Set me${S.jiraUser?` (${esc(S.jiraUser.name)})`:""} as Author on every ticket</label></div>`
     + drafts.map((d,i)=>draftForm(d,i)).join("");
   updateCounts();
   $("cardsFoot").innerHTML=`<button class="btn" type="button" data-close="dlgCards">Cancel</button><button class="btn primary" type="button" id="btnConfirmCards">Create</button>`;
@@ -1155,7 +1138,7 @@ function updateCounts(){
 }
 function readDraft(fs){
   const g=k=>{ const el=fs.querySelector(`[data-f="${k}"]`); return el ? (el.type==="checkbox" ? (el.checked && !el.disabled) : el.value.trim()) : ""; };
-  return { mkJira:g("mkJira"), summary:g("summary"), title:g("title"), metaTitle:g("metaTitle"), metaDescription:g("metaDescription"),
+  return { mkJira:g("mkJira"), meAuthor:g("meAuthor"), summary:g("summary"), title:g("title"), metaTitle:g("metaTitle"), metaDescription:g("metaDescription"),
     category:g("category"), quiz:g("quiz"), additional:linesOf(g("additional")), lsis:g("lsis").split(",").map(s=>s.trim()).filter(Boolean),
     faqs:linesOf(g("faqs")), subheadings:linesOf(g("subheadings")),
     links:[0,1,2].map(j=>({ text:g("anchor"+j), href:normalizeUrl(g("href"+j)) || g("href"+j) })) };
@@ -1190,8 +1173,11 @@ async function createJiraTicket(d, v, it, log){
   const ownRecent=own && own.key && own.at && daysBetween(own.at.slice(0,10), todayISO())<=cfg().recent_ticket_days;
   if (t || ownRecent){ const k=t?t.key:own.key; const u=t?t.url:own.jiraUrl;
     log(`<p class="result"><b>Existing ticket</b> <a href="${esc(u)}" target="_blank" rel="noopener">${esc(k)}</a> for ${esc(d.kw)}; no new ticket created.</p>`); return { key:k, url:u, summary:t?t.summary:own.summary, existing:true }; }
-  const acct=await jiraAccount();
-  const add={ customfield_11100:"110" }; if (acct) add.customfield_11709={ accountId:acct };
+  const me=await jiraUser();
+  if (v.meAuthor && !me){ log(`<p class="result bad"><b>No ticket</b> for ${esc(d.kw)}: couldn't read your Jira account to set you as Author. Untick "Set me as Author" or try again.</p>`); return null; }
+  const add={ customfield_11100:"110" };
+  if (me) add.customfield_11709={ accountId:me.id };
+  if (v.meAuthor) add.customfield_11710={ accountId:me.id }; // Author
   await dbSet("tickets/"+d.slug, { url:d.url, pending:true, summary:v.summary, at:new Date().toISOString() });
   const res=await call(JIRA,"createJiraIssue",{ cloudId:CLOUD, projectKey:"BP", issueTypeName:"Article", summary:v.summary,
     description:jiraDescription(d, v, it), contentFormat:"markdown", additional_fields:add });
@@ -1207,11 +1193,12 @@ async function createJiraTicket(d, v, it, log){
   catch(e){ problems.push("Subheadings/Linked Articles/Additional Keywords/FAQs not set: "+errText(e,JIRA)); }
   try {
     const p=payloadOf(await call(JIRA,"getJiraIssue",{ cloudId:CLOUD, issueIdOrKey:key, responseContentFormat:"markdown",
-      fields:["summary","description","customfield_11100","customfield_11717","customfield_11718","customfield_11719","customfield_11720"] }))||{};
+      fields:["summary","description","customfield_11100","customfield_11710","customfield_11717","customfield_11718","customfield_11719","customfield_11720"] }))||{};
     const f=p.fields||(p.issue&&p.issue.fields)||{};
     if ((f.summary||"")!==v.summary) problems.push(`summary is "${f.summary}"`);
     if (!String(JSON.stringify(f.description||"")).includes(d.url.replace(/\/$/,""))) problems.push("description has no Original article link");
     if (!/Article/.test(JSON.stringify(f.customfield_11100||""))) problems.push("Request Type is not Article");
+    if (v.meAuthor && !JSON.stringify(f.customfield_11710||"").includes(me.id)) problems.push("Author is not set to you");
     for (const [k,label] of [["customfield_11717","Subheadings"],["customfield_11718","Additional Keywords"],["customfield_11719","Linked Articles"],["customfield_11720","FAQs"]])
       if (fields[k] && !f[k]) problems.push(`${label} empty`);
     const linked=JSON.stringify(f.customfield_11719||"");
@@ -1374,7 +1361,6 @@ function drawer(it){
   const jira=[it.jiraKey&&`created <a href="${esc(it.jiraUrl)}" target="_blank" rel="noopener">${esc(it.jiraKey)}</a>`,
     ...jm.map(m=>`<a href="${esc(m.url)}" target="_blank" rel="noopener">${esc(m.key)}</a> (${esc(m.status)}, by ${esc(m.via)})`),
     !jm.length&&it.jira&&it.jira.open&&`open <a href="${esc(it.jira.open.url)}" target="_blank" rel="noopener">${esc(it.jira.open.key)}</a> (${esc(it.jira.open.status)})`].filter(Boolean).join(" · ")||"none";
-  const notion=it.notionUrl?`<a href="${esc(notionHref(it.notionUrl))}" target="_blank" rel="noopener">Open card in Notion</a>${it.notionOpen?` (${esc(it.notionOpen.status)})`:""}`:"none";
   const fups=(it.followups||[]).map(f=>`${f.label} due ${f.due}: ${f.outcome||"pending"}`).join(" · ");
   const lvOpts=LEVELS.map(l=>`<option value="${l}" ${l===lvl?"selected":""}>${l} · ${LEVEL_NAMES[l]}</option>`).join("");
   return `<tr class="drawer"><td colspan="10"><div class="dgrid">
@@ -1384,7 +1370,7 @@ function drawer(it){
     <section><h3>Lost keywords</h3><div class="inner"><table><thead><tr><th>Keyword</th><th>Vol</th><th>Was → now</th><th>Traffic</th><th>Kind</th></tr></thead><tbody>${kwRows}</tbody></table></div>
       <h3>Main keyword by run</h3>${spark(it.history)||`<p class="muted">One run so far.</p>`}${fups?`<p class="muted">Follow-ups: ${esc(fups)}</p>`:""}</section>
     <section><h3>Audit</h3><ul class="facts">${facts}<li>Screen: ${esc(screen)}</li><li>Install intent ${esc(it.intent)} · confirmations ${it.confirmations}</li>
-      <li>Jira: ${jira}${it.notionUrl||it.notionOpen?` · Notion: ${notion}`:""}</li>${(it.notes||[]).map(n=>`<li class="muted">${esc(n)}</li>`).join("")}</ul>
+      <li>Jira: ${jira}</li>${(it.notes||[]).map(n=>`<li class="muted">${esc(n)}</li>`).join("")}</ul>
       <h3>Actions</h3>
       <div class="actrow"><select data-ovl="${esc(it.slug)}" aria-label="Level">${lvOpts}</select><input data-ovr="${esc(it.slug)}" placeholder="Reason (required)" aria-label="Reason for level change"><button class="btn small" type="button" data-act="override" data-slug="${esc(it.slug)}">Change level</button></div>
       <div class="actrow">${it.state==="excluded"?`<button class="btn small" type="button" data-act="include" data-slug="${esc(it.slug)}">Include again</button><span class="muted">Excluded: ${esc(it.excluded&&it.excluded.reason)}</span>`
@@ -1413,7 +1399,7 @@ function render(){
   // queue
   const list=visibleItems();
   if (!list.length){
-    $("rows").innerHTML=`<tr><td colspan="10"><div class="empty">${!run?`<h2>No run yet</h2><p>Run radar asks Ahrefs which betterme.world articles lost top-3 Google positions (US) over the last ${c.compare_days} days, audits each page from the Site Audit crawl, checks Jira and Notion, and levels every page L0–L3 or NOSEO with a reason and a checklist.</p><p>Nothing is written to Jira until you select pages, review the drafts and confirm the tickets.</p>`
+    $("rows").innerHTML=`<tr><td colspan="10"><div class="empty">${!run?`<h2>No run yet</h2><p>Run radar asks Ahrefs which betterme.world articles lost top-3 Google positions (US) over the last ${c.compare_days} days, audits each page from the Site Audit crawl, checks Jira for existing tickets, and levels every page L0–L3 or NOSEO with a reason and a checklist.</p><p>Nothing is written to Jira until you select pages, review the drafts and confirm the tickets.</p>`
       :`<p>No pages match this filter.</p>`}</div></td></tr>`;
   } else {
     $("rows").innerHTML=list.map(it=>{ const p=it.page, a=it.audit||{}, lvl=(it.override&&it.override.level)||it.level;
@@ -1532,7 +1518,10 @@ document.addEventListener("click", e => {
   if (row && !e.target.closest("a,input,button,select")){ const s=row.dataset.slug; S.open.has(s)?S.open.delete(s):S.open.add(s); render(); }
 });
 $("cardsBody").addEventListener("input", () => { updateCounts(); updateCreateLabel(); });
-$("cardsBody").addEventListener("change", () => updateCreateLabel());
+$("cardsBody").addEventListener("change", e => {
+  if (e.target.id==="allAuthor") for (const cb of $("cardsBody").querySelectorAll('[data-f="meAuthor"]:not(:disabled)')) cb.checked=e.target.checked;
+  updateCreateLabel();
+});
 document.addEventListener("keydown", e => { const row=e.target.closest && e.target.closest("tr.row"); if (row && e.key==="Enter" && e.target===row){ const s=row.dataset.slug; S.open.has(s)?S.open.delete(s):S.open.add(s); render(); } });
 
 /* ---------- boot ---------- */

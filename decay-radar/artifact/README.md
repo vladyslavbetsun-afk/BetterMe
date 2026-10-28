@@ -6,7 +6,6 @@ Source of the Decay Radar page, a claude.ai artifact that runs spec 06 in the br
 - Connectors:
   - **Ahrefs:** organic keywords; Site Audit project 3897375 for page audits and related-article lookup; SERP People Also Ask and related terms for ticket drafts.
   - **Atlassian:** BP ticket checks; Article tickets created after confirmation; follow-up comments.
-  - **Notion:** read-only check for open cards in Articles.
   - **Google Sheets:** the quiz-link sheet "2 Wordpress Guide".
   - **Claude (`sample`):** drafts the title, meta fields, subheadings and link anchors.
 - State: the artifact's shared database. It holds `items` (one per page), `runs`, `tickets` (one per page), `suggestions` and `settings/main`.
@@ -20,10 +19,10 @@ Select L1–L3 pages, press **Create Jira tickets**, then **Prepare drafts**. Ea
 - **Subheadings (required):** 6–10 H2s from Claude, based on the current outline and People Also Ask.
 - **Linked Articles (required, exactly 3):** a live betterme.world article URL plus anchor text for each. The URLs come only from the page's own internal links, related URLs in the Site Audit crawl, and same-category pages on the board. Claude picks the three and writes the anchors, and any URL outside those sources is rejected.
 - **Additional Keywords and FAQs:** set as ADF fields.
-- **Request Type and Managers:** Request Type is Article; Managers is set to you.
+- **Request Type, Managers and Author:** Request Type is Article; Managers is set to you; **Set me as Author** (per ticket, or "on every ticket" at the top of the drafts) also sets the Author field (`customfield_11710`) to you.
 - **After creating:** the ticket is re-read to verify the summary, the Original article line, Request Type, and every custom field including all 3 links.
 
-**Existing tickets.** BP is searched both by the article URL (the `Article:` / `Original article:` line) and by the main keyword (a ticket summary whose keyword equals the page's main keyword). This happens in the weekly run, where an open match holds the page as L0, and again just before writing. A page with an open ticket, or one published within the last 60 days, never gets a second ticket. No Notion cards are created.
+**Existing tickets.** BP is searched both by the article URL (the `Article:` / `Original article:` line) and by the main keyword (a ticket summary whose keyword equals the page's main keyword). This happens in the weekly run, where an open match holds the page as L0, and again just before writing. A page with an open ticket, or one published within the last 60 days, never gets a second ticket. Notion is not used at all.
 
 ## How it differs from the Python CLI
 
