@@ -1,0 +1,151 @@
+# BP tickets in Ready (144)
+
+## With images (76)
+
+- https://newsiteam.atlassian.net/browse/BP-102 — 6 day gym workout schedule for weight loss, 15k (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-189 — lower body workouts, 12k (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-515 — benefits of 48 hour fast, 10k (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-548 — top rated wall pilates app, 10k (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-549 — best wall pilates app for weight loss (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-550 — wall pilates workout app, 1800 words (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-652 — somatic work for trauma, 10k (Karina)
+- https://newsiteam.atlassian.net/browse/BP-762 — gym weekly workout plan, 15k (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-849 — how to incorporate cardio into weight training, 12k (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-859 — 30 minute cycling workout, 10k (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-898 — full body gym workout routine, 15k (Karina)
+- https://newsiteam.atlassian.net/browse/BP-910 — winter dinner ideas, 12k (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-982 — 30 day jump rope workout, 2500 words (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1045 — holistic trauma therapy, 10k (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1055 — 7-day meal plan for one person, 15k (Karina)
+- https://newsiteam.atlassian.net/browse/BP-1077 — standing hip flexor stretch, 10k (Karina)
+- https://newsiteam.atlassian.net/browse/BP-1088 — running after leg day, 10k (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1101 — physical activity and productivity, update (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1126 — lower back stretches at work, 2000 words (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1129 — lat stretches, 2000 words (Karina)
+- https://newsiteam.atlassian.net/browse/BP-1134 — workouts with bands, 2500 words (Karina)
+- https://newsiteam.atlassian.net/browse/BP-1159 — weighted ab workouts, 2000 words (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1163 — what is my body type, 2000 words (Karina)
+- https://newsiteam.atlassian.net/browse/BP-1172 — deep stretches, 2000 words (Karina)
+- https://newsiteam.atlassian.net/browse/BP-1173 — somatic experiencing exercise, 2500 words (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1256 — back and bicep workout women, 1800 words (Karina)
+- https://newsiteam.atlassian.net/browse/BP-1257 — beginner strength training program, 2000 words (Karina)
+- https://newsiteam.atlassian.net/browse/BP-1280 — 7 day gluten-free weight loss diet, 2500 words (Karina)
+- https://newsiteam.atlassian.net/browse/BP-1381 — 30 day fasting challenge, update (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1414 — bodyweight leg workouts, 1500 words (Karina)
+- https://newsiteam.atlassian.net/browse/BP-1415 — leg strengthening exercises, 2200 words (Karina)
+- https://newsiteam.atlassian.net/browse/BP-1450 — leg day workouts, 1600 words (Karina)
+- https://newsiteam.atlassian.net/browse/BP-1485 — 50 squats a day, 1600 words, update (Karina)
+- https://newsiteam.atlassian.net/browse/BP-1490 — abs after 40, update (Karina)
+- https://newsiteam.atlassian.net/browse/BP-1493 — 1200 calorie high protein low carb diet, 2200 words, update (Karina)
+- https://newsiteam.atlassian.net/browse/BP-1498 — 4 day workout routine to get ripped, update (Karina)
+- https://newsiteam.atlassian.net/browse/BP-1504 — good chest and arm workout, 2000 words, update (Karina)
+- https://newsiteam.atlassian.net/browse/BP-1506 — leg workout for running, 2000 words, update (Karina)
+- https://newsiteam.atlassian.net/browse/BP-1515 — 12 Weeks Mass Building Workout, 2200 words, update (Karina)
+- https://newsiteam.atlassian.net/browse/BP-1520 — Tabata Yoga, 1500 words, update (Karina)
+- https://newsiteam.atlassian.net/browse/BP-1523 — Workout Challenges At Home, update (Karina)
+- https://newsiteam.atlassian.net/browse/BP-1524 — 7 Exercises To Do Every Day, 1600 words, update (Karina)
+- https://newsiteam.atlassian.net/browse/BP-1533 — Endomorph Workout, 2200 words, update (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1552 — fasting on the weekends, 1900 words (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1555 — how to recover from vacation weight gain, 1900 words (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1556 — how to not feel hungry when fasting, 1900 words (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1559 — 7-day high-fiber meal plan, 1900 words (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1565 — easy hiit workout, 1900 words (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1578 — indoor walking challenge, 1800 words, update (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1589 — athletic build, 1800 words, update (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1591 — does walking in place count as steps, 1800 words, update (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1592 — better me pilates reviews, 1800 words, update (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1606 — how many sit ups to burn 1000 calories, 2100 words, update (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1607 — how long to lose 80 pounds, 2100 words, update (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1610 — how often should you stretch, 1900 words, update (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1611 — cardiovascular endurance exercises, 2400 words, update (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1612 — 100 kettlebell swings a day weight loss, 2200 words, update (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1613 — velocity diet, 1700 words, update (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1614 — burn 1000 calories a day, 1900 words, update (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1616 — 5 day broccoli diet plan, 1900 words, update (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1618 — 7 min workout calories, 1400 words, update (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1619 — how long does it take to walk a marathon, 2400 words, update (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1623 — carrot diet, 1900 words, update (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1624 — benefits and disadvantages of the cucumber egg diet, 1900 words, update (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1625 — 4 macronutrients, 1900 words, update (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1626 — does alcohol make you retain water, 1900 words, update (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1628 — disadvantages of yoga, 1600 words, update (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1630 — denmark diet, 2100 words, update (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1632 — 40 year old male diet plan, 2900 words, update (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1633 — salad diet plan for 2 weeks, 2100 words, update (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1636 — how many reps for deadlift, 2600 words, update (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1638 — best pelvic floor exercises, 2000 words, update (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1639 — what is shred workout, 2000 words, update (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1640 — benefits of calisthenics, 2900 words, update (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1641 — pull ups for abs, 1600 words, update (Oksana)
+- https://newsiteam.atlassian.net/browse/BP-1642 — bodybuilding 12 week cutting diet plan, 2100 words, update (Oksana)
+
+## Without images (68)
+
+- https://newsiteam.atlassian.net/browse/BP-15 — worst foods to break a fast, 10k characters
+- https://newsiteam.atlassian.net/browse/BP-80 — somatic therapy benefits, 15k characters
+- https://newsiteam.atlassian.net/browse/BP-183 — gentle somatic yoga, 10k
+- https://newsiteam.atlassian.net/browse/BP-185 — does somatic pilates work for weight loss, 12k
+- https://newsiteam.atlassian.net/browse/BP-237 — how many miles should a 50 year old run a week, 10k
+- https://newsiteam.atlassian.net/browse/BP-432 — wheel chair yoga, 10k
+- https://newsiteam.atlassian.net/browse/BP-434 — chair yoga classes online, 10k
+- https://newsiteam.atlassian.net/browse/BP-516 — 48 hour fast vs 72 hour fast, 2200 words
+- https://newsiteam.atlassian.net/browse/BP-646 — how to pitch a corporate wellness program, 1800 words
+- https://newsiteam.atlassian.net/browse/BP-746 — postpartum workout plan at home, 15k
+- https://newsiteam.atlassian.net/browse/BP-763 — glute workout plan, 10k
+- https://newsiteam.atlassian.net/browse/BP-961 — cardio for men, 12k
+- https://newsiteam.atlassian.net/browse/BP-1017 — manager wellbeing program, 2000 words
+- https://newsiteam.atlassian.net/browse/BP-1024 — how does trauma affect the body, 15k
+- https://newsiteam.atlassian.net/browse/BP-1073 — how to do the splits, 12k
+- https://newsiteam.atlassian.net/browse/BP-1079 — standing back stretches, 10k
+- https://newsiteam.atlassian.net/browse/BP-1089 — beginner reformer pilates, 10k
+- https://newsiteam.atlassian.net/browse/BP-1091 — stretches for office workers, 10k
+- https://newsiteam.atlassian.net/browse/BP-1092 — shoulder wall stretch, 10k
+- https://newsiteam.atlassian.net/browse/BP-1094 — lifting heavy vs light, 10k
+- https://newsiteam.atlassian.net/browse/BP-1099 — easy warm up exercises, 12k
+- https://newsiteam.atlassian.net/browse/BP-1113 — standing desk stretches, 2500 words
+- https://newsiteam.atlassian.net/browse/BP-1114 — office chair stretches, 2000 words
+- https://newsiteam.atlassian.net/browse/BP-1115 — tech neck exercises, 2000 words
+- https://newsiteam.atlassian.net/browse/BP-1117 — recovery stretches, 2000 words
+- https://newsiteam.atlassian.net/browse/BP-1120 — best shoulder stretches, 1500 words
+- https://newsiteam.atlassian.net/browse/BP-1128 — standing lower back stretches, 2000 words
+- https://newsiteam.atlassian.net/browse/BP-1135 — toned fit apple shaped body, 2500 words
+- https://newsiteam.atlassian.net/browse/BP-1145 — office ab workout, 2000 words
+- https://newsiteam.atlassian.net/browse/BP-1158 — 15 minute full body stretch, 1800 words
+- https://newsiteam.atlassian.net/browse/BP-1171 — wall chest stretch exercise, 1500 words
+- https://newsiteam.atlassian.net/browse/BP-1176 — somatic techniques for anger, 2000 words
+- https://newsiteam.atlassian.net/browse/BP-1224 — bench leg workout, 1500 words
+- https://newsiteam.atlassian.net/browse/BP-1229 — arm toning exercises, 1500 words
+- https://newsiteam.atlassian.net/browse/BP-1366 — ab workouts in bed, 1600 words
+- https://newsiteam.atlassian.net/browse/BP-1372 — stretches for people who sit all day, 1800 words
+- https://newsiteam.atlassian.net/browse/BP-1375 — apple vs rectangle body shape, 1800 words
+- https://newsiteam.atlassian.net/browse/BP-1419 — leg and glute workout, 1800 words
+- https://newsiteam.atlassian.net/browse/BP-1425 — leg workout routine, 1800 words
+- https://newsiteam.atlassian.net/browse/BP-1496 — resistance band exercise for legs and glutes, 2000 words, update
+- https://newsiteam.atlassian.net/browse/BP-1570 — hiit yoga for beginners, 1800 words
+- https://newsiteam.atlassian.net/browse/BP-1572 — cardio without legs, 1800 words
+- https://newsiteam.atlassian.net/browse/BP-1574 — free 28 day chair yoga for seniors, 1800 words, update
+- https://newsiteam.atlassian.net/browse/BP-1587 — what is resting energy, 1500 words, update
+- https://newsiteam.atlassian.net/browse/BP-1588 — how much weight can i lose in 6 weeks, 1800 words, update
+- https://newsiteam.atlassian.net/browse/BP-1590 — does crying burn calories, 1800 words, update
+- https://newsiteam.atlassian.net/browse/BP-1593 — do seasonings have calories, 1800 words, update
+- https://newsiteam.atlassian.net/browse/BP-1597 — calisthenics vs pilates, 1800 words, update
+- https://newsiteam.atlassian.net/browse/BP-1600 — 21-day calisthenics workout, 1800 words, version 2
+- https://newsiteam.atlassian.net/browse/BP-1608 — does whiskey make you fat, 2400 words, update
+- https://newsiteam.atlassian.net/browse/BP-1617 — dieta de 1200 calorias, 1900 words, update
+- https://newsiteam.atlassian.net/browse/BP-1620 — dark meditation, 1900 words, update
+- https://newsiteam.atlassian.net/browse/BP-1627 — side effects of eating too many bananas, 900 words, update
+- https://newsiteam.atlassian.net/browse/BP-1629 — 2000 calorie keto diet, 1900 words, update
+- https://newsiteam.atlassian.net/browse/BP-1631 — structural exercises, 1200 words, update
+- https://newsiteam.atlassian.net/browse/BP-1634 — meats for weight loss, 2600 words, update
+- https://newsiteam.atlassian.net/browse/BP-1635 — morning drink for weight loss, 2400 words, update
+- https://newsiteam.atlassian.net/browse/BP-1637 — healthiest sugar, 2400 words, update
+- https://newsiteam.atlassian.net/browse/BP-1643 — benefits of holding your breath, 2000 words, update
+- https://newsiteam.atlassian.net/browse/BP-1646 — intermittent fasting food list, 2000 words, update
+- https://newsiteam.atlassian.net/browse/BP-1647 — 10 calisthenics exercises, 1900 words, update
+- https://newsiteam.atlassian.net/browse/BP-1659 — 1 hour calisthenics workout, 2000 words, update
+- https://newsiteam.atlassian.net/browse/BP-1747 — apple diet, 2000 words, update
+- https://newsiteam.atlassian.net/browse/BP-1751 — optimal testosterone level for men, 2000 words, update
+- https://newsiteam.atlassian.net/browse/BP-1754 — visceral fat vs subcutaneous fat, 2000 words, update
+- https://newsiteam.atlassian.net/browse/BP-1763 — cardio calisthenics, 2000 words, update
+- https://newsiteam.atlassian.net/browse/BP-1767 — 1950 calorie meal plan, 2000 words, update
+- https://newsiteam.atlassian.net/browse/BP-1768 — black friday gym clothes, 1500 words
