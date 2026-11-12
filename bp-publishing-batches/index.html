@@ -159,6 +159,7 @@ section.panel.tray{border-color:var(--accent)}
       <div class="bar">
         <input type="search" id="q" placeholder="Filter by key or title" aria-label="Filter Ready tickets by key or title">
         <select id="catf" aria-label="Filter Ready tickets by category"></select>
+        <span class="sub" id="otherinfo"></span>
         <div class="seg" role="group" aria-label="Which Ready lists to show">
           <button data-act="show" data-v="both" id="show-both">Both</button>
           <button data-act="show" data-v="img" id="show-img">With images</button>
@@ -219,7 +220,7 @@ const S = {
   batches: {}, log: [],
   sel: [], q: "",
   archOpen: lsGet("pb.arch") === "1", archLoading: false,
-  cat: lsGet("pb.cat") || "",
+  cat: lsGet("pb.cat") || "", showOther: lsGet("pb.other") === "1",
   show: lsGet("pb.show") || "both", folded: (() => { try { return JSON.parse(lsGet("pb.folded") || "{}") || {}; } catch { return {}; } })(),
   running: {}, ui: { preview:{}, confirmDel:null, confirmClear:false, clearing:false, mode:{}, when:{}, whenErr:{}, edit:{} }
 };
@@ -516,13 +517,29 @@ function imgLinks(t){
 }
 function liveLink(t){ return t.live ? `<a href="${esc(t.live.url)}" target="_blank" rel="noopener">Live article</a> <span class="sub">${esc(short(t.live.url))} · ${ago(t.live.at)}</span>` : ""; }
 const NOCAT = "No category";
-const catsOf = t => (t && t.cats && t.cats.length) ? t.cats : null;
-// a batch keeps the categories its tickets had when it was made, so the weekly count works for archived batches too
-const batchCats = (b, k) => (b.cats && b.cats[k]) || catsOf(S.tickets[k]) || [];
+// The six main categories on the blog's home page, and the Jira subcategories that belong to each.
+// Subcategories not listed here (Weight Management, Meditation, Therapy, Activewear, ...) are outside the six.
+const MAIN_CATS = {
+  "Diets": ["Diets","Keto","Low Carb","Gluten Free","Vegan","Meal Plans","Meal Ideas","Healthy Eating","Food For Weight Loss","Recipes"],
+  "Fasting": ["Fasting","Intermittent Fasting"],
+  "Pilates": ["Pilates","Wall Pilates","Home Pilates","Somatic Pilates","Reformer Pilates"],
+  "Chair Yoga": ["Chair Yoga"],
+  "Workouts": ["Workouts","Leg Workouts","Abs Workouts","Core Workouts","Back Workouts","Arm Workouts","Chest Workouts","Butt Workouts","Glute Workouts","Shoulder Workouts","Strength Training","HIIT Training","Cardio Workouts","Cardio","Walking","Running","Workout Plans","Workout Plans For Men","Stretching"],
+  "Calisthenics Workout": ["Calisthenics","Calisthenics Workout","Calisthenics For Women","Calisthenics For Men","Bodyweight Training"]
+};
+const MAIN_ORDER = Object.keys(MAIN_CATS);
+const SUB_TO_MAIN = {}; for (const [m, subs] of Object.entries(MAIN_CATS)) subs.forEach(x => SUB_TO_MAIN[x.toLowerCase()] = m);
+const toMains = subs => [...new Set((subs || []).map(x => SUB_TO_MAIN[String(x).toLowerCase()]).filter(Boolean))].sort((a,b) => MAIN_ORDER.indexOf(a) - MAIN_ORDER.indexOf(b));
+// main categories of a ticket, or null when none of its subcategories is in the six
+const catsOf = t => { const m = t && t.cats ? toMains(t.cats) : []; return m.length ? m : null; };
+const inSix = t => !t || !t.cats || !!catsOf(t);
+// a batch keeps the subcategories its tickets had when it was made
+const batchCats = (b, k) => toMains((b.cats && b.cats[k]) || (S.tickets[k] && S.tickets[k].cats));
 function catChips(t, dupSet){
   const cs = catsOf(t);
-  if (!cs) return t && t.cats ? `<span class="chip warn">No category in description</span>` : `<span class="chip">Category: click Refresh</span>`;
-  return cs.map(c => `<span class="chip cat${dupSet && dupSet.has(c) ? " dup" : ""}">${esc(c)}</span>`).join("");
+  if (!t || !t.cats) return `<span class="chip">Category: click Refresh</span>`;
+  if (!cs) return t.cats.length ? `<span class="chip warn" title="Not one of the six main categories">${esc(t.cats.join(", "))}</span>` : `<span class="chip warn">No category in description</span>`;
+  return cs.map(c => `<span class="chip cat${dupSet && dupSet.has(c) ? " dup" : ""}" title="${esc(t.cats.join(", "))}">${esc(c)}</span>`).join("");
 }
 function filtered(list){
   const q = S.q.trim().toLowerCase();
@@ -531,16 +548,18 @@ function filtered(list){
 }
 const selCats = () => { const m = new Map(); S.sel.forEach(k => (catsOf(S.tickets[k]) || []).forEach(c => m.set(c, (m.get(c) || []).concat(k)))); return m; };
 function renderCatFilter(){
-  const counts = new Map();
+  const counts = new Map(MAIN_ORDER.map(c => [c, 0]));
   readyList().forEach(t => (catsOf(t) || [NOCAT]).forEach(c => counts.set(c, (counts.get(c) || 0) + 1)));
-  if (S.cat && !counts.has(S.cat)) counts.set(S.cat, 0);
-  const opts = [...counts.entries()].sort((a,b) => a[0].localeCompare(b[0]));
-  return `<option value="">All categories</option>` + opts.map(([c,n]) => `<option value="${esc(c)}" ${S.cat === c ? "selected" : ""}>${esc(c)} (${n})</option>`).join("");
+  if (!S.showOther) counts.delete(NOCAT);
+  if (S.cat && !counts.has(S.cat)) S.cat = "";
+  return `<option value="">All categories</option>` + [...counts.entries()].map(([c,n]) => `<option value="${esc(c)}" ${S.cat === c ? "selected" : ""}>${esc(c === NOCAT ? "Other / no category" : c)} (${n})</option>`).join("");
 }
 const inScope = t => S.scope !== "mine" || t.mine;
-function readyList(){
+function readyAll(){
   return S.readyKeys.map(k => S.tickets[k]).filter(t => t && t.status === "Ready" && inScope(t) && !batchOf(t.key) && !t.live);
 }
+// tickets outside the six main categories are hidden unless "Show them" is on
+function readyList(){ return readyAll().filter(t => S.showOther || inSix(t)); }
 function ticketRow(t){
   const on = S.sel.includes(t.key), full = S.sel.length >= BATCH;
   const sc = selCats(); const clash = !on && (catsOf(t) || []).filter(c => sc.has(c));
@@ -722,6 +741,10 @@ function render(){
   $("b-noimg").innerHTML = renderList(noImg, S.q || S.cat ? "No tickets match the filter." : "Every Ready ticket has images.");
   $("b-tray").innerHTML = renderTray(); $("b-batches").innerHTML = renderBatches();
   $("catf").innerHTML = renderCatFilter();
+  const hidden = readyAll().filter(t => !inSix(t)).length;
+  $("otherinfo").innerHTML = !S.jira.at || !hidden ? "" : S.showOther
+    ? `Showing ${hidden} outside the six categories <button class="btn ghost sm" data-act="other">Hide them</button>`
+    : `${hidden} outside the six categories hidden <button class="btn ghost sm" data-act="other">Show them</button>`;
 
   const arch = batchList().filter(b => b.archived).sort((a,b) => (b.archivedAt||0) - (a.archivedAt||0) || (b.n||0) - (a.n||0));
   $("c-arch").textContent = arch.length;
@@ -739,6 +762,7 @@ document.addEventListener("click", async ev => {
   switch (act) {
     case "scope": if (S.scope !== b.dataset.v) { S.scope = b.dataset.v; lsSet("pb.scope", S.scope); render(); } break;
     case "refresh": loadJira(); break;
+    case "other": S.showOther = !S.showOther; lsSet("pb.other", S.showOther ? "1" : "0"); render(); break;
     case "catpick": S.cat = S.cat === b.dataset.c ? "" : b.dataset.c; lsSet("pb.cat", S.cat); render(); break;
     case "show": S.show = b.dataset.v; lsSet("pb.show", S.show); render(); break;
     case "fold": S.folded[b.dataset.v] = !S.folded[b.dataset.v]; lsSet("pb.folded", JSON.stringify(S.folded)); render(); break;
