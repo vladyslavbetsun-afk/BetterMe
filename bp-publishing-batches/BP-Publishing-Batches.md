@@ -22,7 +22,24 @@ A dashboard for moving BetterMe Blog Project (BP) Jira tickets from **Ready** to
   - Search box filters both lists by key or title.
   - **Both / With images / No images** switch shows one list or both.
   - Click a list title to collapse or expand it.
-  - The switch, the collapsed state and the scope are remembered in the browser (`localStorage` keys `pb.scope`, `pb.show`, `pb.folded`).
+  - The switch, the collapsed state and the scope are remembered in the browser (`localStorage` keys `pb.scope`, `pb.show`, `pb.folded`, `pb.cat`, `pb.cats`).
+
+### 1.1a Categories
+- Each ticket's category comes from its Jira description line `**Category:** …`. Several categories split on `;` or `,`, e.g. `Pilates; Somatic Exercises`.
+- Category chips show on every Ready ticket, in the New batch tray and in batches. A ticket with no category line shows "No category in description".
+- **Category filter** next to the search box narrows both Ready lists to one category. Its options show counts.
+- **Categories this week** panel (collapsible, top of the left column):
+  - The goal is 1–2 articles per category per week.
+  - For each category the panel shows:
+    - **This week:** tickets in batches sent or scheduled Monday–Sunday this week, using the scheduled time if there is one. Red 0, green 1–2.
+    - **Next week:** the same count for next week.
+    - **Ready to pick:** unbatched Ready tickets in that category.
+  - Rows are sorted with categories that have nothing this week first.
+  - Clicking a category filters the Ready lists.
+  - The header shows how many categories have none yet.
+- **New batch tray:** duplicate categories turn red, with a warning "2 tickets in Fasting… Swap one for a different category". When the categories are all different, the tray says "All different categories".
+- **Ready lists:** a ticket whose category is already in the tray says so, naming the ticket it clashes with.
+- **Saved with the batch:** each batch stores its tickets' categories (`cats`), so weekly counts keep working after archiving.
 
 ### 1.2 Building a batch
 - Tick up to **4** tickets (checkboxes disable at 4). They appear in the **New batch** tray as numbered slots; × removes one, **Clear** empties the tray.
@@ -124,7 +141,7 @@ Ready with images · Ready, no images · Batches in progress · Batches ready ·
   }
   ```
 - **Database** (artifact `db`, kept across republishes):
-  - `batches/{id}` — `{ id, n, keys[], createdAt, partsFailed[], sentAt, postAt, stale[], work, workAt, archived, archivedAt }`
+  - `batches/{id}` — `{ id, n, keys[], cats{key:[...]}, createdAt, partsFailed[], sentAt, postAt, stale[], work, workAt, archived, archivedAt }`
     - `sentAt` is when you clicked send or schedule.
     - `postAt` is the scheduled delivery time (null when sent immediately).
     - `stale` lists old scheduled times still to delete in Slack.
@@ -214,6 +231,21 @@ section.panel.tray{border-color:var(--accent)}
 .ph .cnt{font-family:var(--f-mono);font-size:12px;color:var(--muted)}
 .ph .sp{margin-left:auto;display:flex;gap:8px;align-items:center}
 .bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin-bottom:-6px}
+.bar select{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:5px 8px;font-size:13px;max-width:100%}
+.chip.cat{background:var(--accent-soft);color:var(--accent)}
+.chip.cat.dup{background:var(--bad-soft);color:var(--bad);font-weight:600}
+.catwrap{max-height:340px;overflow:auto}
+.cattbl{width:100%;border-collapse:collapse;font-size:13px}
+.cattbl th{position:sticky;top:0;background:var(--surface);text-align:left;font-weight:600;font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;padding:6px 6px;border-bottom:1px solid var(--line)}
+.cattbl td{padding:5px 6px;border-top:1px solid var(--line);vertical-align:middle}
+.cattbl td.num,.cattbl th.num{text-align:right;font-variant-numeric:tabular-nums;width:1%;white-space:nowrap}
+.cattbl tr.on td{background:var(--accent-soft)}
+.cattbl button.catpick{border:0;background:none;padding:0;color:var(--accent);cursor:pointer;text-align:left;font:inherit}
+.cattbl button.catpick:hover{text-decoration:underline}
+.wk{display:inline-block;min-width:22px;text-align:center;border-radius:999px;padding:0 6px;font-weight:600}
+.wk.z{background:var(--bad-soft);color:var(--bad)}
+.wk.g{background:var(--ok-soft);color:var(--ok)}
+.wk.m{background:var(--sunk);color:var(--fg)}
 .bar input[type=search]{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:5px 10px;font-size:13px;width:240px;max-width:100%;flex:0 1 auto}
 .fold{display:inline-flex;align-items:center;gap:8px;border:0;background:none;padding:0;cursor:pointer;text-align:left;color:var(--fg);font:inherit;letter-spacing:inherit}
 .fold:hover{color:var(--accent)}
@@ -306,8 +338,10 @@ section.panel.tray{border-color:var(--accent)}
   <div id="pageerr"></div>
   <div class="grid">
     <div class="col">
+      <section class="panel" id="sec-cats"><div class="ph"><h2><button class="fold" data-act="catsfold" aria-controls="b-cats" id="f-cats"><span class="chev" aria-hidden="true"></span>Categories this week</button></h2><span class="cnt" id="c-cats"></span><span class="sp sub">Goal: 1–2 articles per category per week</span></div><div class="pb" id="b-cats"></div></section>
       <div class="bar">
         <input type="search" id="q" placeholder="Filter by key or title" aria-label="Filter Ready tickets by key or title">
+        <select id="catf" aria-label="Filter Ready tickets by category"></select>
         <div class="seg" role="group" aria-label="Which Ready lists to show">
           <button data-act="show" data-v="both" id="show-both">Both</button>
           <button data-act="show" data-v="img" id="show-img">With images</button>
@@ -340,7 +374,14 @@ const IMAGE_BY = new Set(["712020:7cf474f8-6ae6-439f-8d54-f6a1e3143066","712020:
 const VLAD = "712020:0d312ff6-23a7-4fa4-b5a1-b57be36d9f75";
 const YULIIA = { id:"712020:b345726f-fe25-4239-a7dc-7322d7dbc2ae", name:"Yuliia Koreniuk", slack:"U0AHVPJ0QKA" };
 const BATCH = 4;
-const FIELDS = ["summary","status","comment","updated",F.parts,F.mgr];
+const FIELDS = ["summary","status","comment","updated","description",F.parts,F.mgr];
+// the ticket description carries a line like "**Category:** Pilates; Somatic Exercises"
+function categoriesOf(desc){
+  const d = typeof desc === "string" ? desc : "";
+  const m = d.match(/\*\*\s*Categor(?:y|ies)\s*:?\s*\*\*\s*:?\s*([^\n]*)/i) || d.match(/^\s*Categor(?:y|ies)\s*:\s*([^\n]*)/im);
+  if (!m) return [];
+  return m[1].replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/[*_`]/g, "").split(/[;,|]/).map(x => x.trim()).filter(Boolean);
+}
 const DOC_RE = /^https:\/\/docs\.google\.com\/document\//i;
 const LIVE_RE = /^https?:\/\/(www\.)?betterme\.world\//i;
 
@@ -354,6 +395,7 @@ const S = {
   batches: {}, log: [],
   sel: [], q: "",
   archOpen: lsGet("pb.arch") === "1", archLoading: false,
+  cat: lsGet("pb.cat") || "", catsOpen: lsGet("pb.cats") !== "0",
   show: lsGet("pb.show") || "both", folded: (() => { try { return JSON.parse(lsGet("pb.folded") || "{}") || {}; } catch { return {}; } })(),
   running: {}, ui: { preview:{}, confirmDel:null, confirmClear:false, clearing:false, mode:{}, when:{}, whenErr:{}, edit:{} }
 };
@@ -449,7 +491,8 @@ function analyze(issue){
   return {
     key: issue.key, title: f.summary || "", status: (f.status && f.status.name) || "?", url: `${SITE}/browse/${issue.key}`,
     parts, mine: mgrs.some(m => m.id === S.me), images, doc: last(docs) || null, docCount: new Set(docs.map(d => d.url)).size,
-    live, yuliia: parts.some(p => p.id === YULIIA.id), updated: parseT(f.updated)
+    live, yuliia: parts.some(p => p.id === YULIIA.id), updated: parseT(f.updated),
+    cats: categoriesOf(f.description)
   };
 }
 async function loadJira(){
@@ -524,7 +567,8 @@ function slackText(keys){
 async function createBatch(){
   if (!S.sel.length) return;
   const n = Math.max(0, ...Object.values(S.batches).map(b => b.n || 0)) + 1;
-  const b = { id: "b" + Date.now(), n, keys: [...S.sel], createdAt: Date.now() };
+  const cats = {}; S.sel.forEach(k => { const t = S.tickets[k]; if (t && t.cats) cats[k] = t.cats; });
+  const b = { id: "b" + Date.now(), n, keys: [...S.sel], createdAt: Date.now(), cats };
   S.sel = [];
   await saveBatch(b);
   await logIt("batch", `Batch ${n} created: ${b.keys.join(", ")}`);
@@ -647,9 +691,53 @@ function imgLinks(t){
   return `<span class="lbl">Images:</span> ` + t.images.map((im, i) => `<a href="${esc(im.url)}" target="_blank" rel="noopener" title="Added by ${esc(im.by)}">${t.images.length > 1 ? "Image " + (i+1) : "Image"}</a>`).join(" ") + ` <span class="sub">by ${esc([...new Set(t.images.map(i => i.by.split(" ")[0]))].join(", "))}</span>`;
 }
 function liveLink(t){ return t.live ? `<a href="${esc(t.live.url)}" target="_blank" rel="noopener">Live article</a> <span class="sub">${esc(short(t.live.url))} · ${ago(t.live.at)}</span>` : ""; }
+const NOCAT = "No category";
+const catsOf = t => (t && t.cats && t.cats.length) ? t.cats : null;
+// a batch keeps the categories its tickets had when it was made, so the weekly count works for archived batches too
+const batchCats = (b, k) => (b.cats && b.cats[k]) || catsOf(S.tickets[k]) || [];
+function catChips(t, dupSet){
+  const cs = catsOf(t);
+  if (!cs) return t && t.cats ? `<span class="chip warn">No category in description</span>` : "";
+  return cs.map(c => `<span class="chip cat${dupSet && dupSet.has(c) ? " dup" : ""}">${esc(c)}</span>`).join("");
+}
 function filtered(list){
   const q = S.q.trim().toLowerCase();
-  return q ? list.filter(t => t.key.toLowerCase().includes(q) || t.title.toLowerCase().includes(q)) : list;
+  return list.filter(t => (!q || t.key.toLowerCase().includes(q) || t.title.toLowerCase().includes(q))
+    && (!S.cat || (S.cat === NOCAT ? !catsOf(t) : (t.cats || []).includes(S.cat))));
+}
+const selCats = () => { const m = new Map(); S.sel.forEach(k => (catsOf(S.tickets[k]) || []).forEach(c => m.set(c, (m.get(c) || []).concat(k)))); return m; };
+// Monday 00:00 of the week containing t, local time
+function weekStart(t){ const d = new Date(t); d.setHours(0,0,0,0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d.getTime(); }
+function catWeeks(){
+  const w0 = weekStart(Date.now()), w1 = w0 + 7*DAY, w2 = w1 + 7*DAY;
+  const rows = new Map();
+  const row = c => { if (!rows.has(c)) rows.set(c, { cat:c, now:[], next:[], ready:0 }); return rows.get(c); };
+  for (const b of batchList()) {
+    const at = b.postAt || b.sentAt; if (!at) continue;
+    const slot = at >= w0 && at < w1 ? "now" : at >= w1 && at < w2 ? "next" : null; if (!slot) continue;
+    b.keys.forEach(k => { const cs = batchCats(b, k); (cs.length ? cs : [NOCAT]).forEach(c => row(c)[slot].push(k)); });
+  }
+  readyList().forEach(t => (catsOf(t) || [NOCAT]).forEach(c => row(c).ready++));
+  return { w0, w1, rows: [...rows.values()].sort((a,b) => a.now.length - b.now.length || b.ready - a.ready || a.cat.localeCompare(b.cat)) };
+}
+function renderCats(){
+  if (!S.jira.at) return `<div class="empty">Click <b>Refresh</b> to load tickets and see which categories still need an article this week.</div>`;
+  const { w0, w1, rows } = catWeeks();
+  const fmt = t => new Date(t).toLocaleDateString([], { day:"numeric", month:"short" });
+  const wk = n => `<span class="wk ${n === 0 ? "z" : n <= 2 ? "g" : "m"}">${n}</span>`;
+  const sel = selCats();
+  return `<div class="sub" style="margin:6px 0 8px">This week ${fmt(w0)}–${fmt(w1 - DAY)}. Counts tickets in batches sent or scheduled for that week. Click a category to filter the Ready lists.</div>
+  <div class="catwrap"><table class="cattbl"><thead><tr><th>Category</th><th class="num">This week</th><th class="num">Next week</th><th class="num">Ready to pick</th></tr></thead><tbody>
+  ${rows.map(r => `<tr class="${S.cat === r.cat ? "on" : ""}"><td><button class="catpick" data-act="catpick" data-c="${esc(r.cat)}">${esc(r.cat)}</button>${sel.has(r.cat) ? ` <span class="chip cat">in new batch</span>` : ""}</td>
+    <td class="num" title="${esc(r.now.join(", "))}">${wk(r.now.length)}</td><td class="num" title="${esc(r.next.join(", "))}">${r.next.length || "–"}</td><td class="num">${r.ready || "–"}</td></tr>`).join("")}
+  </tbody></table></div>`;
+}
+function renderCatFilter(){
+  const counts = new Map();
+  readyList().forEach(t => (catsOf(t) || [NOCAT]).forEach(c => counts.set(c, (counts.get(c) || 0) + 1)));
+  if (S.cat && !counts.has(S.cat)) counts.set(S.cat, 0);
+  const opts = [...counts.entries()].sort((a,b) => a[0].localeCompare(b[0]));
+  return `<option value="">All categories</option>` + opts.map(([c,n]) => `<option value="${esc(c)}" ${S.cat === c ? "selected" : ""}>${esc(c)} (${n})</option>`).join("");
 }
 const inScope = t => S.scope !== "mine" || t.mine;
 function readyList(){
@@ -657,10 +745,12 @@ function readyList(){
 }
 function ticketRow(t){
   const on = S.sel.includes(t.key), full = S.sel.length >= BATCH;
+  const sc = selCats(); const clash = !on && (catsOf(t) || []).filter(c => sc.has(c));
   return `<div class="tk${on ? " sel" : ""}">
     <input type="checkbox" id="cb-${esc(t.key)}" data-act="sel" data-k="${esc(t.key)}" ${on ? "checked" : ""} ${!on && full ? "disabled" : ""} aria-label="Add ${esc(t.key)} to batch">
     <div class="main">
       <div class="row">${keyLink(t)}<label class="title" for="cb-${esc(t.key)}">${esc(t.title)}</label></div>
+      <div class="row">${catChips(t, clash ? new Set(clash) : null)}${clash && clash.length ? `<span class="sub">${esc(clash.join(", "))} already in the new batch (${esc([...new Set(clash.flatMap(c => sc.get(c)))].join(", "))})</span>` : ""}</div>
       <div class="links">${docLink(t)}${imgLinks(t) ? `<span>${imgLinks(t)}</span>` : ""}${t.yuliia ? `<span class="chip vi">Yuliia is a participant</span>` : ""}</div>
     </div>
   </div>`;
@@ -672,16 +762,19 @@ function renderList(list, emptyMsg){
   return list.map(ticketRow).join("");
 }
 function renderTray(){
-  const slots = [];
+  const slots = [], sc = selCats();
   for (let i = 0; i < BATCH; i++) {
     const k = S.sel[i], t = k && S.tickets[k];
-    slots.push(t ? `<li class="full"><span class="num">${i+1}</span>${keyLink(t)}<span class="t" title="${esc(t.title)}">${esc(t.title)}</span>${t.images.length ? "" : `<span class="chip warn">No images</span>`}<button class="x" data-act="unsel" data-k="${esc(k)}" aria-label="Remove ${esc(k)}">×</button></li>`
+    const dups = t ? new Set((catsOf(t) || []).filter(c => (sc.get(c) || []).length > 1)) : null;
+    slots.push(t ? `<li class="full"><span class="num">${i+1}</span>${keyLink(t)}<span class="t" title="${esc(t.title)}">${esc(t.title)}</span>${catChips(t, dups)}${t.images.length ? "" : `<span class="chip warn">No images</span>`}<button class="x" data-act="unsel" data-k="${esc(k)}" aria-label="Remove ${esc(k)}">×</button></li>`
       : `<li><span class="num">${i+1}</span><span class="sub">Tick a Ready ticket to add it</span></li>`);
   }
   const n = S.sel.length;
   return `<ul class="slots">${slots.join("")}</ul>
     <div class="acts"><button class="btn pri" data-act="create" ${n ? "" : "disabled"}>Create batch${n && n < BATCH ? ` with ${n}` : ""}</button>${n ? `<button class="btn ghost sm" data-act="clearsel">Clear</button>` : ""}
-    ${n && n < BATCH ? `<span class="sub">Batches are usually ${BATCH} tickets.</span>` : ""}</div>`;
+    ${n && n < BATCH ? `<span class="sub">Batches are usually ${BATCH} tickets.</span>` : ""}</div>
+    ${[...sc.entries()].filter(([,ks]) => ks.length > 1).map(([c,ks]) => `<div class="warn" style="margin-top:8px">${ks.length} tickets in <b>${esc(c)}</b>: ${esc(ks.join(", "))}. Swap one for a different category.</div>`).join("")}
+    ${n && ![...sc.values()].some(ks => ks.length > 1) && S.sel.every(k => catsOf(S.tickets[k])) ? `<div class="sub" style="margin-top:8px">All different categories.</div>` : ""}`;
 }
 function batchTicket(b, k){
   const t = S.tickets[k];
@@ -694,7 +787,7 @@ function batchTicket(b, k){
   else if (b.sentAt) state = `<span class="chip">Waiting for live link</span>`;
   else state = (t.yuliia ? `<span class="chip vi">Participant</span>` : "") + (t.doc ? ` <a href="${esc(t.doc.url)}" target="_blank" rel="noopener">Doc</a>` : "");
   const failed = (b.partsFailed || []).includes(k) ? `<span class="chip bad">Participant not added</span>` : "";
-  return `<li>${keyLink(t)}<span class="t">${esc(t.title)}</span>${t.status !== "Ready" && t.status !== "Published" ? `<span class="chip">${esc(t.status)}</span>` : ""}${failed}${state}</li>`;
+  return `<li>${keyLink(t)}<span class="t">${esc(t.title)}</span>${batchCats(b, k).map(c => `<span class="chip cat">${esc(c)}</span>`).join("")}${t.status !== "Ready" && t.status !== "Published" ? `<span class="chip">${esc(t.status)}</span>` : ""}${failed}${state}</li>`;
 }
 function renderArchive(list){
   if (!list.length) return `<div class="empty">Archived batches are kept here. Archive a batch once all its tickets are published.</div>`;
@@ -827,9 +920,15 @@ function render(){
     $("b-"+v).hidden = !open;
     $("sec-"+v).querySelector(".ph").classList.toggle("closed", !open);
   }
-  $("b-img").innerHTML = renderList(withImg, S.q ? "No tickets match the filter." : "No Ready tickets have an image link from Oksana or Karina yet.");
-  $("b-noimg").innerHTML = renderList(noImg, S.q ? "No tickets match the filter." : "Every Ready ticket has images.");
+  $("b-img").innerHTML = renderList(withImg, S.q || S.cat ? "No tickets match the filter." : "No Ready tickets have an image link from Oksana or Karina yet.");
+  $("b-noimg").innerHTML = renderList(noImg, S.q || S.cat ? "No tickets match the filter." : "Every Ready ticket has images.");
   $("b-tray").innerHTML = renderTray(); $("b-batches").innerHTML = renderBatches();
+  $("catf").innerHTML = renderCatFilter();
+  $("f-cats").setAttribute("aria-expanded", S.catsOpen);
+  $("b-cats").hidden = !S.catsOpen;
+  $("sec-cats").querySelector(".ph").classList.toggle("closed", !S.catsOpen);
+  if (S.catsOpen) $("b-cats").innerHTML = renderCats();
+  if (S.jira.at) { const z = catWeeks().rows.filter(r => r.cat !== NOCAT && !r.now.length).length; $("c-cats").textContent = z ? `${z} with none yet` : "all covered"; } else $("c-cats").textContent = "";
   const arch = batchList().filter(b => b.archived).sort((a,b) => (b.archivedAt||0) - (a.archivedAt||0) || (b.n||0) - (a.n||0));
   $("c-arch").textContent = arch.length;
   $("f-arch").setAttribute("aria-expanded", S.archOpen);
@@ -846,6 +945,8 @@ document.addEventListener("click", async ev => {
   switch (act) {
     case "scope": if (S.scope !== b.dataset.v) { S.scope = b.dataset.v; lsSet("pb.scope", S.scope); render(); } break;
     case "refresh": loadJira(); break;
+    case "catsfold": S.catsOpen = !S.catsOpen; lsSet("pb.cats", S.catsOpen ? "1" : "0"); render(); break;
+    case "catpick": S.cat = S.cat === b.dataset.c ? "" : b.dataset.c; lsSet("pb.cat", S.cat); render(); break;
     case "show": S.show = b.dataset.v; lsSet("pb.show", S.show); render(); break;
     case "fold": S.folded[b.dataset.v] = !S.folded[b.dataset.v]; lsSet("pb.folded", JSON.stringify(S.folded)); render(); break;
     case "jump": {
@@ -895,6 +996,7 @@ document.addEventListener("change", ev => {
   render();
 });
 $("q").addEventListener("input", ev => { S.q = ev.target.value; render(); });
+$("catf").addEventListener("change", ev => { S.cat = ev.target.value; lsSet("pb.cat", S.cat); render(); });
 
 /* ---------- boot ---------- */
 loadCache();
