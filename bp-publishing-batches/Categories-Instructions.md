@@ -11,11 +11,11 @@ How the BP Publishing Batches dashboard shows each Jira ticket's **main blog cat
   **Category:** Leg Workouts
   **Category:** Pilates; Somatic Exercises
   ```
-- Maps that subcategory to one of the **seven main categories** of the blog home page.
-  - For example, Leg Workouts becomes **Workouts** and Weight Management becomes **Weight Loss**.
+- Maps that subcategory to one of the **six main categories** of the blog home page.
+  - For example, Leg Workouts becomes **Workouts** and Wall Pilates becomes **Pilates**.
 - Shows only the **main category** as a chip right after the ticket title. Hovering over the chip shows the original subcategory.
-- **Shows only tickets in the seven main categories.** The rest are hidden, with a "N outside the main categories hidden · Show them" switch.
-- **Category filter:** a dropdown next to the search box lists the seven, with counts.
+- **Shows categories only for tickets in the six main categories.** Tickets in other categories (Weight Loss and the rest) get no main-category chip and are hidden, with a "N outside the six categories hidden · Show them" switch.
+- **Category filter:** a dropdown next to the search box lists the six, with counts.
 - **Duplicate warning when building a batch:**
   - Two selected tickets with the same main category turn red, with a warning: "2 tickets in Workouts: BP-1, BP-2. Swap one for a different category."
   - When all selected tickets differ, the page says "All different categories".
@@ -24,7 +24,7 @@ How the BP Publishing Batches dashboard shows each Jira ticket's **main blog cat
 
 ---
 
-## 2. Main categories and their subcategories
+## 2. The six main categories and their subcategories
 
 | Main category | Jira subcategories that count under it |
 |---|---|
@@ -34,9 +34,8 @@ How the BP Publishing Batches dashboard shows each Jira ticket's **main blog cat
 | **Chair Yoga** | Chair Yoga, Yoga |
 | **Workouts** | Workouts, Leg Workouts, Abs Workouts, Core Workouts, Back Workouts, Arm Workouts, Chest Workouts, Butt Workouts, Glute Workouts, Shoulder Workouts, Strength Training, HIIT Training, Cardio Workouts, Cardio, Walking, Running, Workout Plans, Workout Plans For Men, Stretching |
 | **Calisthenics Workout** | Calisthenics, Calisthenics Workout, Calisthenics For Women, Calisthenics For Men, Bodyweight Training |
-| **Weight Loss** | Weight Loss, Weight Management, Weight Loss Tips |
 
-**Outside the main categories (hidden):** Somatic Exercises, Meditation, Health, Activewear, Therapy, Corporate Wellness, and tickets with no `Category` line. Today only BP-1760 and BP-1721 have no `Category` line.
+**Outside the six (no main category, hidden):** Weight Management, Weight Loss Tips, Somatic Exercises, Meditation, Health, Activewear, Therapy, Corporate Wellness, and tickets with no `Category` line. Today only BP-1760 and BP-1721 have no `Category` line.
 
 **Rules**
 - Matching is case-insensitive.
@@ -76,15 +75,14 @@ function categoriesOf(desc){
   return m[1].replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/[*_`]/g, "").split(/[;,|]/).map(x => x.trim()).filter(Boolean);
 }
 
-// Main categories on the blog home page and the Jira subcategories under each
+// The six main categories on the blog home page and the Jira subcategories under each
 const MAIN_CATS = {
   "Diets": ["Diets","Keto","Low Carb","Gluten Free","Vegan","Meal Plans","Meal Ideas","Healthy Eating","Food For Weight Loss","Recipes"],
   "Fasting": ["Fasting","Intermittent Fasting"],
   "Pilates": ["Pilates","Wall Pilates","Home Pilates","Somatic Pilates","Reformer Pilates"],
   "Chair Yoga": ["Chair Yoga","Yoga"],
   "Workouts": ["Workouts","Leg Workouts","Abs Workouts","Core Workouts","Back Workouts","Arm Workouts","Chest Workouts","Butt Workouts","Glute Workouts","Shoulder Workouts","Strength Training","HIIT Training","Cardio Workouts","Cardio","Walking","Running","Workout Plans","Workout Plans For Men","Stretching"],
-  "Calisthenics Workout": ["Calisthenics","Calisthenics Workout","Calisthenics For Women","Calisthenics For Men","Bodyweight Training"],
-  "Weight Loss": ["Weight Loss","Weight Management","Weight Loss Tips"]
+  "Calisthenics Workout": ["Calisthenics","Calisthenics Workout","Calisthenics For Women","Calisthenics For Men","Bodyweight Training"]
 };
 const MAIN_ORDER = Object.keys(MAIN_CATS);
 const SUB_TO_MAIN = {};
@@ -112,7 +110,7 @@ function catChips(t, dupSet){
   const cs = mainsOf(t);
   if (!t || !t.cats) return `<span class="chip">Category: click Refresh</span>`;
   if (!cs) return t.cats.length
-    ? `<span class="chip warn" title="Not one of the main categories">${esc(t.cats.join(", "))}</span>`
+    ? `<span class="chip warn" title="Not one of the six main categories">${esc(t.cats.join(", "))}</span>`
     : `<span class="chip warn">No category in description</span>`;
   return cs.map(c => `<span class="chip cat${dupSet && dupSet.has(c) ? " dup" : ""}" title="${esc(t.cats.join(", "))}">${esc(c)}</span>`).join("");
 }
@@ -125,12 +123,12 @@ CSS (use your own color tokens):
 .chip.cat.dup{background:var(--bad-soft);color:var(--bad);font-weight:600}
 ```
 
-### Step 5. Hide tickets outside the main categories
+### Step 5. Hide tickets outside the six categories
 ```js
 let showOther = false;   // the "Show them" switch
 const visible = tickets.filter(t => showOther || inMain(t));
 const hiddenCount = tickets.filter(t => !inMain(t)).length;
-// bar text: `${hiddenCount} outside the main categories hidden` + a Show them / Hide them button
+// bar text: `${hiddenCount} outside the six categories hidden` + a Show them / Hide them button
 ```
 
 ### Step 6. Category filter
@@ -168,7 +166,7 @@ batch.cats = Object.fromEntries(selected.map(k => [k, tickets[k].cats || []]));
 1. `description` is in the Jira fields and `responseContentFormat: "markdown"` is set.
 2. `ticket.cats` is filled with `categoriesOf(...)` for every loaded ticket.
 3. The main-category chip shows next to the title in every ticket list.
-4. Tickets outside the main categories are hidden, with a Show them switch.
-5. The category filter lists the seven main categories.
+4. Tickets outside the six categories are hidden, with a Show them switch.
+5. The category filter lists the six main categories.
 6. Duplicate main categories are flagged when grouping tickets.
 7. Refresh once after deploying, so tickets saved earlier get their categories.

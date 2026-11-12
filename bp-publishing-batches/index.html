@@ -517,16 +517,15 @@ function imgLinks(t){
 }
 function liveLink(t){ return t.live ? `<a href="${esc(t.live.url)}" target="_blank" rel="noopener">Live article</a> <span class="sub">${esc(short(t.live.url))} · ${ago(t.live.at)}</span>` : ""; }
 const NOCAT = "No category";
-// The main categories on the blog's home page, and the Jira subcategories that belong to each.
-// Subcategories not listed here (Meditation, Somatic Exercises, Therapy, Activewear, ...) are outside them.
+// The six main categories on the blog's home page, and the Jira subcategories that belong to each.
+// Subcategories not listed here (Weight Management, Weight Loss Tips, Meditation, Somatic Exercises, ...) are outside the six.
 const MAIN_CATS = {
   "Diets": ["Diets","Keto","Low Carb","Gluten Free","Vegan","Meal Plans","Meal Ideas","Healthy Eating","Food For Weight Loss","Recipes"],
   "Fasting": ["Fasting","Intermittent Fasting"],
   "Pilates": ["Pilates","Wall Pilates","Home Pilates","Somatic Pilates","Reformer Pilates"],
   "Chair Yoga": ["Chair Yoga","Yoga"],
   "Workouts": ["Workouts","Leg Workouts","Abs Workouts","Core Workouts","Back Workouts","Arm Workouts","Chest Workouts","Butt Workouts","Glute Workouts","Shoulder Workouts","Strength Training","HIIT Training","Cardio Workouts","Cardio","Walking","Running","Workout Plans","Workout Plans For Men","Stretching"],
-  "Calisthenics Workout": ["Calisthenics","Calisthenics Workout","Calisthenics For Women","Calisthenics For Men","Bodyweight Training"],
-  "Weight Loss": ["Weight Loss","Weight Management","Weight Loss Tips"]
+  "Calisthenics Workout": ["Calisthenics","Calisthenics Workout","Calisthenics For Women","Calisthenics For Men","Bodyweight Training"]
 };
 const MAIN_ORDER = Object.keys(MAIN_CATS);
 const SUB_TO_MAIN = {}; for (const [m, subs] of Object.entries(MAIN_CATS)) subs.forEach(x => SUB_TO_MAIN[x.toLowerCase()] = m);
@@ -539,7 +538,7 @@ const batchCats = (b, k) => toMains((b.cats && b.cats[k]) || (S.tickets[k] && S.
 function catChips(t, dupSet){
   const cs = catsOf(t);
   if (!t || !t.cats) return `<span class="chip">Category: click Refresh</span>`;
-  if (!cs) return t.cats.length ? `<span class="chip warn" title="Not one of the main categories">${esc(t.cats.join(", "))}</span>` : `<span class="chip warn">No category in description</span>`;
+  if (!cs) return t.cats.length ? `<span class="chip warn" title="Not one of the six main categories">${esc(t.cats.join(", "))}</span>` : `<span class="chip warn">No category in description</span>`;
   return cs.map(c => `<span class="chip cat${dupSet && dupSet.has(c) ? " dup" : ""}" title="${esc(t.cats.join(", "))}">${esc(c)}</span>`).join("");
 }
 function filtered(list){
@@ -559,7 +558,7 @@ const inScope = t => S.scope !== "mine" || t.mine;
 function readyAll(){
   return S.readyKeys.map(k => S.tickets[k]).filter(t => t && t.status === "Ready" && inScope(t) && !batchOf(t.key) && !t.live);
 }
-// tickets outside the main categories are hidden unless "Show them" is on
+// tickets outside the six categories are hidden unless "Show them" is on
 function readyList(){ return readyAll().filter(t => S.showOther || inSix(t)); }
 function ticketRow(t){
   const on = S.sel.includes(t.key), full = S.sel.length >= BATCH;
@@ -744,8 +743,8 @@ function render(){
   $("catf").innerHTML = renderCatFilter();
   const hidden = readyAll().filter(t => !inSix(t)).length;
   $("otherinfo").innerHTML = !S.jira.at || !hidden ? "" : S.showOther
-    ? `Showing ${hidden} outside the main categories <button class="btn ghost sm" data-act="other">Hide them</button>`
-    : `${hidden} outside the main categories hidden <button class="btn ghost sm" data-act="other">Show them</button>`;
+    ? `Showing ${hidden} outside the six categories <button class="btn ghost sm" data-act="other">Hide them</button>`
+    : `${hidden} outside the six categories hidden <button class="btn ghost sm" data-act="other">Show them</button>`;
 
   const arch = batchList().filter(b => b.archived).sort((a,b) => (b.archivedAt||0) - (a.archivedAt||0) || (b.n||0) - (a.n||0));
   $("c-arch").textContent = arch.length;
