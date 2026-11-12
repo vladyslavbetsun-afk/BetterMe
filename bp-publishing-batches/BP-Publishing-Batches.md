@@ -24,7 +24,7 @@ A dashboard for moving BetterMe Blog Project (BP) Jira tickets from **Ready** to
   - Click a list title to collapse or expand it.
   - The switch, the collapsed state and the scope are remembered in the browser (`localStorage` keys `pb.scope`, `pb.show`, `pb.folded`, `pb.cat`, `pb.other`).
 
-### 1.1a Categories (six main categories)
+### 1.1a Categories (seven main categories)
 - Each ticket's subcategory comes from its Jira description line `**Category:** …` (split on `;` or `,`).
 - The dashboard shows only the **main category** it belongs to:
 
@@ -33,14 +33,15 @@ A dashboard for moving BetterMe Blog Project (BP) Jira tickets from **Ready** to
   | Diets | Diets, Keto, Low Carb, Gluten Free, Vegan, Meal Plans, Meal Ideas, Healthy Eating, Food For Weight Loss, Recipes |
   | Fasting | Fasting, Intermittent Fasting |
   | Pilates | Pilates, Wall Pilates, Home Pilates, Somatic Pilates, Reformer Pilates |
-  | Chair Yoga | Chair Yoga |
+  | Chair Yoga | Chair Yoga, Yoga |
   | Workouts | Workouts, Leg/Abs/Core/Back/Arm/Chest/Butt/Glute/Shoulder Workouts, Strength Training, HIIT Training, Cardio Workouts, Cardio, Walking, Running, Workout Plans, Workout Plans For Men, Stretching |
   | Calisthenics Workout | Calisthenics, Calisthenics Workout, Calisthenics For Women, Calisthenics For Men, Bodyweight Training |
+  | Weight Loss | Weight Loss, Weight Management, Weight Loss Tips |
 
   The mapping is the `MAIN_CATS` list at the top of the script; edit it to change a mapping.
 - Hovering over a category chip shows the original subcategory.
-- **Only tickets in the six are shown** in the Ready lists, tiles and filter. Tickets outside them are hidden. That covers Weight Management, Weight Loss Tips, Meditation, Health, Yoga, Somatic Exercises, Activewear, Therapy, Corporate Wellness and tickets with no category line. The bar says "N outside the six categories hidden · Show them"; when shown, those tickets carry an orange chip with their subcategory.
-- **Category filter** (next to search) lists the six with counts.
+- **Only tickets in the main categories are shown** in the Ready lists, tiles and filter. Tickets outside them are hidden. That covers Meditation, Health, Somatic Exercises, Activewear, Therapy, Corporate Wellness and tickets with no category line. The bar says "N outside the main categories hidden · Show them"; when shown, those tickets carry an orange chip with their subcategory.
+- **Category filter** (next to search) lists the main categories with counts.
 - **New batch tray:** two tickets with the same main category turn red and get a warning to swap one; otherwise it says "All different categories". In the Ready lists, a ticket whose main category is already in the tray says so.
 - Batches show each ticket's main category; each batch stores its tickets' subcategories (`cats`).
 
@@ -690,20 +691,21 @@ function imgLinks(t){
 }
 function liveLink(t){ return t.live ? `<a href="${esc(t.live.url)}" target="_blank" rel="noopener">Live article</a> <span class="sub">${esc(short(t.live.url))} · ${ago(t.live.at)}</span>` : ""; }
 const NOCAT = "No category";
-// The six main categories on the blog's home page, and the Jira subcategories that belong to each.
-// Subcategories not listed here (Weight Management, Meditation, Therapy, Activewear, ...) are outside the six.
+// The main categories on the blog's home page, and the Jira subcategories that belong to each.
+// Subcategories not listed here (Meditation, Somatic Exercises, Therapy, Activewear, ...) are outside them.
 const MAIN_CATS = {
   "Diets": ["Diets","Keto","Low Carb","Gluten Free","Vegan","Meal Plans","Meal Ideas","Healthy Eating","Food For Weight Loss","Recipes"],
   "Fasting": ["Fasting","Intermittent Fasting"],
   "Pilates": ["Pilates","Wall Pilates","Home Pilates","Somatic Pilates","Reformer Pilates"],
-  "Chair Yoga": ["Chair Yoga"],
+  "Chair Yoga": ["Chair Yoga","Yoga"],
   "Workouts": ["Workouts","Leg Workouts","Abs Workouts","Core Workouts","Back Workouts","Arm Workouts","Chest Workouts","Butt Workouts","Glute Workouts","Shoulder Workouts","Strength Training","HIIT Training","Cardio Workouts","Cardio","Walking","Running","Workout Plans","Workout Plans For Men","Stretching"],
-  "Calisthenics Workout": ["Calisthenics","Calisthenics Workout","Calisthenics For Women","Calisthenics For Men","Bodyweight Training"]
+  "Calisthenics Workout": ["Calisthenics","Calisthenics Workout","Calisthenics For Women","Calisthenics For Men","Bodyweight Training"],
+  "Weight Loss": ["Weight Loss","Weight Management","Weight Loss Tips"]
 };
 const MAIN_ORDER = Object.keys(MAIN_CATS);
 const SUB_TO_MAIN = {}; for (const [m, subs] of Object.entries(MAIN_CATS)) subs.forEach(x => SUB_TO_MAIN[x.toLowerCase()] = m);
 const toMains = subs => [...new Set((subs || []).map(x => SUB_TO_MAIN[String(x).toLowerCase()]).filter(Boolean))].sort((a,b) => MAIN_ORDER.indexOf(a) - MAIN_ORDER.indexOf(b));
-// main categories of a ticket, or null when none of its subcategories is in the six
+// main categories of a ticket, or null when none of its subcategories is in them
 const catsOf = t => { const m = t && t.cats ? toMains(t.cats) : []; return m.length ? m : null; };
 const inSix = t => !t || !t.cats || !!catsOf(t);
 // a batch keeps the subcategories its tickets had when it was made
@@ -711,7 +713,7 @@ const batchCats = (b, k) => toMains((b.cats && b.cats[k]) || (S.tickets[k] && S.
 function catChips(t, dupSet){
   const cs = catsOf(t);
   if (!t || !t.cats) return `<span class="chip">Category: click Refresh</span>`;
-  if (!cs) return t.cats.length ? `<span class="chip warn" title="Not one of the six main categories">${esc(t.cats.join(", "))}</span>` : `<span class="chip warn">No category in description</span>`;
+  if (!cs) return t.cats.length ? `<span class="chip warn" title="Not one of the main categories">${esc(t.cats.join(", "))}</span>` : `<span class="chip warn">No category in description</span>`;
   return cs.map(c => `<span class="chip cat${dupSet && dupSet.has(c) ? " dup" : ""}" title="${esc(t.cats.join(", "))}">${esc(c)}</span>`).join("");
 }
 function filtered(list){
@@ -731,7 +733,7 @@ const inScope = t => S.scope !== "mine" || t.mine;
 function readyAll(){
   return S.readyKeys.map(k => S.tickets[k]).filter(t => t && t.status === "Ready" && inScope(t) && !batchOf(t.key) && !t.live);
 }
-// tickets outside the six main categories are hidden unless "Show them" is on
+// tickets outside the main categories are hidden unless "Show them" is on
 function readyList(){ return readyAll().filter(t => S.showOther || inSix(t)); }
 function ticketRow(t){
   const on = S.sel.includes(t.key), full = S.sel.length >= BATCH;
@@ -916,8 +918,8 @@ function render(){
   $("catf").innerHTML = renderCatFilter();
   const hidden = readyAll().filter(t => !inSix(t)).length;
   $("otherinfo").innerHTML = !S.jira.at || !hidden ? "" : S.showOther
-    ? `Showing ${hidden} outside the six categories <button class="btn ghost sm" data-act="other">Hide them</button>`
-    : `${hidden} outside the six categories hidden <button class="btn ghost sm" data-act="other">Show them</button>`;
+    ? `Showing ${hidden} outside the main categories <button class="btn ghost sm" data-act="other">Hide them</button>`
+    : `${hidden} outside the main categories hidden <button class="btn ghost sm" data-act="other">Show them</button>`;
 
   const arch = batchList().filter(b => b.archived).sort((a,b) => (b.archivedAt||0) - (a.archivedAt||0) || (b.n||0) - (a.n||0));
   $("c-arch").textContent = arch.length;
