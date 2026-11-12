@@ -122,6 +122,14 @@ The ticket title is matched against exercise keywords (workout, yoga, squat, run
   - narrow writer cards: ★ Top writer tag, name, number of tickets **in Text**, topic, rate, "✓ no expert review needed" where it applies, **Per article**, **This month** (with the expert-fee part), and the price for the picked ticket with an **Assign** button.
 - **This session:** a log of each assignment and what changed in Jira, or why it failed.
 
+### Main-category chips
+
+- Each Open ticket's `description` is read (markdown) and its `Category:` line (bold or plain) is split on `;` `,` `|` into subcategories.
+- Subcategories are mapped to the **six blog home-page categories**: Diets, Fasting, Pilates, Chair Yoga, Workouts, Calisthenics Workout (same subcategory lists as the Publishing Batches dashboard, without Weight Loss). Matching is case-insensitive.
+- Only tickets in those six get a chip after the title (in the list, the picked-ticket box and the pop-up). Hovering shows the original subcategory.
+- All Open tickets stay visible. Tickets with one of the six categories are listed **first**, then the rest; each group oldest first.
+- The Exercise / Nutrition / Other filter and the expert-fee estimate are unchanged (they still use the title).
+
 ### Pop-up writer picker
 
 Clicking a ticket opens a pop-up with:
@@ -302,6 +310,7 @@ h1{margin:0 0 4px;font-family:var(--f-display);font-weight:600;font-size:34px;le
 .wk-bar span.on{background:var(--accent)}
 .wk-n{font-family:var(--f-mono);font-weight:600}
 .wk-n.full{color:var(--ok-fg)}
+.pill.maincat{background:var(--accent-soft);color:var(--accent-strong);font-size:11px;vertical-align:2px;margin-left:2px}
 .pill.top{background:var(--text-bg);color:var(--text-fg)}
 .modal-bg{position:fixed;inset:0;z-index:20;background:rgba(10,18,14,.45);display:flex;align-items:flex-start;justify-content:center;padding:calc(40px + env(safe-area-inset-top,0px)) 16px calc(16px + env(safe-area-inset-bottom,0px));overflow-y:auto}
 .modal{background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);width:100%;max-width:480px;display:flex;flex-direction:column;gap:12px;padding:16px}
@@ -542,7 +551,7 @@ function loadOf(id){ const l = S.load[id] || {}; return { text:l.Text||0, review
 async function searchAll(jql, fields, pages=5){
   let out = [], token;
   for (let i = 0; i < pages; i++) {
-    const input = { cloudId:CLOUD, jql, fields, maxResults:100 };
+    const input = { cloudId:CLOUD, jql, fields, maxResults:100, responseContentFormat:"markdown" };
     if (token) input.nextPageToken = token;
     const p = await call("searchJiraIssuesUsingJql", input);
     const nodes = (p && p.issues && (Array.isArray(p.issues) ? p.issues : p.issues.nodes)) || [];
@@ -552,12 +561,47 @@ async function searchAll(jql, fields, pages=5){
   }
   return out;
 }
+/* ---------- blog home-page categories ---------- */
+// Plain text of a Jira rich-text (ADF) description, in case it doesn't come back as markdown
+function adfText(n){
+  if (!n || typeof n !== "object") return "";
+  if (n.type === "text") return n.text || "";
+  const inner = (n.content || []).map(adfText).join("");
+  return ["paragraph","heading","listItem"].includes(n.type) ? inner + "\n" : inner;
+}
+// Subcategories from the "Category: ..." line of the description (bold or plain)
+function categoriesOf(desc){
+  const d = typeof desc === "string" ? desc : adfText(desc);
+  const m = d.match(/^[\s*_]*Categor(?:y|ies)[\s*_]*:[\s*_]*([^\n]*)/im);
+  if (!m) return [];
+  return m[1].replace(/\[([^\]|]*)(?:\|[^\]]*)?\]\([^)]*\)/g, "$1").replace(/[*_`]/g, "").split(/[;,|]/).map(x => x.trim()).filter(Boolean);
+}
+// The six main categories on the blog home page and the Jira subcategories under each
+const MAIN_CATS = {
+  "Diets": ["Diets","Keto","Low Carb","Gluten Free","Vegan","Meal Plans","Meal Ideas","Healthy Eating","Food For Weight Loss","Recipes"],
+  "Fasting": ["Fasting","Intermittent Fasting"],
+  "Pilates": ["Pilates","Wall Pilates","Home Pilates","Somatic Pilates","Reformer Pilates"],
+  "Chair Yoga": ["Chair Yoga","Yoga"],
+  "Workouts": ["Workouts","Leg Workouts","Abs Workouts","Core Workouts","Back Workouts","Arm Workouts","Chest Workouts","Butt Workouts","Glute Workouts","Shoulder Workouts","Strength Training","HIIT Training","Cardio Workouts","Cardio","Walking","Running","Workout Plans","Workout Plans For Men","Stretching"],
+  "Calisthenics Workout": ["Calisthenics","Calisthenics Workout","Calisthenics For Women","Calisthenics For Men","Bodyweight Training"]
+};
+const MAIN_ORDER = Object.keys(MAIN_CATS);
+const SUB_TO_MAIN = {};
+for (const [m, subs] of Object.entries(MAIN_CATS)) subs.forEach(x => SUB_TO_MAIN[x.toLowerCase()] = m);
+const toMains = subs => [...new Set((subs || []).map(x => SUB_TO_MAIN[String(x).toLowerCase()]).filter(Boolean))]
+  .sort((a, b) => MAIN_ORDER.indexOf(a) - MAIN_ORDER.indexOf(b));
+const mainsOf = t => (t && t.cats ? toMains(t.cats) : []);
+// Chip(s) shown after the title; only for tickets in the six main categories
+function mainChips(t){
+  return mainsOf(t).map(c => `<span class="pill maincat" title="${esc(t.cats.join(", "))}">${esc(c)}</span>`).join("");
+}
+
 function toTicket(issue){
   const f = issue.fields || {};
   const author = f[F.author] && f[F.author].accountId ? { id:f[F.author].accountId, name:f[F.author].displayName || "?" } : null;
   const parts = (Array.isArray(f[F.parts]) ? f[F.parts] : []).filter(p => p && p.accountId).map(p => ({ id:p.accountId, name:p.displayName || "?" }));
   return { key:issue.key, title:f.summary || "", status:(f.status && f.status.name) || "?", created:parseT(f.created), author, parts,
-    cat:categoryOf(f.summary), wc:wordCount(f.summary), url:`${SITE}/browse/${issue.key}` };
+    cat:categoryOf(f.summary), cats:categoriesOf(f.description || ""), wc:wordCount(f.summary), url:`${SITE}/browse/${issue.key}` };
 }
 async function load(){
   if (S.loading) return;
@@ -565,7 +609,7 @@ async function load(){
   try {
     const wk = weekStart();
     const [open, active, month, week] = await Promise.all([
-      searchAll(`project = BP AND status = "Open" ORDER BY created ASC`, ["summary","status","created",F.author,F.parts]),
+      searchAll(`project = BP AND status = "Open" ORDER BY created ASC`, ["summary","status","created","description",F.author,F.parts]),
       searchAll(`project = BP AND status in ("Text","Review","Proofreading") AND cf[11710] is not EMPTY`, ["summary","status",F.author,F.expert], 8),
       // An article counts as earned in the month the writer handed it in, i.e. it left Text.
       searchAll(`project = BP AND cf[11710] is not EMPTY AND status CHANGED FROM "Text" DURING (startOfMonth(), now())`, ["summary","status",F.author,F.expert], 4),
@@ -595,7 +639,7 @@ async function load(){
   S.loading = false; render();
 }
 async function readTicket(key){
-  const p = await call("getJiraIssue", { cloudId:CLOUD, issueIdOrKey:key, fields:["summary","status","created",F.author,F.parts] });
+  const p = await call("getJiraIssue", { cloudId:CLOUD, issueIdOrKey:key, fields:["summary","status","created","description",F.author,F.parts], responseContentFormat:"markdown" });
   const nodes = p && p.issues && (Array.isArray(p.issues) ? p.issues : p.issues.nodes);
   const issue = p && p.fields ? p : (nodes && (nodes.find(n => n.key === key) || nodes[0]));
   if (!issue || !issue.fields) throw { plain:true, message:`Jira returned no data for ${key}.` };
@@ -662,7 +706,9 @@ function catPill(cat){
 }
 function filtered(){
   const q = S.q.trim().toLowerCase();
-  return S.open.filter(t => (S.cat === "all" || (S.cat === "other" ? !t.cat : t.cat === S.cat)) && (!q || (t.key + " " + t.title).toLowerCase().includes(q)));
+  // Tickets in the six home-page categories come first; the rest follow, each group oldest first.
+  return S.open.filter(t => (S.cat === "all" || (S.cat === "other" ? !t.cat : t.cat === S.cat)) && (!q || (t.key + " " + t.title).toLowerCase().includes(q)))
+    .map((t, i) => ({ t, i })).sort((a, b) => ((mainsOf(b.t).length > 0) - (mainsOf(a.t).length > 0)) || (a.i - b.i)).map(x => x.t);
 }
 function renderQueue(){
   const list = filtered();
@@ -675,7 +721,7 @@ function renderQueue(){
     const authorW = t.author && BY_ID[t.author.id];
     const on = S.selected === t.key;
     return `<div class="tkw ${on ? "on" : ""}"><button class="tk" aria-pressed="${on}" data-k="${esc(t.key)}">
-      <span class="key">${esc(t.key)}</span><span class="ttl">${esc(t.title)}</span><span class="age" title="Created">${age(t.created)}</span>
+      <span class="key">${esc(t.key)}</span><span class="ttl">${esc(t.title)} ${mainChips(t)}</span><span class="age" title="Created">${age(t.created)}</span>
       <span class="meta">${catPill(t.cat)}${t.wc ? `<span class="wc">${t.wc.min === t.wc.max ? t.wc.min : t.wc.min+"–"+t.wc.max} words</span>` : ""}
         ${t.author ? `<span class="pill ${authorW ? "open" : "warn"}" title="Current Author">Author: ${esc(authorW ? authorW.name : t.author.name)}</span>` : ""}
         ${busy ? `<span class="pill text">Assigning to ${esc(firstName(BY_ID[busy].name))}…</span>` : ""}</span>
@@ -706,7 +752,7 @@ function renderModal(){
     : `<span class="grp">Top writers</span><div class="wlist">${ws.filter(x => x.w.top).map(row).join("")}</div>
        <span class="grp">Other writers</span><div class="wlist">${ws.filter(x => !x.w.top).map(row).join("")}</div>`;
   return `<div class="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle">
-    <div class="modal-head"><div><span class="wc"><a href="${esc(t.url)}" target="_blank" rel="noopener">${esc(t.key)} ↗</a> · ${t.wc ? (t.wc.min === t.wc.max ? t.wc.min : t.wc.min+"–"+t.wc.max) + " words" : "no word count"}</span><h3 id="mTitle">${esc(t.title)}</h3></div>
+    <div class="modal-head"><div><span class="wc"><a href="${esc(t.url)}" target="_blank" rel="noopener">${esc(t.key)} ↗</a> · ${t.wc ? (t.wc.min === t.wc.max ? t.wc.min : t.wc.min+"–"+t.wc.max) + " words" : "no word count"}</span><h3 id="mTitle">${esc(t.title)} ${mainChips(t)}</h3></div>
       <button class="btn ghost sm" data-act="closem" aria-label="Close">✕</button></div>${body}</div>`;
 }
 // Monday of the current week, local time, as YYYY-MM-DD.
@@ -736,7 +782,7 @@ function renderPicked(t){
   if (!t) return `<div class="picked none">Click an Open ticket on the left to choose its writer in a pop-up. The cards below then also show the price for that ticket. Any writer can take any ticket.</div>`;
   const others = t.parts.filter(p => !(t.author && p.id === t.author.id));
   return `<div class="picked"><span class="lbl">Assigning</span>
-    <span class="ttl">${esc(t.title)}</span>
+    <span class="ttl">${esc(t.title)} ${mainChips(t)}</span>
     <div class="row"><a href="${esc(t.url)}" target="_blank" rel="noopener" class="mono">${esc(t.key)} ↗</a>${catPill(t.cat)}${t.wc ? `<span class="wc">${t.wc.min === t.wc.max ? t.wc.min : t.wc.min+"–"+t.wc.max} words</span>` : `<span class="wc">no word count in title</span>`}
       <span>Participants: ${others.length ? esc(others.map(p => p.name).join(", ")) : "none"}</span>
       <button class="btn ghost sm" data-act="unpick">Clear</button></div></div>`;
