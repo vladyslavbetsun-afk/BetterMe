@@ -22,24 +22,15 @@ A dashboard for moving BetterMe Blog Project (BP) Jira tickets from **Ready** to
   - Search box filters both lists by key or title.
   - **Both / With images / No images** switch shows one list or both.
   - Click a list title to collapse or expand it.
-  - The switch, the collapsed state and the scope are remembered in the browser (`localStorage` keys `pb.scope`, `pb.show`, `pb.folded`, `pb.cat`, `pb.cats`).
+  - The switch, the collapsed state and the scope are remembered in the browser (`localStorage` keys `pb.scope`, `pb.show`, `pb.folded`, `pb.cat`).
 
 ### 1.1a Categories
 - Each ticket's category comes from its Jira description line `**Category:** …`. Several categories split on `;` or `,`, e.g. `Pilates; Somatic Exercises`.
-- Category chips show on every Ready ticket, in the New batch tray and in batches. A ticket with no category line shows "No category in description".
+- Category chips show next to each ticket's title in both Ready lists (with images and without), in the New batch tray and in batches. Before the first Refresh after this change, tickets show "Category: click Refresh". A ticket with no category line shows "No category in description".
 - **Category filter** next to the search box narrows both Ready lists to one category. Its options show counts.
-- **Categories this week** panel (collapsible, top of the left column):
-  - The goal is 1–2 articles per category per week.
-  - For each category the panel shows:
-    - **This week:** tickets in batches sent or scheduled Monday–Sunday this week, using the scheduled time if there is one. Red 0, green 1–2.
-    - **Next week:** the same count for next week.
-    - **Ready to pick:** unbatched Ready tickets in that category.
-  - Rows are sorted with categories that have nothing this week first.
-  - Clicking a category filters the Ready lists.
-  - The header shows how many categories have none yet.
 - **New batch tray:** duplicate categories turn red, with a warning "2 tickets in Fasting… Swap one for a different category". When the categories are all different, the tray says "All different categories".
 - **Ready lists:** a ticket whose category is already in the tray says so, naming the ticket it clashes with.
-- **Saved with the batch:** each batch stores its tickets' categories (`cats`), so weekly counts keep working after archiving.
+- **Saved with the batch:** each batch stores its tickets' categories (`cats`).
 
 ### 1.2 Building a batch
 - Tick up to **4** tickets (checkboxes disable at 4). They appear in the **New batch** tray as numbered slots; × removes one, **Clear** empties the tray.
@@ -234,18 +225,6 @@ section.panel.tray{border-color:var(--accent)}
 .bar select{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:5px 8px;font-size:13px;max-width:100%}
 .chip.cat{background:var(--accent-soft);color:var(--accent)}
 .chip.cat.dup{background:var(--bad-soft);color:var(--bad);font-weight:600}
-.catwrap{max-height:340px;overflow:auto}
-.cattbl{width:100%;border-collapse:collapse;font-size:13px}
-.cattbl th{position:sticky;top:0;background:var(--surface);text-align:left;font-weight:600;font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;padding:6px 6px;border-bottom:1px solid var(--line)}
-.cattbl td{padding:5px 6px;border-top:1px solid var(--line);vertical-align:middle}
-.cattbl td.num,.cattbl th.num{text-align:right;font-variant-numeric:tabular-nums;width:1%;white-space:nowrap}
-.cattbl tr.on td{background:var(--accent-soft)}
-.cattbl button.catpick{border:0;background:none;padding:0;color:var(--accent);cursor:pointer;text-align:left;font:inherit}
-.cattbl button.catpick:hover{text-decoration:underline}
-.wk{display:inline-block;min-width:22px;text-align:center;border-radius:999px;padding:0 6px;font-weight:600}
-.wk.z{background:var(--bad-soft);color:var(--bad)}
-.wk.g{background:var(--ok-soft);color:var(--ok)}
-.wk.m{background:var(--sunk);color:var(--fg)}
 .bar input[type=search]{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:5px 10px;font-size:13px;width:240px;max-width:100%;flex:0 1 auto}
 .fold{display:inline-flex;align-items:center;gap:8px;border:0;background:none;padding:0;cursor:pointer;text-align:left;color:var(--fg);font:inherit;letter-spacing:inherit}
 .fold:hover{color:var(--accent)}
@@ -338,7 +317,6 @@ section.panel.tray{border-color:var(--accent)}
   <div id="pageerr"></div>
   <div class="grid">
     <div class="col">
-      <section class="panel" id="sec-cats"><div class="ph"><h2><button class="fold" data-act="catsfold" aria-controls="b-cats" id="f-cats"><span class="chev" aria-hidden="true"></span>Categories this week</button></h2><span class="cnt" id="c-cats"></span><span class="sp sub">Goal: 1–2 articles per category per week</span></div><div class="pb" id="b-cats"></div></section>
       <div class="bar">
         <input type="search" id="q" placeholder="Filter by key or title" aria-label="Filter Ready tickets by key or title">
         <select id="catf" aria-label="Filter Ready tickets by category"></select>
@@ -376,8 +354,15 @@ const YULIIA = { id:"712020:b345726f-fe25-4239-a7dc-7322d7dbc2ae", name:"Yuliia 
 const BATCH = 4;
 const FIELDS = ["summary","status","comment","updated","description",F.parts,F.mgr];
 // the ticket description carries a line like "**Category:** Pilates; Somatic Exercises"
+// plain text of an Atlassian rich-text (ADF) description, one line per paragraph
+function adfText(n){
+  if (!n || typeof n !== "object") return "";
+  if (n.type === "text") return n.text || "";
+  const inner = (n.content || []).map(adfText).join("");
+  return ["paragraph","heading","listItem"].includes(n.type) ? inner + "\n" : inner;
+}
 function categoriesOf(desc){
-  const d = typeof desc === "string" ? desc : "";
+  const d = typeof desc === "string" ? desc : adfText(desc);
   const m = d.match(/\*\*\s*Categor(?:y|ies)\s*:?\s*\*\*\s*:?\s*([^\n]*)/i) || d.match(/^\s*Categor(?:y|ies)\s*:\s*([^\n]*)/im);
   if (!m) return [];
   return m[1].replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/[*_`]/g, "").split(/[;,|]/).map(x => x.trim()).filter(Boolean);
@@ -395,7 +380,7 @@ const S = {
   batches: {}, log: [],
   sel: [], q: "",
   archOpen: lsGet("pb.arch") === "1", archLoading: false,
-  cat: lsGet("pb.cat") || "", catsOpen: lsGet("pb.cats") !== "0",
+  cat: lsGet("pb.cat") || "",
   show: lsGet("pb.show") || "both", folded: (() => { try { return JSON.parse(lsGet("pb.folded") || "{}") || {}; } catch { return {}; } })(),
   running: {}, ui: { preview:{}, confirmDel:null, confirmClear:false, clearing:false, mode:{}, when:{}, whenErr:{}, edit:{} }
 };
@@ -697,7 +682,7 @@ const catsOf = t => (t && t.cats && t.cats.length) ? t.cats : null;
 const batchCats = (b, k) => (b.cats && b.cats[k]) || catsOf(S.tickets[k]) || [];
 function catChips(t, dupSet){
   const cs = catsOf(t);
-  if (!cs) return t && t.cats ? `<span class="chip warn">No category in description</span>` : "";
+  if (!cs) return t && t.cats ? `<span class="chip warn">No category in description</span>` : `<span class="chip">Category: click Refresh</span>`;
   return cs.map(c => `<span class="chip cat${dupSet && dupSet.has(c) ? " dup" : ""}">${esc(c)}</span>`).join("");
 }
 function filtered(list){
@@ -706,32 +691,6 @@ function filtered(list){
     && (!S.cat || (S.cat === NOCAT ? !catsOf(t) : (t.cats || []).includes(S.cat))));
 }
 const selCats = () => { const m = new Map(); S.sel.forEach(k => (catsOf(S.tickets[k]) || []).forEach(c => m.set(c, (m.get(c) || []).concat(k)))); return m; };
-// Monday 00:00 of the week containing t, local time
-function weekStart(t){ const d = new Date(t); d.setHours(0,0,0,0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d.getTime(); }
-function catWeeks(){
-  const w0 = weekStart(Date.now()), w1 = w0 + 7*DAY, w2 = w1 + 7*DAY;
-  const rows = new Map();
-  const row = c => { if (!rows.has(c)) rows.set(c, { cat:c, now:[], next:[], ready:0 }); return rows.get(c); };
-  for (const b of batchList()) {
-    const at = b.postAt || b.sentAt; if (!at) continue;
-    const slot = at >= w0 && at < w1 ? "now" : at >= w1 && at < w2 ? "next" : null; if (!slot) continue;
-    b.keys.forEach(k => { const cs = batchCats(b, k); (cs.length ? cs : [NOCAT]).forEach(c => row(c)[slot].push(k)); });
-  }
-  readyList().forEach(t => (catsOf(t) || [NOCAT]).forEach(c => row(c).ready++));
-  return { w0, w1, rows: [...rows.values()].sort((a,b) => a.now.length - b.now.length || b.ready - a.ready || a.cat.localeCompare(b.cat)) };
-}
-function renderCats(){
-  if (!S.jira.at) return `<div class="empty">Click <b>Refresh</b> to load tickets and see which categories still need an article this week.</div>`;
-  const { w0, w1, rows } = catWeeks();
-  const fmt = t => new Date(t).toLocaleDateString([], { day:"numeric", month:"short" });
-  const wk = n => `<span class="wk ${n === 0 ? "z" : n <= 2 ? "g" : "m"}">${n}</span>`;
-  const sel = selCats();
-  return `<div class="sub" style="margin:6px 0 8px">This week ${fmt(w0)}–${fmt(w1 - DAY)}. Counts tickets in batches sent or scheduled for that week. Click a category to filter the Ready lists.</div>
-  <div class="catwrap"><table class="cattbl"><thead><tr><th>Category</th><th class="num">This week</th><th class="num">Next week</th><th class="num">Ready to pick</th></tr></thead><tbody>
-  ${rows.map(r => `<tr class="${S.cat === r.cat ? "on" : ""}"><td><button class="catpick" data-act="catpick" data-c="${esc(r.cat)}">${esc(r.cat)}</button>${sel.has(r.cat) ? ` <span class="chip cat">in new batch</span>` : ""}</td>
-    <td class="num" title="${esc(r.now.join(", "))}">${wk(r.now.length)}</td><td class="num" title="${esc(r.next.join(", "))}">${r.next.length || "–"}</td><td class="num">${r.ready || "–"}</td></tr>`).join("")}
-  </tbody></table></div>`;
-}
 function renderCatFilter(){
   const counts = new Map();
   readyList().forEach(t => (catsOf(t) || [NOCAT]).forEach(c => counts.set(c, (counts.get(c) || 0) + 1)));
@@ -749,8 +708,8 @@ function ticketRow(t){
   return `<div class="tk${on ? " sel" : ""}">
     <input type="checkbox" id="cb-${esc(t.key)}" data-act="sel" data-k="${esc(t.key)}" ${on ? "checked" : ""} ${!on && full ? "disabled" : ""} aria-label="Add ${esc(t.key)} to batch">
     <div class="main">
-      <div class="row">${keyLink(t)}<label class="title" for="cb-${esc(t.key)}">${esc(t.title)}</label></div>
-      <div class="row">${catChips(t, clash ? new Set(clash) : null)}${clash && clash.length ? `<span class="sub">${esc(clash.join(", "))} already in the new batch (${esc([...new Set(clash.flatMap(c => sc.get(c)))].join(", "))})</span>` : ""}</div>
+      <div class="row">${keyLink(t)}<label class="title" for="cb-${esc(t.key)}">${esc(t.title)}</label>${catChips(t, clash ? new Set(clash) : null)}</div>
+      ${clash && clash.length ? `<div class="sub">${esc(clash.join(", "))} already in the new batch (${esc([...new Set(clash.flatMap(c => sc.get(c)))].join(", "))})</div>` : ""}
       <div class="links">${docLink(t)}${imgLinks(t) ? `<span>${imgLinks(t)}</span>` : ""}${t.yuliia ? `<span class="chip vi">Yuliia is a participant</span>` : ""}</div>
     </div>
   </div>`;
@@ -924,11 +883,7 @@ function render(){
   $("b-noimg").innerHTML = renderList(noImg, S.q || S.cat ? "No tickets match the filter." : "Every Ready ticket has images.");
   $("b-tray").innerHTML = renderTray(); $("b-batches").innerHTML = renderBatches();
   $("catf").innerHTML = renderCatFilter();
-  $("f-cats").setAttribute("aria-expanded", S.catsOpen);
-  $("b-cats").hidden = !S.catsOpen;
-  $("sec-cats").querySelector(".ph").classList.toggle("closed", !S.catsOpen);
-  if (S.catsOpen) $("b-cats").innerHTML = renderCats();
-  if (S.jira.at) { const z = catWeeks().rows.filter(r => r.cat !== NOCAT && !r.now.length).length; $("c-cats").textContent = z ? `${z} with none yet` : "all covered"; } else $("c-cats").textContent = "";
+
   const arch = batchList().filter(b => b.archived).sort((a,b) => (b.archivedAt||0) - (a.archivedAt||0) || (b.n||0) - (a.n||0));
   $("c-arch").textContent = arch.length;
   $("f-arch").setAttribute("aria-expanded", S.archOpen);
@@ -945,7 +900,6 @@ document.addEventListener("click", async ev => {
   switch (act) {
     case "scope": if (S.scope !== b.dataset.v) { S.scope = b.dataset.v; lsSet("pb.scope", S.scope); render(); } break;
     case "refresh": loadJira(); break;
-    case "catsfold": S.catsOpen = !S.catsOpen; lsSet("pb.cats", S.catsOpen ? "1" : "0"); render(); break;
     case "catpick": S.cat = S.cat === b.dataset.c ? "" : b.dataset.c; lsSet("pb.cat", S.cat); render(); break;
     case "show": S.show = b.dataset.v; lsSet("pb.show", S.show); render(); break;
     case "fold": S.folded[b.dataset.v] = !S.folded[b.dataset.v]; lsSet("pb.folded", JSON.stringify(S.folded)); render(); break;
