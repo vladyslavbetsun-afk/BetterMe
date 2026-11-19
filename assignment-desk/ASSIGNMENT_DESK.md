@@ -40,6 +40,7 @@ Connector tools the page needs (declared as the artifact's `mcp` capability):
 | Open tickets | `project = BP AND status = "Open" ORDER BY created ASC` |
 | Writer workload + tickets for price averages | `project = BP AND status in ("Text","Review","Proofreading") AND cf[11710] is not EMPTY` |
 | Articles handed in this month | `project = BP AND cf[11710] is not EMPTY AND status CHANGED FROM "Text" DURING (startOfMonth(), now())` |
+| Assigned this month (Brenda) | `project = BP AND status CHANGED FROM "Open" TO "Text" DURING (startOfMonth(), now())` |
 | Assigned this week (since Monday) | `project = BP AND status CHANGED FROM "Open" TO "Text" DURING ("<Monday YYYY-MM-DD>", now())`, counted per current Author |
 
 Results are paged (100 per page). Jira is read **only when you click Refresh**. Opening the page shows the data from the last Refresh, kept in your browser; the header says when that was. (The only other Jira calls are the ones an assignment makes on the ticket you assign.)
@@ -115,7 +116,7 @@ The ticket title is matched against exercise keywords (workout, yoga, squat, run
 
 - **Header:** title, sync status, **Hide/Show writers & pricing** toggle (remembered in the browser), **Refresh**.
 - **Left — Open tickets:** search box (key or title), topic filter (All / Exercise / Nutrition / Other). Each row shows key, title, age, topic, word count and current Author if any.
-- **Weekly target:** each writer card shows **This week n/3** with a 3-segment bar; it counts tickets moved from Open to Text since Monday 00:00 and resets every Monday. `WEEK_INCLUDE` lists extra tickets to count in a given week (week of Oct 26: BP-1721 for Eve, assigned Oct 21). The pop-up shows the same "n/3 this week" next to each name, and the bar above the cards shows the week total and the top writers' total out of 12.
+- **Plan per writer:** each card shows assigned vs plan with a segment bar. Plan: Jeremy 3/week, Eve 2/week, Nderitu 2/week, Anoshia 1/week (week = Monday 00:00 onwards), Brenda 1/month ("1 every 4 weeks", counted since the 1st). Other writers show "This week n · no plan". Counts = tickets moved from Open to Text in the period, under their current Author. The pop-up shows the same "n/plan" next to each name; the bar above the cards shows the week total, the weekly plan out of 8, and Brenda's month. Edit `PLAN` in the code to change it. `WEEK_INCLUDE` lists extra tickets to count in a given week.
 - **Right — Writers & pricing:**
   - month total bar,
   - the picked ticket (title, key link, topic, word count, participants),
@@ -455,7 +456,7 @@ const NUT_KW = ["diet","diets","dieta","meal","meals","snack","snacks","drink","
 const S = {
   mcp:null, loading:false, error:null, at:null,
   open:[], load:{}, selected:null, confirm:null, busy:{}, log:[],
-  q:"", cat:"all", earned:{}, titles:{}, week:{}, weekOf:null, modal:null, lastFocus:null,
+  q:"", cat:"all", earned:{}, titles:{}, week:{}, weekOf:null, mAsg:{}, mAsgOf:null, modal:null, lastFocus:null,
   panel: (() => { try { return localStorage.getItem("desk.panel") !== "off"; } catch { return true; } })()
 };
 
@@ -608,13 +609,15 @@ async function load(){
   S.loading = true; S.error = null; render();
   try {
     const wk = weekStart();
-    const [open, active, month, week] = await Promise.all([
+    const [open, active, month, week, monthAsg] = await Promise.all([
       searchAll(`project = BP AND status = "Open" ORDER BY created ASC`, ["summary","status","created","description",F.author,F.parts]),
       searchAll(`project = BP AND status in ("Text","Review","Proofreading") AND cf[11710] is not EMPTY`, ["summary","status",F.author,F.expert], 8),
       // An article counts as earned in the month the writer handed it in, i.e. it left Text.
       searchAll(`project = BP AND cf[11710] is not EMPTY AND status CHANGED FROM "Text" DURING (startOfMonth(), now())`, ["summary","status",F.author,F.expert], 4),
       // Assigned this week = moved from Open to Text since Monday; counted for the ticket's current Author.
-      searchAll(`project = BP AND status CHANGED FROM "Open" TO "Text" DURING ("${wk}", now())`, [F.author], 3)
+      searchAll(`project = BP AND status CHANGED FROM "Open" TO "Text" DURING ("${wk}", now())`, [F.author], 3),
+      // Assigned this month, for writers planned per month (Brenda)
+      searchAll(`project = BP AND status CHANGED FROM "Open" TO "Text" DURING (startOfMonth(), now())`, [F.author], 3)
     ]);
     S.open = open.map(toTicket);
     const ld = {}, titles = {};
@@ -631,7 +634,9 @@ async function load(){
     const count = i => { const a = i.fields && i.fields[F.author]; if (a && BY_ID[a.accountId] && !seen.has(i.key)) { seen.add(i.key); wc[a.accountId] = (wc[a.accountId] || 0) + 1; } };
     week.forEach(count);
     (WEEK_INCLUDE[wk] || []).forEach(k => { const i = active.find(x => x.key === k); if (i) count(i); });
-    S.load = ld; S.earned = earned; S.titles = titles; S.week = wc; S.weekOf = wk;
+    const mc = {};
+    monthAsg.forEach(i => { const a = i.fields && i.fields[F.author]; if (a && BY_ID[a.accountId]) mc[a.accountId] = (mc[a.accountId] || 0) + 1; });
+    S.load = ld; S.earned = earned; S.titles = titles; S.week = wc; S.weekOf = wk; S.mAsg = mc; S.mAsgOf = MONTH;
     if (S.selected && !S.open.some(t => t.key === S.selected)) { S.selected = null; S.confirm = null; }
     S.at = Date.now();
     saveSnap();
@@ -689,6 +694,7 @@ async function assign(key, wid){
     S.open = S.open.filter(t => t.key !== key);
     S.load[wid] = { ...(S.load[wid]||{}), Text: ((S.load[wid]||{}).Text || 0) + 1 };
     if (S.weekOf === weekStart()) S.week[wid] = (S.week[wid] || 0) + 1;
+    if (S.mAsgOf === MONTH) S.mAsg[wid] = (S.mAsg[wid] || 0) + 1;
     saveSnap();
     if (S.selected === key) S.selected = null;
     logIt("ok", `${key} → ${w.name}: ${done.join(", ")}.`);
@@ -746,7 +752,7 @@ function renderModal(){
   const conf = S.confirm && S.confirm.key === t.key && BY_ID[S.confirm.wid];
   const row = ({ w, ld }) => { const pr = priceFor(w, t); return `<button class="wpick" data-act="pickw" data-w="${esc(w.id)}">
       <span class="nm">${esc(w.name)}</span><span class="pr">${pr ? esc(pr) : esc(rateLabel(w))}</span>
-      <span class="sub"><span><b>${weekOf(w.id)}/${WEEK_TARGET} this week</b></span><span>${ld.text} in Text</span><span>${esc(nicheTag(w).label)}</span><span>${w.noReview ? "no expert review" : "goes to expert"}</span></span></button>`; };
+      <span class="sub"><span><b>${planLabel(w.id)}</b></span><span>${ld.text} in Text</span><span>${esc(nicheTag(w).label)}</span><span>${w.noReview ? "no expert review" : "goes to expert"}</span></span></button>`; };
   const ws = sortedWriters(t);
   const body = conf ? `<div class="confirm">${confirmBody(t, conf)}</div>`
     : `<span class="grp">Top writers</span><div class="wlist">${ws.filter(x => x.w.top).map(row).join("")}</div>
@@ -760,22 +766,38 @@ function weekStart(){
   const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 }
-const WEEK_TARGET = 3;
+// Planned articles per writer: per week, or per month for Brenda (1 every 4 weeks). Writers not listed have no plan.
+const PLAN = {
+  "712020:4e42fbfd-ec2b-414f-99d4-41dfb6faa417": { per:"week", n:3 },   // Jeremy
+  "712020:51b52722-9eb1-4aa8-8b6d-527b045f3913": { per:"week", n:2 },   // Eve
+  "712020:4e7281a8-604f-46bd-9f0e-61aa6a42030b": { per:"week", n:2 },   // Nderitu
+  "70121:fb24c986-30fc-4274-b096-e53d17aad7a4": { per:"week", n:1 },    // Anoshia
+  "612fcdbd9976c30069467dad": { per:"month", n:1 }                      // Brenda
+};
 // Tickets to count in a given week even though they moved to Text before that Monday.
 const WEEK_INCLUDE = { "2026-10-26": ["BP-1721"] };
 function weekOf(id){ return S.weekOf === weekStart() ? ((S.week || {})[id] || 0) : 0; }
-function weekBar(id){
-  const n = weekOf(id);
-  const segs = Array.from({ length:WEEK_TARGET }, (_, i) => `<span class="${i < n ? "on" : ""}"></span>`).join("");
-  return `<div class="wk" title="Assigned since Monday"><span class="wk-l">This week</span><span class="wk-bar">${segs}</span><span class="wk-n ${n >= WEEK_TARGET ? "full" : ""}">${S.at ? `${n}/${WEEK_TARGET}` : "–"}</span></div>`;
+function monthAsgOf(id){ return S.mAsgOf === MONTH ? ((S.mAsg || {})[id] || 0) : 0; }
+// Assigned vs plan for the writer's period: { n, target, label } or null when the writer has no plan
+function planOf(id){
+  const p = PLAN[id]; if (!p) return null;
+  const n = p.per === "month" ? monthAsgOf(id) : weekOf(id);
+  return { n, target:p.n, label: p.per === "month" ? "This month" : "This week" };
 }
+function weekBar(id){
+  const q = planOf(id);
+  if (!q) return `<div class="wk" title="Assigned since Monday"><span class="wk-l">This week</span><span class="wk-n">${S.at ? weekOf(id) : "–"}</span><span class="wk-l">· no plan</span></div>`;
+  const segs = Array.from({ length:Math.max(q.target, 1) }, (_, i) => `<span class="${i < q.n ? "on" : ""}"></span>`).join("");
+  return `<div class="wk" title="${q.label === "This month" ? "Assigned since the 1st (plan: 1 every 4 weeks)" : "Assigned since Monday"}"><span class="wk-l">${q.label}</span><span class="wk-bar">${segs}</span><span class="wk-n ${q.n >= q.target ? "full" : ""}">${S.at ? `${q.n}/${q.target}` : "–"}</span></div>`;
+}
+function planLabel(id){ const q = planOf(id); return q ? `${q.n}/${q.target} ${q.label.toLowerCase()}` : `${weekOf(id)} this week · no plan`; }
 function renderMonth(){
   const vals = Object.values(S.earned || {});
   const n = vals.reduce((s,e) => s + e.n, 0), lo = vals.reduce((s,e) => s + e.lo, 0), hi = vals.reduce((s,e) => s + e.hi, 0);
   if (!S.at) return `<span class="lbl">${S.loading ? `Loading ${MONTH} earnings…` : `Click Refresh to load ${MONTH} earnings.`}</span>`;
   const wd = new Date(weekStart() + "T00:00:00").toLocaleDateString("en-US", { month:"short", day:"numeric" });
   const wn = WRITERS.reduce((s,w) => s + weekOf(w.id), 0);
-  return `<span class="lbl" style="flex-basis:100%"><b>Week of ${wd}:</b> ${wn} article${wn === 1 ? "" : "s"} assigned so far · top writers ${WRITERS.filter(w => w.top).reduce((s,w) => s + Math.min(weekOf(w.id), WEEK_TARGET), 0)}/${WRITERS.filter(w => w.top).length * WEEK_TARGET}</span>
+  return `<span class="lbl" style="flex-basis:100%"><b>Week of ${wd}:</b> ${wn} article${wn === 1 ? "" : "s"} assigned so far · weekly plan ${Object.entries(PLAN).filter(([, p]) => p.per === "week").reduce((s,[id, p]) => s + Math.min(weekOf(id), p.n), 0)}/${Object.values(PLAN).filter(p => p.per === "week").reduce((s,p) => s + p.n, 0)} · Brenda this month ${monthAsgOf("612fcdbd9976c30069467dad")}/1</span>
     <span class="big">${money(lo, hi)}</span><span class="lbl">earned by these writers in ${MONTH} · ${n} article${n === 1 ? "" : "s"} handed in (left Text this month), priced as word count × rate (or flat fee) plus the expert's review fee: +$50 for Carter Lee, Garett Reid and Angelica Galvan, +$20 for Maria</span>`;
 }
 function renderPicked(t){
@@ -873,7 +895,7 @@ $("q").addEventListener("input", e => { S.q = e.target.value; $("queue").innerHT
 // The last refreshed data is kept in this browser so opening the page doesn't call Jira.
 const SNAP = "desk.snapshot.v1";
 function saveSnap(){
-  try { localStorage.setItem(SNAP, JSON.stringify({ at:S.at, open:S.open, load:S.load, earned:S.earned, titles:S.titles, month:MONTH, week:S.week, weekOf:S.weekOf })); } catch {}
+  try { localStorage.setItem(SNAP, JSON.stringify({ at:S.at, open:S.open, load:S.load, earned:S.earned, titles:S.titles, month:MONTH, week:S.week, weekOf:S.weekOf, mAsg:S.mAsg, mAsgOf:S.mAsgOf })); } catch {}
 }
 (function restoreSnap(){
   try {
@@ -881,7 +903,7 @@ function saveSnap(){
     if (!d || !d.at) return;
     S.at = d.at; S.open = d.open || []; S.load = d.load || {}; S.titles = d.titles || {};
     S.earned = d.month === MONTH ? (d.earned || {}) : {};
-    S.week = d.week || {}; S.weekOf = d.weekOf || null;
+    S.week = d.week || {}; S.weekOf = d.weekOf || null; S.mAsg = d.mAsg || {}; S.mAsgOf = d.mAsgOf || null;
   } catch {}
 })();
 render();
